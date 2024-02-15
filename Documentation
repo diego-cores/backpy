@@ -2,7 +2,7 @@ BackPy documentation.
 ----
 BackPy is a library that is used to test strategies in the market.
 
-  Version: 1.0.E
+  Version: 0.8.1
 
 BackPy is a library that is used to test strategies in the market, 
 it is made so that you can provide your own data or use Yfinance module.
