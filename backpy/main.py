@@ -263,7 +263,7 @@ def plot_strategy(log:bool = False) -> None:
 
     ax1.legend(loc='upper left'); ax2.legend(loc='upper left'); ax3.legend(loc='upper left')
 
-    mpl.pyplot.xticks(__trades.index)
+    mpl.pyplot.xticks([])
     mpl.pyplot.gcf().canvas.manager.set_window_title(f'Strategy statistics.')
     mpl.pyplot.show()
 
