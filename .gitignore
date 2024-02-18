@@ -1,3 +1,4 @@
 vscode/
+backpy/__pycache__
 yfinance_cache
 test.py
