@@ -48,12 +48,17 @@ class StrategyClass(ABC):
         ----
         This function is used to run trades.
         """
+
         self.next()
+
         # Check if a trade needs to be closed.
-        self.__trades_ac.apply(lambda row: self.act_close(row.name) if (row['Type'] and (self.__data["High"].iloc[-1] >= row['TakeProfit'] or self.__data["Low"].iloc[-1] <= row['StopLoss'])) or (not row['Type'] and (self.__data["Low"].iloc[-1] <= row['TakeProfit'] or self.__data["High"].iloc[-1] >= row['StopLoss'])) else None,axis=1)
+        self.__trades_ac.apply(lambda row: self.act_close(row.name) if self.__data["High"].iloc[-1] >= max(row['TakeProfit'],row['StopLoss']) or self.__data["Low"].iloc[-1] <= min(row['TakeProfit'],row['StopLoss']) else None, axis=1) 
+
         # Concat new trade.
-        if not self.__trade.empty: self.__trades_ac = pd.concat([self.__trades_ac, self.__trade], ignore_index=True)
- 
+        if not self.__trade.empty and np.isnan(self.__trade['StopLoss'].iloc[0]) and np.isnan(self.__trade['TakeProfit'].iloc[0]): 
+            self.__trades_cl = pd.concat([self.__trades_cl, self.__trade], ignore_index=True); self.__trades_cl.reset_index(drop=True, inplace=True)
+        elif not self.__trade.empty: self.__trades_ac = pd.concat([self.__trades_ac, self.__trade], ignore_index=True)
+
         self.__trades_ac.reset_index(drop=True, inplace=True)
         return self.__trades_ac, self.__trades_cl
 
@@ -125,6 +130,7 @@ class StrategyClass(ABC):
         if (type and self.__data["Close"].iloc[-1] <= stop_loss and self.__data["Close"].iloc[-1] >= take_profit) or (not type and self.__data["Close"].iloc[-1] >= stop_loss and self.__data["Close"].iloc[-1] <= take_profit): raise ValueError
         # Create new trade.
         self.__trade = pd.DataFrame({'Date':self.__data.index[-1],'Close':self.__data["Close"].iloc[-1],'Low':self.__data["Low"].iloc[-1],'High':self.__data["High"].iloc[-1],'StopLoss':stop_loss,'TakeProfit':take_profit,'PositionClose':np.nan,'PositionDate':np.nan,'Amount':amount,'ProfitPer':np.nan,'Profit':np.nan,'Type':type},index=[1])
+        #raise KeyError()
 
     def act_close(self, index:int = 0) -> None:
         """

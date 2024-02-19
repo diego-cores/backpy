@@ -328,7 +328,7 @@ Mean ratio: {round((abs(__trades['Close']-__trades['PositionClose']) / abs(__tra
 Wins: {(__trades['ProfitPer']>0).sum()}
 Loss: {(__trades['ProfitPer']<=0).sum()}
 Stop vs take: {abs((__trades['ProfitPer']>0).sum() - (__trades['ProfitPer']<=0).sum())}
-WinRate: {round((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1)}%
+WinRate: {round((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
 ----
     """
     if data: data_s += stats_icon(False)
