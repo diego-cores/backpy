@@ -131,8 +131,11 @@ class StrategyClass(ABC):
         __data = self.__data
         if label == 'index': return __data.index
         elif label != None: __data = __data[label]
+
+        if last != None:
+            if last <= 0 or last > __data.shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
         
-        return __data.iloc[len(self.__data[label])-last if last != None and last < len(self.__data[label]) else 0:]
+        return __data.iloc[len(__data)-last if last != None and last < len(__data) else 0:]
     
     def prev_trades_cl(self, label:str = None, last:int = None) -> pd.DataFrame:
         """
@@ -155,7 +158,10 @@ class StrategyClass(ABC):
         if label == 'index': return __trades_cl.index
         elif label != None: __trades_cl = __trades_cl[label]
 
-        return self.__trades_cl.iloc[len(self.__trades_cl[label])-last if last != None and last < len(self.__trades_cl[label]) else 0:] if not self.__trades_cl.empty else None
+        if last != None:
+            if last <= 0 or last > __trades_cl.shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
+        return __trades_cl.iloc[len(__trades_cl)-last if last != None and last < len(__trades_cl) else 0:] if not __trades_cl.empty else None
     
     def prev_trades_ac(self, label:str = None, last:int = None) -> pd.DataFrame:
         """
@@ -169,7 +175,7 @@ class StrategyClass(ABC):
         \n
         label: \n
         \tData column, if you leave it at None all columns will be returned.\n
-        \tIf you leave 'index', all indexes will be returned, ignoring the last parameter.\n
+        \tIf you leave 'index', all indexes will be returned, ignoring the 'last' parameter.\n
         last: \n
         \tHow much data starting from the present backwards do you want to be returned.\n
         \tIf you leave it at None, the data for all times is returned.\n
@@ -177,8 +183,11 @@ class StrategyClass(ABC):
         __trades_ac = self.__trades_ac
         if label == 'index': return __trades_ac.index
         elif label != None: __trades_ac = __trades_ac[label]
-        
-        return self.__trades_ac.iloc[len(self.__trades_ac[label])-last if last != None and last < len(self.__trades_ac[label]) else 0:] if not self.__trades_ac.empty else None
+
+        if last != None:
+            if last <= 0 or last > __trades_ac.shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
+        return __trades_ac.iloc[len(__trades_ac)-last if last != None and last < len(__trades_ac) else 0:] if not __trades_ac.empty else None
         
     def idc_ema(self, period:int = any, last:int = None) -> np.array:
         """
@@ -196,8 +205,12 @@ class StrategyClass(ABC):
         \tHow much data starting from the present backwards do you want to be returned.\n
         \tIf you leave it at None, the data for all times is returned.\n
         """
+        if period > 5000 and period <= 0: raise ValueError()
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
         ema = self.__data["Close"].ewm(span=period, adjust=False).mean(); return np.flip(ema[len(ema)-last if last != None and last < len(ema) else 0:])
-        
+
     def idc_hvolume(self, start:int = 0, end:int = None, bar:int = 10) -> pd.DataFrame:
         """
         Indicator horizontal volume.
@@ -217,7 +230,12 @@ class StrategyClass(ABC):
         bar: \n
         \tThe number of horizontal volume bars (the more bars, the more precise).\n
         """
-        data_len = self.__data.shape[0]; data_range = self.__data.iloc[abs(data_len-end) if end != None and end < data_len else 0:abs(data_len-start) if start < data_len else data_len]
+        if start < 0: raise ValueError("'start' must be greater or equal than 0.")
+        elif end != None:
+            if end < 0: raise ValueError("'end' must be greater or equal than 0.")
+            elif start >= end: raise ValueError("'start' must be less than end.")
+
+        data_len = self.__data.shape[0]; data_range = self.__data.iloc[data_len-end if end != None and end < data_len else 0:data_len-start if start < data_len else data_len]
 
         if bar == 1: return pd.DataFrame({"H_Volume":data_range["Volume"].sum()}, index=[1])
 
@@ -254,9 +272,9 @@ class StrategyClass(ABC):
         \tThe amount of imaginary points with which you would enter the position.\n
         """
         # Check if type is 1 or 0.
-        if not type in {1,0}: raise ValueError("Only 1 or 0.")
+        if not type in {1,0}: raise exception.ActionError("'type' only 1 or 0.")
         # Check exceptions.
-        if (type and self.__data["Close"].iloc[-1] <= stop_loss and self.__data["Close"].iloc[-1] >= take_profit) or (not type and self.__data["Close"].iloc[-1] >= stop_loss and self.__data["Close"].iloc[-1] <= take_profit): raise ValueError
+        if (type and self.__data["Close"].iloc[-1] <= stop_loss and self.__data["Close"].iloc[-1] >= take_profit) or (not type and self.__data["Close"].iloc[-1] >= stop_loss and self.__data["Close"].iloc[-1] <= take_profit): raise exception.ActionError("'stop_loss' or t'ake_profit' incorrectly configured for the position type.")
         # Create new trade.
         self.__trade = pd.DataFrame({'Date':self.__data.index[-1],'Close':self.__data["Close"].iloc[-1],'Low':self.__data["Low"].iloc[-1],'High':self.__data["High"].iloc[-1],'StopLoss':stop_loss,'TakeProfit':take_profit,'PositionClose':np.nan,'PositionDate':np.nan,'Amount':amount,'ProfitPer':np.nan,'Profit':np.nan,'Type':type},index=[1])
 
@@ -274,7 +292,7 @@ class StrategyClass(ABC):
         """
         # Check exceptions.
         if self.__trades_ac.empty: raise exception.ActionError('There are no active trades.')
-        if not index in self.__trades_ac.index.to_list(): raise ValueError("Index does not exist.")
+        elif not index in self.__trades_ac.index.to_list(): raise exception.ActionError('Index does not exist.')
         # Get trade to close.
         trade = self.__trades_ac.iloc[lambda x: x.index==index]
         self.__trades_ac = self.__trades_ac.drop(trade.index)
@@ -295,6 +313,10 @@ class StrategyClass(ABC):
         Modify action.
         ----
         Modify an action.\n
+        Alert:
+        --
+        If an invalid stop loss or invalid takeprofit is submitted,\n
+        the program will return None and will not execute any changes.\n
         Parameters:
         --
         >>> index:int = 0
@@ -312,12 +334,12 @@ class StrategyClass(ABC):
         """
         # Check exceptions.
         if self.__trades_ac.empty: raise exception.ActionError('There are no active trades.')
-        if not (new_stop or new_take): raise ValueError
+        elif not (new_stop or new_take): raise exception.ActionError('Nothing was changed.')
         # Get trade to modify.
-        trade = self.__trades_ac.loc[lambda x: x.index==index]
+        trade = self.__trades_ac.loc[index]
         # Set new stop.
-        if (new_stop < self.__data["Close"].iloc[-1] and trade['Type']) or (not trade['Type'] and new_stop > self.close) or np.isnan(new_stop): trade['StopLoss'] = new_stop 
-        else: raise ValueError
+        if (new_stop < self.__data["Close"].iloc[-1] and trade['Type']) or (not trade['Type'] and new_stop > self.close) or np.isnan(new_stop): 
+            self.__trades_ac.loc[index, 'StopLoss'] = new_stop 
         # Set new take.
-        if (new_take > self.__data["Close"].iloc[-1] and trade['Type']) or (not trade['Type'] and new_take < self.close) or np.isnan(new_stop): trade['TakeProfit'] = new_take
-        else: raise ValueError
+        if (new_take > self.__data["Close"].iloc[-1] and trade['Type']) or (not trade['Type'] and new_take < self.close) or np.isnan(new_stop): 
+            self.__trades_ac.loc[index,'TakeProfit'] = new_take

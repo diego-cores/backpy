@@ -157,8 +157,8 @@ def run(strategy_class:'strategy.StrategyClass' = any, prnt:bool = True, progres
     
     if not act_trades.empty: __trades = pd.concat([__trades, act_trades.dropna(axis=1, how='all')], ignore_index=True)
     
-    if prnt and not __trades.empty: stats_trades(prnt=True)
-    elif not prnt and not __trades.empty: return stats_trades(prnt=False)
+    if prnt and not __trades.empty and 'ProfitPer' in __trades.columns: stats_trades(prnt=True)
+    elif not prnt and not __trades.empty and 'ProfitPer' in __trades.columns: return stats_trades(prnt=False)
 
 def plot(log:bool = False, progress:bool = True) -> None:
     """
@@ -213,6 +213,7 @@ def plot(log:bool = False, progress:bool = True) -> None:
 
     def t_scatter(function = any, color:str = any, marker:str = any, date_label:str = 'Date'):
         if not isinstance(function, types.FunctionType): raise TypeError("'function' is not a function.")
+        elif not date_label in __trades.columns: return
         ax1.scatter(__trades[date_label].apply(lambda x: mpl.dates.date2num(x) if x != np.nan else None) if not __trades.empty else [] , __trades.apply(function, axis=1), c=color, s = 30, marker=marker)
 
     t_scatter(lambda row: row['PositionClose'] if row['ProfitPer'] > 0 else None, 'gold', 'x', 'PositionDate')
@@ -318,7 +319,7 @@ def stats_trades(data:bool = False, prnt:bool = True):
     \tIf it is false, an string will be returned.\n
     """
     if __trades.empty: raise exception.StatsError('Trades not loaded.')
-    if not 'ProfitPer' in __trades.columns:  raise exception.StatsError('There is no data to see.')
+    elif not 'ProfitPer' in __trades.columns:  raise exception.StatsError('There is no data to see.')
 
     data_s = f"""
 Statistics of strategy.
