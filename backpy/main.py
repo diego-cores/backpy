@@ -11,6 +11,12 @@ Functions:
 >>> plot
 >>> icon_stats
 >>> trades_stats
+
+Hidden variables:
+--
+>>> __data_interval # Data interval.
+>>> __data_icon # Data icon.
+>>> __data # Saved data.
 """
 
 import matplotlib as mpl
