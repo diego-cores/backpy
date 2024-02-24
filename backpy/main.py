@@ -230,7 +230,7 @@ def plot(log:bool = False, progress:bool = True) -> None:
 
     date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
     ax1.xaxis.set_major_formatter(date_format); fig.autofmt_xdate()
-    mpl.pyplot.gcf().canvas.manager.set_window_title(f'Back testing: \'{__data_icon}\' {__data.index[0].day}.{__data.index[0].month}.{__data.index[0].year}~{__data.index[-1].day}.{__data.index[-1].month}.{__data.index[-1].year}')
+    mpl.pyplot.gcf().canvas.manager.set_window_title(f'Back testing: \'{__data_icon}\' {__data.index[0].day+"."+__data.index[0].month+"."+__data.index[0].year+"~"+__data.index[-1].day+"."+__data.index[-1].month+"."+__data.index[-1].year if isinstance(__data.index[0], pd.Timestamp) else ""}')
 
     if progress: utils.load_bar(9, 9); print('\nPlotTimer:',round(time()-t,2))
     mpl.pyplot.show()
@@ -240,9 +240,10 @@ def plot_strategy(log:bool = False) -> None:
     Plot strategy statistics.
     ----
     Plot your strategy statistics:\n
-    # Graph of profit.
-    # Ratio graph.
-    # Stop vs take graph.
+    - Graph of profit.
+    - Graph of 'ProfitPer'.
+    - Ratio graph.
+    - Stop vs take graph.
     Parameters:
     --
     >>> log:bool = Flase
@@ -261,14 +262,16 @@ def plot_strategy(log:bool = False) -> None:
     fig = mpl.pyplot.figure(figsize=(16,8))
     ax1 = mpl.pyplot.subplot2grid((6,2), (0,0), rowspan=3, colspan=1)
     ax2 = mpl.pyplot.subplot2grid((6,2), (0,1), rowspan=3, colspan=1, sharex=ax1)
-    ax3 = mpl.pyplot.subplot2grid((6,2), (3,0), rowspan=3, colspan=1, sharex=ax1)
+    ax3 = mpl.pyplot.subplot2grid((6,2), (3,1), rowspan=3, colspan=1)
+    ax4 = mpl.pyplot.subplot2grid((6,2), (3,0), rowspan=3, colspan=1, sharex=ax1)
 
     if log: ax1.semilogy(__trades['Profit'],alpha=0)
     ax1.plot(__trades.index,__trades['Profit'].cumsum(), c='black', label='Profit.')
-    ax2.plot(__trades.index,abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss']), c='black', label='Ratio.')
-    ax3.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Stop vs take.')
+    ax2.plot(__trades.index,__trades['ProfitPer'].cumsum(), c='black', label='ProfitPer.')
+    ax3.plot(__trades.index,abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss']), c='black', label='Ratio.')
+    ax4.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Stop vs take.')
 
-    ax1.legend(loc='upper left'); ax2.legend(loc='upper left'); ax3.legend(loc='upper left')
+    ax1.legend(loc='upper left'); ax2.legend(loc='upper left'); ax3.legend(loc='upper left'); ax4.legend(loc='upper left')
 
     mpl.pyplot.xticks([])
     mpl.pyplot.gcf().canvas.manager.set_window_title(f'Strategy statistics.')
