@@ -69,20 +69,6 @@ What can I do with BackPy?
 - You can print statistics of the uploaded data.
 - You can modify the stop loss or take profit of any open position.
 - You can see statistics of how your strategy did.
-
-Example of what you have to do to create your own strategy:
-
->>> class FristStrategy(BackPy.StrategyClass):
->>>     def next(self) -> None:
->>>         ema = self.idc_ema(100,1).iloc[0]
->>>         if self.close > ema:
->>>             self.act_open('l')
-
-Then you can plot the graph and its results.
-Example:
-
->>> BackPy.plot()
->>> BackPy.trades_stats()
 """
 
 __all__ = [

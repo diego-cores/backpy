@@ -100,9 +100,35 @@ def load_data(data:pd.DataFrame = any, icon:str = None, interval:str = None, sta
     """
     Load any data.
     ----
-    Function still not working.
+    Load data.\n
+    Parameters:
+    Parameters:
+    --
+    >>> data:str = any
+    >>> icon:str = None
+    >>> interval:str = None
+    >>> statistics:bool = True
+    \n
+    data: \n
+    \tpd.Dataframe with all the data.\n
+    \tYou need to have these columns:\n
+    \t['Open', 'High', 'Low', 'Close', 'Volume']\n
+    icon: \n
+    \tString of the data icon.\n
+    interval: \n
+    \tString of the data interval.\n
+    statistics: \n
+    \tPrint statistics of the loaded data.\n
     """
-    pass
+    global __data, __data_icon, __data_interval
+    if not all(col in data.columns.to_list() for col in ['Open', 'High', 'Low', 'Close', 'Volume']): raise exception.DataError("Some columns are missing columns: ['Open', 'High', 'Low', 'Close', 'Volume']")
+
+    __data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
+    __data.index.name = 'Date'
+    __data_icon = icon
+    __data_interval = interval
+
+    if statistics: stats_icon(prnt=True)
 
 def run(strategy_class:'strategy.StrategyClass' = any, prnt:bool = True, progress:bool = True) -> str:
     """
@@ -303,7 +329,7 @@ Standard deviation: {round(__data['Close'].std(),1) if utils.has_number_on_left(
 Average price: {round(__data['Close'].mean(),1) if utils.has_number_on_left(__data['Close'].mean()) else __data['Close'].mean()}
 Average volume: {round(__data['Volume'].mean(),1)}
 ----
-{__data.index[0].day}.{__data.index[0].month}.{__data.index[0].year}~{__data.index[-1].day}.{__data.index[-1].month}.{__data.index[-1].year} ~ {__data_interval} ~ {__data_icon}
+{__data.index[0].day+"."+__data.index[0].month+"."+__data.index[0].year+"~"+__data.index[-1].day+"."+__data.index[-1].month+"."+__data.index[-1].year if isinstance(__data.index[0], pd.Timestamp) else ""} ~ {__data_interval} ~ {__data_icon}
     """
     if prnt:print(data_s) 
     else: return data_s
