@@ -279,7 +279,7 @@ def plot_strategy(log:bool = False) -> None:
     except ModuleNotFoundError: raise exception.PlotError('Matplotlib.pyplot is missing.')
 
     if __trades.empty: raise exception.StatsError('Trades not loaded.')
-    if not 'ProfitPer' in __trades.columns:  raise exception.StatsError('There is no data to see.')
+    if not 'Profit' in __trades.columns:  raise exception.StatsError('There is no data to see.')
 
     mpl.pyplot.close('all'); mpl.pyplot.style.use('ggplot')
     
@@ -355,9 +355,9 @@ Average return: {round(__trades['ProfitPer'].mean(),1)}%
 Average ratio: {round((abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss'])).mean(),1)}
 
 Profit fact: {round((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),1) if not pd.isna(__trades['Profit']).all() else 0}
-Duration ratio: {round(__trades['PositionDate'].apply(lambda x: x.timestamp()).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp()).sum(),4)}
+Duration ratio: {round(__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).sum(),4)}
 
-Max drawdown: {round(utils.max_drawdown(__trades['Profit']),1)}%
+Max drawdown: {round(utils.max_drawdown(__trades['Profit'].cumsum()),1)}%
 Long exposure: {round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
 Winnings: {round((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
 ----

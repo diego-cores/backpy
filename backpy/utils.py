@@ -56,10 +56,10 @@ def max_drawdown(values:pd.Series):
     \tThe ordered data.\n
     """
     max_drdwn, max_val = 0, values[0]
-    print(max_drdwn, max_val)
-    # Error
+
     def calc(x):
         nonlocal max_drdwn, max_val
+
         if x > max_val: max_val = x
         else: 
             drdwn = (max_val - x) / max_val
@@ -67,5 +67,4 @@ def max_drawdown(values:pd.Series):
                 max_drdwn = drdwn
     values.apply(calc)
 
-    print(max_drdwn, max_val)
     return max_drdwn * 100
