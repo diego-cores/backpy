@@ -256,7 +256,7 @@ def plot(log:bool = False, progress:bool = True) -> None:
 
     date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
     ax1.xaxis.set_major_formatter(date_format); fig.autofmt_xdate()
-    mpl.pyplot.gcf().canvas.manager.set_window_title(f'Back testing: \'{__data_icon}\' {__data.index[0].day+"."+__data.index[0].month+"."+__data.index[0].year+"~"+__data.index[-1].day+"."+__data.index[-1].month+"."+__data.index[-1].year if isinstance(__data.index[0], pd.Timestamp) else ""}')
+    mpl.pyplot.gcf().canvas.manager.set_window_title(f'Back testing: \'{__data_icon}\' {".".join(str(val) for val in [__data.index[0].day,__data.index[0].month,__data.index[0].year])+"~"+".".join(str(val) for val in [__data.index[-1].day,__data.index[-1].month,__data.index[-1].year]) if isinstance(__data.index[0], pd.Timestamp) else ""}')
 
     if progress: utils.load_bar(9, 9); print('\nPlotTimer:',round(time()-t,2))
     mpl.pyplot.show()
@@ -267,9 +267,7 @@ def plot_strategy(log:bool = False) -> None:
     ----
     Plot your strategy statistics:\n
     - Graph of profit.
-    - Graph of 'ProfitPer'.
-    - Ratio graph.
-    - Stop vs take graph.
+    - Winnings graph.
     Parameters:
     --
     >>> log:bool = Flase
@@ -288,16 +286,12 @@ def plot_strategy(log:bool = False) -> None:
     fig = mpl.pyplot.figure(figsize=(16,8))
     ax1 = mpl.pyplot.subplot2grid((6,2), (0,0), rowspan=3, colspan=1)
     ax2 = mpl.pyplot.subplot2grid((6,2), (0,1), rowspan=3, colspan=1, sharex=ax1)
-    ax3 = mpl.pyplot.subplot2grid((6,2), (3,1), rowspan=3, colspan=1)
-    ax4 = mpl.pyplot.subplot2grid((6,2), (3,0), rowspan=3, colspan=1, sharex=ax1)
 
     if log: ax1.semilogy(__trades['Profit'],alpha=0)
     ax1.plot(__trades.index,__trades['Profit'].cumsum(), c='black', label='Profit.')
-    ax2.plot(__trades.index,__trades['ProfitPer'].cumsum(), c='black', label='ProfitPer.')
-    ax3.plot(__trades.index,abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss']), c='black', label='Ratio.')
-    ax4.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Stop vs take.')
+    ax2.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Winnings.')
 
-    ax1.legend(loc='upper left'); ax2.legend(loc='upper left'); ax3.legend(loc='upper left'); ax4.legend(loc='upper left')
+    ax1.legend(loc='upper left'); ax2.legend(loc='upper left')
 
     mpl.pyplot.xticks([])
     mpl.pyplot.gcf().canvas.manager.set_window_title(f'Strategy statistics.')
@@ -321,6 +315,7 @@ def stats_icon(prnt:bool = True) -> str:
     data_s = f"""
 Statistics of {__data_icon}:
 ----
+Last price: {round(__data['Close'].iloc[-1],1) if utils.has_number_on_left(__data['Close'].iloc[-1].max()) else __data['Close'].iloc[-1].max()}
 Maximum price: {round(__data['High'].max(),1) if utils.has_number_on_left(__data['High'].max()) else __data['High'].max()}
 Minimum price: {round(__data['Low'].min(),1) if utils.has_number_on_left(__data['Low'].min()) else __data['Low'].min()}
 Maximum volume: {__data['Volume'].max()}
@@ -329,7 +324,7 @@ Standard deviation: {round(__data['Close'].std(),1) if utils.has_number_on_left(
 Average price: {round(__data['Close'].mean(),1) if utils.has_number_on_left(__data['Close'].mean()) else __data['Close'].mean()}
 Average volume: {round(__data['Volume'].mean(),1)}
 ----
-{__data.index[0].day+"."+__data.index[0].month+"."+__data.index[0].year+"~"+__data.index[-1].day+"."+__data.index[-1].month+"."+__data.index[-1].year if isinstance(__data.index[0], pd.Timestamp) else ""} ~ {__data_interval} ~ {__data_icon}
+{".".join(str(val) for val in [__data.index[0].day,__data.index[0].month,__data.index[0].year])+"~"+".".join(str(val) for val in [__data.index[-1].day,__data.index[-1].month,__data.index[-1].year]) if isinstance(__data.index[0], pd.Timestamp) else ""} ~ {__data_interval} ~ {__data_icon}
     """
     if prnt:print(data_s) 
     else: return data_s
@@ -353,18 +348,18 @@ def stats_trades(data:bool = False, prnt:bool = True):
     data_s = f"""
 Statistics of strategy.
 ----
-N-Trades: {len(__trades.index)}
+Trades: {len(__trades.index)}
 
-Total PyG: {round(__trades['ProfitPer'].sum(),1)}
-Mean PyG: {round(__trades['ProfitPer'].mean(),1)} 
-Total profits: {round(__trades['Profit'].sum(),1) if __trades['Profit'].sum() != 0 else np.nan}
-Mean profit: {round(__trades['Profit'].mean(),1) if __trades['Profit'].mean() != 0 else np.nan}
-Mean ratio: {round((abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss'])).mean(),1)}
+Return: {round(__trades['ProfitPer'].sum(),1)}%
+Average return: {round(__trades['ProfitPer'].mean(),1)}%
+Average ratio: {round((abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss'])).mean(),1)}
 
-Wins: {(__trades['ProfitPer']>0).sum()}
-Loss: {(__trades['ProfitPer']<=0).sum()}
-Stop vs take: {abs((__trades['ProfitPer']>0).sum() - (__trades['ProfitPer']<=0).sum())}
-WinRate: {round((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
+Profit fact: {round((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),1) if not pd.isna(__trades['Profit']).all() else 0}
+Duration ratio: {round(__trades['PositionDate'].apply(lambda x: x.timestamp()).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp()).sum(),4)}
+
+Max drawdown: {round(utils.max_drawdown(__trades['Profit']),1)}%
+Long exposure: {round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
+Winnings: {round((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
 ----
     """
     if data: data_s += stats_icon(False)
