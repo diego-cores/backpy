@@ -14,6 +14,7 @@ Functions:
 
 Hidden variables:
 --
+>>> _init_funds # Initial funds.
 >>> __data_interval # Data interval.
 >>> __data_icon # Data icon.
 >>> __data # Saved data.
@@ -36,6 +37,7 @@ __data_icon = None
 __data = None
 
 __trades = pd.DataFrame()
+_init_funds = 0
 
 def load_yfinance_data(tickers:str = any, start:str = None, end:str = None, interval:str = '1d', statistics:bool = True, progress:bool = True) -> None:
     """
@@ -130,7 +132,7 @@ def load_data(data:pd.DataFrame = any, icon:str = None, interval:str = None, sta
 
     if statistics: stats_icon(prnt=True)
 
-def run(strategy_class:'strategy.StrategyClass' = any, prnt:bool = True, progress:bool = True) -> str:
+def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000, prnt:bool = True, progress:bool = True) -> str:
     """
     Run your strategy.
     ----
@@ -138,12 +140,16 @@ def run(strategy_class:'strategy.StrategyClass' = any, prnt:bool = True, progres
     Parameters:
     --
     >>> strategy_class:'strategy.StrategyClass' = any
+    >>> initial_funds:int = 10000
     >>> prnt:bool = True
     >>> progress:bool = True
     \n
     strategy_class: \n
     \tA class that is inherited from StrategyClass\n
     \twhere you create your strategy in the next function.\n
+    initial_funds\n
+    \tIt is the initial amount you start with.\n
+    \tIt is used for some statistics.\n
     prnt: \n
     \tIf it is true, trades_stats will be printed.\n
     \tIf it is false, an string will be returned.\n
@@ -165,11 +171,13 @@ def run(strategy_class:'strategy.StrategyClass' = any, prnt:bool = True, progres
     FristStrategy:
     >>> class FristStrategy(backpy.StrategyClass)
     """
-    global __trades
+    global __trades, _init_funds
 
     if __data is None: raise exception.RunError('Data not loaded.')
+    if initial_funds < 0: raise exception.RunError("'initial_funds' cannot be less than 0.")
     if not __trades.empty: __trades = pd.DataFrame()
 
+    _init_funds = initial_funds
     act_trades = pd.DataFrame()
     t = time() if progress else None
 
@@ -288,7 +296,7 @@ def plot_strategy(log:bool = False) -> None:
     ax2 = mpl.pyplot.subplot2grid((6,2), (0,1), rowspan=3, colspan=1, sharex=ax1)
 
     if log: ax1.semilogy(__trades['Profit'],alpha=0)
-    ax1.plot(__trades.index,__trades['Profit'].cumsum(), c='black', label='Profit.')
+    ax1.plot(__trades.index,__trades['Profit'].cumsum()+_init_funds, c='black', label='Profit.')
     ax2.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Winnings.')
 
     ax1.legend(loc='upper left'); ax2.legend(loc='upper left')
@@ -354,10 +362,11 @@ Return: {round(__trades['ProfitPer'].sum(),1)}%
 Average return: {round(__trades['ProfitPer'].mean(),1)}%
 Average ratio: {round((abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss'])).mean(),1)}
 
+Profit: {round(__trades['Profit'].sum(),1)}
 Profit fact: {round((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),1) if not pd.isna(__trades['Profit']).all() else 0}
 Duration ratio: {round(__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).sum(),4)}
 
-Max drawdown: {round(utils.max_drawdown(__trades['Profit'].cumsum()),1)}%
+Max drawdown: {round(utils.max_drawdown(__trades['Profit'].cumsum()+_init_funds),1)}%
 Long exposure: {round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
 Winnings: {round((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
 ----
