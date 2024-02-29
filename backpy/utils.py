@@ -6,7 +6,7 @@ Different useful functions for the operation of main code.
 
 import pandas as pd
 
-def load_bar(size:int,step:int) -> None:
+def load_bar(size:int,step:int,more:str = '') -> None:
     """
     Loading bar.
     ----
@@ -15,11 +15,14 @@ def load_bar(size:int,step:int) -> None:
     --
     >>> size:int
     >>> step:int
+    >>> more:str = ''
     \n
     size: \n
     \tNumber of steps.\n
     step: \n
     \tstep.\n
+    more: \n
+    \tThis string appears to the right of the bar.\n
     """
     per = str(int(step/size*100))
     load = '*'*int(46*step/size) + ' '*(46-int(46*step/size))
@@ -27,7 +30,7 @@ def load_bar(size:int,step:int) -> None:
     first = load[:46//2-int(round(len(per)/2,0))]
     sec = load[46//2+int(len(per)-round(len(per)/2,0)):]
 
-    print('\r['+first+per+'%%'+sec+']'+f'  {step} of {size} completed', end='')
+    print('\r['+first+per+'%%'+sec+']'+f'  {step} of {size} completed '+more, end='')
 
 def has_number_on_left(num:float) -> bool:
     """

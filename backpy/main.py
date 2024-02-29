@@ -179,10 +179,10 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
 
     _init_funds = initial_funds
     act_trades = pd.DataFrame()
-    t = time() if progress else None
+    t = time(); step_t = time()
 
     for f in range(__data.shape[0]):
-        if progress: utils.load_bar(__data.shape[0], f+1)
+        if progress: utils.load_bar(__data.shape[0], f+1, f'/ Step time: {round(time()-step_t,3)}'); step_t = time()
 
         instance = strategy_class(__data[:f+1], __trades, act_trades)
         act_trades, __trades = instance._StrategyClass__before()

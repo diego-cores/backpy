@@ -216,6 +216,10 @@ class StrategyClass(ABC):
         Indicator horizontal volume.
         ----
         Return a pd.DataFrame with the position of each bar and the volume.\n
+        Alert:
+        --
+        Using this function with the 'end' parameter set to None\n
+        is not recommended and may cause slowness in the program.\n
         Parameters:
         --
         >>> start:int = 0
