@@ -296,7 +296,7 @@ def plot_strategy(log:bool = False) -> None:
     ax2 = mpl.pyplot.subplot2grid((6,2), (0,1), rowspan=3, colspan=1, sharex=ax1)
 
     if log: ax1.semilogy(__trades['Profit'],alpha=0)
-    ax1.plot(__trades.index,__trades['Profit'].cumsum()+_init_funds, c='black', label='Profit.')
+    ax1.plot(__trades.index,__trades['Profit'].cumsum(), c='black', label='Profit.')
     ax2.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Winnings.')
 
     ax1.legend(loc='upper left'); ax2.legend(loc='upper left')

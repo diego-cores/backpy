@@ -278,7 +278,7 @@ class StrategyClass(ABC):
         # Check if type is 1 or 0.
         if not type in {1,0}: raise exception.ActionError("'type' only 1 or 0.")
         # Check exceptions.
-        if (type and self.__data["Close"].iloc[-1] <= stop_loss and self.__data["Close"].iloc[-1] >= take_profit) or (not type and self.__data["Close"].iloc[-1] >= stop_loss and self.__data["Close"].iloc[-1] <= take_profit): raise exception.ActionError("'stop_loss' or t'ake_profit' incorrectly configured for the position type.")
+        if (type and (self.__data["Close"].iloc[-1] <= stop_loss or self.__data["Close"].iloc[-1] >= take_profit)) or (not type and (self.__data["Close"].iloc[-1] >= stop_loss or self.__data["Close"].iloc[-1] <= take_profit)): raise exception.ActionError("'stop_loss' or t'ake_profit' incorrectly configured for the position type.")
         # Create new trade.
         self.__trade = pd.DataFrame({'Date':self.__data.index[-1],'Close':self.__data["Close"].iloc[-1],'Low':self.__data["Low"].iloc[-1],'High':self.__data["High"].iloc[-1],'StopLoss':stop_loss,'TakeProfit':take_profit,'PositionClose':np.nan,'PositionDate':np.nan,'Amount':amount,'ProfitPer':np.nan,'Profit':np.nan,'Type':type},index=[1])
 
@@ -342,8 +342,8 @@ class StrategyClass(ABC):
         # Get trade to modify.
         trade = self.__trades_ac.loc[index]
         # Set new stop.
-        if (new_stop < self.__data["Close"].iloc[-1] and trade['Type']) or (not trade['Type'] and new_stop > self.close) or np.isnan(new_stop): 
+        if new_stop and ((new_stop < self.__data["Close"].iloc[-1] and trade['Type']) or (not trade['Type'] and new_stop > self.close) or np.isnan(new_stop)): 
             self.__trades_ac.loc[index, 'StopLoss'] = new_stop 
         # Set new take.
-        if (new_take > self.__data["Close"].iloc[-1] and trade['Type']) or (not trade['Type'] and new_take < self.close) or np.isnan(new_stop): 
+        if new_take and ((new_take > self.__data["Close"].iloc[-1] and trade['Type']) or (not trade['Type'] and new_take < self.close) or np.isnan(new_take)): 
             self.__trades_ac.loc[index,'TakeProfit'] = new_take
