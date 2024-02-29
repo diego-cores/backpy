@@ -363,7 +363,7 @@ Average return: {round(__trades['ProfitPer'].mean(),1)}%
 Average ratio: {round((abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss'])).mean(),1)}
 
 Profit: {round(__trades['Profit'].sum(),1)}
-Profit fact: {round((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),1) if not pd.isna(__trades['Profit']).all() else 0}
+Profit fact: {round((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),1) if (__trades['Profit']>0).sum() > 0 and (__trades['Profit']<=0).sum() > 0 and not pd.isna(__trades['Profit']).all() else 0}
 Duration ratio: {round(__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).sum(),4)}
 
 Max drawdown: {round(utils.max_drawdown(__trades['Profit'].cumsum()+_init_funds),1)}%
