@@ -1,0 +1,12 @@
+Important Notice: Understanding the Risks of Trading and Financial Data Analysis.
+--
+Trading financial instruments and using financial data for analysis involves significant risks, 
+including the possibility of loss of capital. Markets can be volatile and data may contain errors. 
+Before engaging in trading activities or using financial data, it is important to understand and 
+carefully consider these risks and seek independent financial advice if necessary.
+
+Disclaimer Regarding Accuracy of BackPy.
+--
+It is essential to acknowledge that the backtesting software utilized
+for financial chart analysis may not be entirely accurate and could contain errors, 
+leading to results that may not reflect real-world outcomes.

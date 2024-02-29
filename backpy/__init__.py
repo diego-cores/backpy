@@ -64,11 +64,8 @@ What can I do with BackPy?
 - With BackPy you will be able to know the position of different indicators for each point.
 - You can create your own indicators based on price, date and volume.
 - For each point you can consult previous data such as previous closings and active actions.
-- Data will be returned in type: pandas.dataframe, pandas.series or numpy.ndarray.
 - You can display the data with logarithmic scale or not.
 - You can print statistics of the uploaded data.
-- You can modify the stop loss or take profit of any open position.
-- You can see statistics of how your strategy did.
 """
 
 __all__ = [
