@@ -155,13 +155,15 @@ class StrategyClass(ABC):
         \tIf you leave it at None, the data for all times is returned.\n
         """
         __trades_cl = self.__trades_cl
+
         if label == 'index': return __trades_cl.index
+        elif __trades_cl.empty: return pd.DataFrame()
         elif label != None: __trades_cl = __trades_cl[label]
 
-        if last != None:
+        if last != None: 
             if last <= 0 or last > __trades_cl.shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
-        return __trades_cl.iloc[len(__trades_cl)-last if last != None and last < len(__trades_cl) else 0:] if not __trades_cl.empty else None
+        return __trades_cl.iloc[len(__trades_cl)-last if last != None and last < len(__trades_cl) else 0:] 
     
     def prev_trades_ac(self, label:str = None, last:int = None) -> pd.DataFrame:
         """
@@ -182,12 +184,13 @@ class StrategyClass(ABC):
         """
         __trades_ac = self.__trades_ac
         if label == 'index': return __trades_ac.index
+        elif __trades_ac.empty: return pd.DataFrame()
         elif label != None: __trades_ac = __trades_ac[label]
 
         if last != None:
             if last <= 0 or last > __trades_ac.shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
-        return __trades_ac.iloc[len(__trades_ac)-last if last != None and last < len(__trades_ac) else 0:] if not __trades_ac.empty else None
+        return __trades_ac.iloc[len(__trades_ac)-last if last != None and last < len(__trades_ac) else 0:]
         
     def idc_ema(self, period:int = any, last:int = None) -> np.array:
         """
@@ -278,6 +281,7 @@ class StrategyClass(ABC):
         # Check if type is 1 or 0.
         if not type in {1,0}: raise exception.ActionError("'type' only 1 or 0.")
         # Check exceptions.
+        if amount <= 0: raise exception.ActionError("'amount' can only be greater than 0.")
         if (type and (self.__data["Close"].iloc[-1] <= stop_loss or self.__data["Close"].iloc[-1] >= take_profit)) or (not type and (self.__data["Close"].iloc[-1] >= stop_loss or self.__data["Close"].iloc[-1] <= take_profit)): raise exception.ActionError("'stop_loss' or 'take_profit' incorrectly configured for the position type.")
         # Create new trade.
         self.__trade = pd.DataFrame({'Date':self.__data.index[-1],'Close':self.__data["Close"].iloc[-1],'Low':self.__data["Low"].iloc[-1],'High':self.__data["High"].iloc[-1],'StopLoss':stop_loss,'TakeProfit':take_profit,'PositionClose':np.nan,'PositionDate':np.nan,'Amount':amount,'ProfitPer':np.nan,'Profit':np.nan,'Type':type},index=[1])
@@ -308,7 +312,7 @@ class StrategyClass(ABC):
         open = trade['Close'].iloc[0]
 
         trade['ProfitPer'] = (position_close-open)/open*100 if trade['Type'].iloc[0] else (open-position_close)/open*100
-        trade['Profit'] = trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]/100 if trade['Amount'].iloc[0] else np.nan
+        trade['Profit'] = trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]/100 if not np.isnan(trade['Amount'].iloc[0]) else np.nan
 
         self.__trades_cl = pd.concat([self.__trades_cl,trade], ignore_index=True) ; self.__trades_cl.reset_index(drop=True, inplace=True)
 
