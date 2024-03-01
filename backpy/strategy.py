@@ -278,7 +278,7 @@ class StrategyClass(ABC):
         # Check if type is 1 or 0.
         if not type in {1,0}: raise exception.ActionError("'type' only 1 or 0.")
         # Check exceptions.
-        if (type and (self.__data["Close"].iloc[-1] <= stop_loss or self.__data["Close"].iloc[-1] >= take_profit)) or (not type and (self.__data["Close"].iloc[-1] >= stop_loss or self.__data["Close"].iloc[-1] <= take_profit)): raise exception.ActionError("'stop_loss' or t'ake_profit' incorrectly configured for the position type.")
+        if (type and (self.__data["Close"].iloc[-1] <= stop_loss or self.__data["Close"].iloc[-1] >= take_profit)) or (not type and (self.__data["Close"].iloc[-1] >= stop_loss or self.__data["Close"].iloc[-1] <= take_profit)): raise exception.ActionError("'stop_loss' or 'take_profit' incorrectly configured for the position type.")
         # Create new trade.
         self.__trade = pd.DataFrame({'Date':self.__data.index[-1],'Close':self.__data["Close"].iloc[-1],'Low':self.__data["Low"].iloc[-1],'High':self.__data["High"].iloc[-1],'StopLoss':stop_loss,'TakeProfit':take_profit,'PositionClose':np.nan,'PositionDate':np.nan,'Amount':amount,'ProfitPer':np.nan,'Profit':np.nan,'Type':type},index=[1])
 
@@ -300,9 +300,9 @@ class StrategyClass(ABC):
         # Get trade to close.
         trade = self.__trades_ac.iloc[lambda x: x.index==index]
         self.__trades_ac = self.__trades_ac.drop(trade.index)
-        
+        # Get PositionClose
         take = trade['TakeProfit'].iloc[0];stop = trade['StopLoss'].iloc[0]
-        position_close = (take if self.__data["High"].iloc[-1] >= take else stop if self.__data["Low"].iloc[-1] <= stop else self.__data["Close"].iloc[-1]) if trade['Type'].iloc[0] else (take if self.__data["Low"].iloc[-1] <= take else stop if self.__data["High"].iloc[-1] >= stop else self.__data["Close"].iloc[-1])
+        position_close = (stop if self.__data["Low"].iloc[-1] <= stop else take if self.__data["High"].iloc[-1] >= take else self.__data["Close"].iloc[-1]) if trade['Type'].iloc[0] else (stop if self.__data["High"].iloc[-1] >= stop else take if self.__data["Low"].iloc[-1] <= take else self.__data["Close"].iloc[-1])
         # Fill data.
         trade['PositionClose'] = position_close; trade['PositionDate'] = self.__data.index[-1]
         open = trade['Close'].iloc[0]

@@ -275,6 +275,7 @@ def plot_strategy(log:bool = False) -> None:
     ----
     Plot your strategy statistics:\n
     - Graph of profit.
+    - Graph of return.
     - Winnings graph.
     Parameters:
     --
@@ -294,12 +295,14 @@ def plot_strategy(log:bool = False) -> None:
     fig = mpl.pyplot.figure(figsize=(16,8))
     ax1 = mpl.pyplot.subplot2grid((6,2), (0,0), rowspan=3, colspan=1)
     ax2 = mpl.pyplot.subplot2grid((6,2), (0,1), rowspan=3, colspan=1, sharex=ax1)
+    ax3 = mpl.pyplot.subplot2grid((6,2), (3,0), rowspan=3, colspan=1, sharex=ax1)
 
-    if log: ax1.semilogy(__trades['Profit'],alpha=0)
+    if log: ax1.semilogy(__trades['Profit'],alpha=0); ax3.semilogy(__trades['ProfitPer'],alpha=0)
     ax1.plot(__trades.index,__trades['Profit'].cumsum(), c='black', label='Profit.')
     ax2.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Winnings.')
+    ax3.plot(__trades.index,__trades['ProfitPer'].cumsum(), c='black', label='Return.')
 
-    ax1.legend(loc='upper left'); ax2.legend(loc='upper left')
+    ax1.legend(loc='upper left'); ax2.legend(loc='upper left'); ax3.legend(loc='upper left')
 
     mpl.pyplot.xticks([])
     mpl.pyplot.gcf().canvas.manager.set_window_title(f'Strategy statistics.')
