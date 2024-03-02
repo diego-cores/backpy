@@ -208,7 +208,7 @@ class StrategyClass(ABC):
         \tHow much data starting from the present backwards do you want to be returned.\n
         \tIf you leave it at None, the data for all times is returned.\n
         """
-        if period > 5000 and period <= 0: raise ValueError()
+        if period > 5000 or period <= 0: raise ValueError("'period' it has to be greater than 0 and less than 5000.")
         elif last != None:
             if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
@@ -241,6 +241,7 @@ class StrategyClass(ABC):
         elif end != None:
             if end < 0: raise ValueError("'end' must be greater or equal than 0.")
             elif start >= end: raise ValueError("'start' must be less than end.")
+        if bar <= 0: raise ValueError("'bar' must be greater than 0.")
 
         data_len = self.__data.shape[0]; data_range = self.__data.iloc[data_len-end if end != None and end < data_len else 0:data_len-start if start < data_len else data_len]
 
