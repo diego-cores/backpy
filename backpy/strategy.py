@@ -261,7 +261,7 @@ class StrategyClass(ABC):
         Open an action.\n
         Warning:
         --
-        If you leave the stop loss and take profit in np.nan your trade will be counted as closed and you can't modify it.\n
+        If you leave the stop loss and take profit in np.nan your trade will be counted as closed and you can't modify it or close it.\n
         Parameters:
         --
         >>> type:int = 1
@@ -302,15 +302,15 @@ class StrategyClass(ABC):
         if self.__trades_ac.empty: raise exception.ActionError('There are no active trades.')
         elif not index in self.__trades_ac.index.to_list(): raise exception.ActionError('Index does not exist.')
         # Get trade to close.
-        trade = self.__trades_ac.iloc[lambda x: x.index==index]
+        trade = self.__trades_ac.iloc[lambda x: x.index==index].copy()
         self.__trades_ac = self.__trades_ac.drop(trade.index)
         # Get PositionClose
         take = trade['TakeProfit'].iloc[0];stop = trade['StopLoss'].iloc[0]
         position_close = (stop if self.__data["Low"].iloc[-1] <= stop else take if self.__data["High"].iloc[-1] >= take else self.__data["Close"].iloc[-1]) if trade['Type'].iloc[0] else (stop if self.__data["High"].iloc[-1] >= stop else take if self.__data["Low"].iloc[-1] <= take else self.__data["Close"].iloc[-1])
         # Fill data.
-        trade['PositionClose'] = position_close; trade['PositionDate'] = self.__data.index[-1]
+        trade['PositionClose'] = position_close
+        trade['PositionDate'] = self.__data.index[-1]
         open = trade['Close'].iloc[0]
-
         trade['ProfitPer'] = (position_close-open)/open*100 if trade['Type'].iloc[0] else (open-position_close)/open*100
         trade['Profit'] = trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]/100 if not np.isnan(trade['Amount'].iloc[0]) else np.nan
 

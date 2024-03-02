@@ -69,7 +69,6 @@ def max_drawdown(values:pd.Series):
             drdwn = (max_val - x) / max_val
             if drdwn > max_drdwn:
                 max_drdwn = drdwn
-                print(max_val, x)
     values.apply(calc)
 
     return max_drdwn * 100

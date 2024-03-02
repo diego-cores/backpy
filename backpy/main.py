@@ -361,7 +361,7 @@ Average ratio: {round((abs(__trades['Close']-__trades['PositionClose']) / abs(__
 
 Profit: {round(__trades['Profit'].sum(),1)}
 Profit fact: {round((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),1) if (__trades['Profit']>0).sum() > 0 and (__trades['Profit']<=0).sum() > 0 and not pd.isna(__trades['Profit']).all() else 0}
-Duration ratio: {round(__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).sum(),4)}
+Duration ratio: {round(__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).sum(),4) if not __trades['PositionDate'].isnull().all() else np.nan}
 
 Max drawdown: {round(utils.max_drawdown(__trades['Profit'].dropna().cumsum()+_init_funds),1)}%
 Long exposure: {round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
