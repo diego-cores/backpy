@@ -3,7 +3,7 @@ Back Test Py.
 ----
 BackPy is a library that is used to test strategies in the market.
 
-  Version: 0.8.2
+  Version: 0.9.0
 
 https://github.com/Diego-Cores/BackPy
 
@@ -61,28 +61,11 @@ leading to results that may not reflect real-world outcomes.
 
 What can I do with BackPy?
 --
-# With BackPy you will be able to know the position of different indicators for each point.
-# You can create your own indicators based on price, date and volume.
-# For each point you can consult previous data such as previous closings and active actions.
-# Data will be returned in type: pandas.dataframe, pandas.series or numpy.ndarray.
-# You can display the data with logarithmic scale or not.
-# You can print statistics of the uploaded data.
-# You can modify the stop loss or take profit of any open position.
-# You can see statistics of how your strategy did.
-
-Example of what you have to do to create your own strategy:
-
->>> class FristStrategy(BackPy.StrategyClass):
->>>     def next(self) -> None:
->>>         ema = self.idc_ema(100,1).iloc[0]
->>>         if self.close > ema:
->>>             self.act_open('l')
-
-Then you can plot the graph and its results.
-Example:
-
->>> BackPy.plot()
->>> BackPy.trades_stats()
+- With BackPy you will be able to know the position of different indicators for each point.
+- You can create your own indicators based on price, date and volume.
+- For each point you can consult previous data such as previous closings and active actions.
+- You can display the data with logarithmic scale or not.
+- You can print statistics of the uploaded data.
 """
 
 __all__ = [

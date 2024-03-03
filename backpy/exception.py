@@ -4,6 +4,8 @@ Exceptions.
 Custom exceptions.
 """
 
+class DataError(Exception):pass
+
 class YfinanceError(Exception):pass
 
 class PlotError(Exception):pass

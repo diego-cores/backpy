@@ -14,6 +14,7 @@ Functions:
 
 Hidden variables:
 --
+>>> _init_funds # Initial funds.
 >>> __data_interval # Data interval.
 >>> __data_icon # Data icon.
 >>> __data # Saved data.
@@ -36,6 +37,7 @@ __data_icon = None
 __data = None
 
 __trades = pd.DataFrame()
+_init_funds = 0
 
 def load_yfinance_data(tickers:str = any, start:str = None, end:str = None, interval:str = '1d', statistics:bool = True, progress:bool = True) -> None:
     """
@@ -100,11 +102,37 @@ def load_data(data:pd.DataFrame = any, icon:str = None, interval:str = None, sta
     """
     Load any data.
     ----
-    Function still not working.
+    Load data.\n
+    Parameters:
+    Parameters:
+    --
+    >>> data:str = any
+    >>> icon:str = None
+    >>> interval:str = None
+    >>> statistics:bool = True
+    \n
+    data: \n
+    \tpd.Dataframe with all the data.\n
+    \tYou need to have these columns:\n
+    \t['Open', 'High', 'Low', 'Close', 'Volume']\n
+    icon: \n
+    \tString of the data icon.\n
+    interval: \n
+    \tString of the data interval.\n
+    statistics: \n
+    \tPrint statistics of the loaded data.\n
     """
-    pass
+    global __data, __data_icon, __data_interval
+    if not all(col in data.columns.to_list() for col in ['Open', 'High', 'Low', 'Close', 'Volume']): raise exception.DataError("Some columns are missing columns: ['Open', 'High', 'Low', 'Close', 'Volume']")
 
-def run(strategy_class:'strategy.StrategyClass' = any, prnt:bool = True, progress:bool = True) -> str:
+    __data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
+    __data.index.name = 'Date'
+    __data_icon = icon
+    __data_interval = interval
+
+    if statistics: stats_icon(prnt=True)
+
+def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000, prnt:bool = True, progress:bool = True) -> str:
     """
     Run your strategy.
     ----
@@ -112,12 +140,16 @@ def run(strategy_class:'strategy.StrategyClass' = any, prnt:bool = True, progres
     Parameters:
     --
     >>> strategy_class:'strategy.StrategyClass' = any
+    >>> initial_funds:int = 10000
     >>> prnt:bool = True
     >>> progress:bool = True
     \n
     strategy_class: \n
     \tA class that is inherited from StrategyClass\n
     \twhere you create your strategy in the next function.\n
+    initial_funds\n
+    \tIt is the initial amount you start with.\n
+    \tIt is used for some statistics.\n
     prnt: \n
     \tIf it is true, trades_stats will be printed.\n
     \tIf it is false, an string will be returned.\n
@@ -139,16 +171,18 @@ def run(strategy_class:'strategy.StrategyClass' = any, prnt:bool = True, progres
     FristStrategy:
     >>> class FristStrategy(backpy.StrategyClass)
     """
-    global __trades
+    global __trades, _init_funds
 
     if __data is None: raise exception.RunError('Data not loaded.')
+    if initial_funds < 0: raise exception.RunError("'initial_funds' cannot be less than 0.")
     if not __trades.empty: __trades = pd.DataFrame()
 
+    _init_funds = initial_funds
     act_trades = pd.DataFrame()
-    t = time() if progress else None
+    t = time(); step_t = time()
 
     for f in range(__data.shape[0]):
-        if progress: utils.load_bar(__data.shape[0], f+1)
+        if progress: utils.load_bar(__data.shape[0], f+1, f'/ Step time: {round(time()-step_t,3)}'); step_t = time()
 
         instance = strategy_class(__data[:f+1], __trades, act_trades)
         act_trades, __trades = instance._StrategyClass__before()
@@ -230,31 +264,26 @@ def plot(log:bool = False, progress:bool = True) -> None:
 
     date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
     ax1.xaxis.set_major_formatter(date_format); fig.autofmt_xdate()
-    mpl.pyplot.gcf().canvas.manager.set_window_title(f'Back testing: \'{__data_icon}\' {__data.index[0].day}.{__data.index[0].month}.{__data.index[0].year}~{__data.index[-1].day}.{__data.index[-1].month}.{__data.index[-1].year}')
+    mpl.pyplot.gcf().canvas.manager.set_window_title(f'Back testing: \'{__data_icon}\' {".".join(str(val) for val in [__data.index[0].day,__data.index[0].month,__data.index[0].year])+"~"+".".join(str(val) for val in [__data.index[-1].day,__data.index[-1].month,__data.index[-1].year]) if isinstance(__data.index[0], pd.Timestamp) else ""}')
 
     if progress: utils.load_bar(9, 9); print('\nPlotTimer:',round(time()-t,2))
     mpl.pyplot.show()
 
-def plot_strategy(log:bool = False) -> None:
+def plot_strategy() -> None:
     """
     Plot strategy statistics.
     ----
     Plot your strategy statistics:\n
-    # Graph of profit.
-    # Ratio graph.
-    # Stop vs take graph.
-    Parameters:
-    --
-    >>> log:bool = Flase
-    log: \n
-    \tPlot your profit data using logarithmic scale.\n
+    - Graph of profit.
+    - Graph of return.
+    - Winnings graph.
     """
     try:
         import matplotlib.pyplot
     except ModuleNotFoundError: raise exception.PlotError('Matplotlib.pyplot is missing.')
 
     if __trades.empty: raise exception.StatsError('Trades not loaded.')
-    if not 'ProfitPer' in __trades.columns:  raise exception.StatsError('There is no data to see.')
+    if not 'Profit' in __trades.columns:  raise exception.StatsError('There is no data to see.')
 
     mpl.pyplot.close('all'); mpl.pyplot.style.use('ggplot')
     
@@ -263,10 +292,9 @@ def plot_strategy(log:bool = False) -> None:
     ax2 = mpl.pyplot.subplot2grid((6,2), (0,1), rowspan=3, colspan=1, sharex=ax1)
     ax3 = mpl.pyplot.subplot2grid((6,2), (3,0), rowspan=3, colspan=1, sharex=ax1)
 
-    if log: ax1.semilogy(__trades['Profit'],alpha=0)
     ax1.plot(__trades.index,__trades['Profit'].cumsum(), c='black', label='Profit.')
-    ax2.plot(__trades.index,abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss']), c='black', label='Ratio.')
-    ax3.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Stop vs take.')
+    ax2.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Winnings.')
+    ax3.plot(__trades.index,__trades['ProfitPer'].cumsum(), c='black', label='Return.')
 
     ax1.legend(loc='upper left'); ax2.legend(loc='upper left'); ax3.legend(loc='upper left')
 
@@ -292,6 +320,7 @@ def stats_icon(prnt:bool = True) -> str:
     data_s = f"""
 Statistics of {__data_icon}:
 ----
+Last price: {round(__data['Close'].iloc[-1],1) if utils.has_number_on_left(__data['Close'].iloc[-1].max()) else __data['Close'].iloc[-1].max()}
 Maximum price: {round(__data['High'].max(),1) if utils.has_number_on_left(__data['High'].max()) else __data['High'].max()}
 Minimum price: {round(__data['Low'].min(),1) if utils.has_number_on_left(__data['Low'].min()) else __data['Low'].min()}
 Maximum volume: {__data['Volume'].max()}
@@ -300,7 +329,7 @@ Standard deviation: {round(__data['Close'].std(),1) if utils.has_number_on_left(
 Average price: {round(__data['Close'].mean(),1) if utils.has_number_on_left(__data['Close'].mean()) else __data['Close'].mean()}
 Average volume: {round(__data['Volume'].mean(),1)}
 ----
-{__data.index[0].day}.{__data.index[0].month}.{__data.index[0].year}~{__data.index[-1].day}.{__data.index[-1].month}.{__data.index[-1].year} ~ {__data_interval} ~ {__data_icon}
+{".".join(str(val) for val in [__data.index[0].day,__data.index[0].month,__data.index[0].year])+"~"+".".join(str(val) for val in [__data.index[-1].day,__data.index[-1].month,__data.index[-1].year]) if isinstance(__data.index[0], pd.Timestamp) else ""} ~ {__data_interval} ~ {__data_icon}
     """
     if prnt:print(data_s) 
     else: return data_s
@@ -324,18 +353,19 @@ def stats_trades(data:bool = False, prnt:bool = True):
     data_s = f"""
 Statistics of strategy.
 ----
-N-Trades: {len(__trades.index)}
+Trades: {len(__trades.index)}
 
-Total PyG: {round(__trades['ProfitPer'].sum(),1)}
-Mean PyG: {round(__trades['ProfitPer'].mean(),1)} 
-Total profits: {round(__trades['Profit'].sum(),1) if __trades['Profit'].sum() != 0 else np.nan}
-Mean profit: {round(__trades['Profit'].mean(),1) if __trades['Profit'].mean() != 0 else np.nan}
-Mean ratio: {round((abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss'])).mean(),1)}
+Return: {round(__trades['ProfitPer'].sum(),1)}%
+Average return: {round(__trades['ProfitPer'].mean(),1)}%
+Average ratio: {round((abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss'])).mean(),1)}
 
-Wins: {(__trades['ProfitPer']>0).sum()}
-Loss: {(__trades['ProfitPer']<=0).sum()}
-Stop vs take: {abs((__trades['ProfitPer']>0).sum() - (__trades['ProfitPer']<=0).sum())}
-WinRate: {round((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
+Profit: {round(__trades['Profit'].sum(),1)}
+Profit fact: {round((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),1) if (__trades['Profit']>0).sum() > 0 and (__trades['Profit']<=0).sum() > 0 and not pd.isna(__trades['Profit']).all() else 0}
+Duration ratio: {round(__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).sum(),4) if not __trades['PositionDate'].isnull().all() else np.nan}
+
+Max drawdown: {round(utils.max_drawdown(__trades['Profit'].dropna().cumsum()+_init_funds),1)}%
+Long exposure: {round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
+Winnings: {round((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
 ----
     """
     if data: data_s += stats_icon(False)
