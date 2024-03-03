@@ -116,6 +116,7 @@ class StrategyClass(ABC):
         Prev.
         ----
         Returns the data from the previous steps.\n
+        Columns: 'Open','High','Low','Close','Volume'.\n
         Parameters:
         --
         >>> label:str = None
@@ -142,6 +143,7 @@ class StrategyClass(ABC):
         Prev of trades closed.
         ----
         Returns the data from the closed trades.\n
+        Columns: 'Date','Close','Low','High','StopLoss','TakeProfit','PositionClose','PositionDate','Amount','ProfitPer','Profit','Type'.\n
         Parameters:
         --
         >>> label:str = None
@@ -170,6 +172,7 @@ class StrategyClass(ABC):
         Prev of trades active.
         ----
         Returns the data from the active trades.\n
+        Columns: 'Date','Close','Low','High','StopLoss','TakeProfit','Amount','Type'.\n
         Parameters:
         --
         >>> label:str = None
@@ -219,6 +222,7 @@ class StrategyClass(ABC):
         Indicator horizontal volume.
         ----
         Return a pd.DataFrame with the position of each bar and the volume.\n
+        Columns: 'Pos','H_Volume'.\n
         Alert:
         --
         Using this function with the 'end' parameter set to None\n
