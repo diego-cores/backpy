@@ -321,7 +321,7 @@ class StrategyClass(ABC):
         trade['PositionDate'] = self.__data.index[-1]
         open = trade['Close'].iloc[0]
         trade['ProfitPer'] = (position_close-open)/open*100 if trade['Type'].iloc[0] else (open-position_close)/open*100
-        trade['Profit'] = trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]/100*(self.__commission/100) if not np.isnan(trade['Amount'].iloc[0]) else np.nan
+        trade['Profit'] = trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]/100-trade['Amount']*(self.__commission/100) if not np.isnan(trade['Amount'].iloc[0]) else np.nan
 
         self.__trades_cl = pd.concat([self.__trades_cl,trade], ignore_index=True) ; self.__trades_cl.reset_index(drop=True, inplace=True)
 

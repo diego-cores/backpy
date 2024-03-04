@@ -152,7 +152,7 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
     \tIt is the initial amount you start with.\n
     \tIt is used for some statistics.\n
     commission:\n
-    \tIt is the commission for each trade.\n
+    \tIt is the commission in percentage for each trade.\n
     \tIt is used for some statistics.\n
     prnt: \n
     \tIf it is true, trades_stats will be printed.\n
@@ -200,7 +200,7 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
     if prnt and not __trades.empty and 'ProfitPer' in __trades.columns: stats_trades(prnt=True)
     elif not prnt and not __trades.empty and 'ProfitPer' in __trades.columns: return stats_trades(prnt=False)
 
-def plot(log:bool = False, progress:bool = True) -> None:
+def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     """
     Plot graph with trades.
     ----
@@ -209,6 +209,7 @@ def plot(log:bool = False, progress:bool = True) -> None:
     --
     >>> log:bool = Flase
     >>> progress:bool = True
+    >>> block:bool = True
     \n
     log: \n
     \tPlot your data using logarithmic scale.\n
@@ -273,9 +274,9 @@ def plot(log:bool = False, progress:bool = True) -> None:
     mpl.pyplot.gcf().canvas.manager.set_window_title(f'Back testing: \'{__data_icon}\' {".".join(str(val) for val in [__data.index[0].day,__data.index[0].month,__data.index[0].year])+"~"+".".join(str(val) for val in [__data.index[-1].day,__data.index[-1].month,__data.index[-1].year]) if isinstance(__data.index[0], pd.Timestamp) else ""}')
 
     if progress: utils.load_bar(9, 9); print('\nPlotTimer:',round(time()-t,2))
-    mpl.pyplot.show()
+    mpl.pyplot.show(block=block)
 
-def plot_strategy() -> None:
+def plot_strategy(block:bool = True) -> None:
     """
     Plot strategy statistics.
     ----
@@ -283,6 +284,9 @@ def plot_strategy() -> None:
     - Graph of profit.
     - Graph of return.
     - Winnings graph.
+    Parameters:
+    --
+    >>> block:bool = True
     """
     try:
         import matplotlib.pyplot
@@ -291,7 +295,7 @@ def plot_strategy() -> None:
     if __trades.empty: raise exception.StatsError('Trades not loaded.')
     if not 'Profit' in __trades.columns:  raise exception.StatsError('There is no data to see.')
 
-    mpl.pyplot.close('all'); mpl.pyplot.style.use('ggplot')
+    mpl.pyplot.style.use('ggplot')
     
     fig = mpl.pyplot.figure(figsize=(16,8))
     ax1 = mpl.pyplot.subplot2grid((6,2), (0,0), rowspan=3, colspan=1)
@@ -306,7 +310,7 @@ def plot_strategy() -> None:
 
     mpl.pyplot.xticks([])
     mpl.pyplot.gcf().canvas.manager.set_window_title(f'Strategy statistics.')
-    mpl.pyplot.show()
+    mpl.pyplot.show(block=block)
 
 def stats_icon(prnt:bool = True) -> str:
     """
