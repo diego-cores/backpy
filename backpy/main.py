@@ -132,7 +132,7 @@ def load_data(data:pd.DataFrame = any, icon:str = None, interval:str = None, sta
 
     if statistics: stats_icon(prnt=True)
 
-def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000, prnt:bool = True, progress:bool = True) -> str:
+def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000, commission:int = 0, prnt:bool = True, progress:bool = True) -> str:
     """
     Run your strategy.
     ----
@@ -141,14 +141,18 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
     --
     >>> strategy_class:'strategy.StrategyClass' = any
     >>> initial_funds:int = 10000
+    >>> commission:int = 0
     >>> prnt:bool = True
     >>> progress:bool = True
     \n
     strategy_class: \n
     \tA class that is inherited from StrategyClass\n
     \twhere you create your strategy in the next function.\n
-    initial_funds\n
+    initial_funds:\n
     \tIt is the initial amount you start with.\n
+    \tIt is used for some statistics.\n
+    commission:\n
+    \tIt is the commission for each trade.\n
     \tIt is used for some statistics.\n
     prnt: \n
     \tIf it is true, trades_stats will be printed.\n
@@ -175,16 +179,18 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
 
     if __data is None: raise exception.RunError('Data not loaded.')
     if initial_funds < 0: raise exception.RunError("'initial_funds' cannot be less than 0.")
+    if commission < 0: raise exception.RunError("'commission' cannot be less than 0.")
     if not __trades.empty: __trades = pd.DataFrame()
 
     _init_funds = initial_funds
+
     act_trades = pd.DataFrame()
     t = time(); step_t = time()
 
     for f in range(__data.shape[0]):
         if progress: utils.load_bar(__data.shape[0], f+1, f'/ Step time: {round(time()-step_t,3)}'); step_t = time()
 
-        instance = strategy_class(__data[:f+1], __trades, act_trades)
+        instance = strategy_class(__data[:f+1], __trades, act_trades, commission)
         act_trades, __trades = instance._StrategyClass__before()
     
     if progress: print('\nRunTimer:',round(time()-t,2))

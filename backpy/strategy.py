@@ -41,7 +41,7 @@ class StrategyClass(ABC):
     --
     >>> __before
     """ 
-    def __init__(self, data:pd.DataFrame = any, trades_cl:pd.DataFrame = pd.DataFrame(), trades_ac:pd.DataFrame = pd.DataFrame()) -> None: 
+    def __init__(self, data:pd.DataFrame = any, trades_cl:pd.DataFrame = pd.DataFrame(), trades_ac:pd.DataFrame = pd.DataFrame(), commission:int = 0) -> None: 
         """
         __init__
         ----
@@ -58,6 +58,8 @@ class StrategyClass(ABC):
         \tClosed trades.\n
         trades_ac: \n
         \tOpen trades.\n
+        commission: \n
+        \Commission per trade.\n
         Variables:
         --
         >>> self.open = data["Open"].iloc[-1]
@@ -82,6 +84,8 @@ class StrategyClass(ABC):
         self.close = data["Close"].iloc[-1]
         self.volume = data["Volume"].iloc[-1]
         self.date = data.index[-1]
+
+        self.__commission = commission
 
         self.__trade = pd.DataFrame()
         self.__trades_ac = trades_ac
@@ -317,7 +321,7 @@ class StrategyClass(ABC):
         trade['PositionDate'] = self.__data.index[-1]
         open = trade['Close'].iloc[0]
         trade['ProfitPer'] = (position_close-open)/open*100 if trade['Type'].iloc[0] else (open-position_close)/open*100
-        trade['Profit'] = trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]/100 if not np.isnan(trade['Amount'].iloc[0]) else np.nan
+        trade['Profit'] = trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]/100-self.__commission if not np.isnan(trade['Amount'].iloc[0]) else np.nan
 
         self.__trades_cl = pd.concat([self.__trades_cl,trade], ignore_index=True) ; self.__trades_cl.reset_index(drop=True, inplace=True)
 
