@@ -41,7 +41,7 @@ class StrategyClass(ABC):
     --
     >>> __before
     """ 
-    def __init__(self, data:pd.DataFrame = any, trades_cl:pd.DataFrame = pd.DataFrame(), trades_ac:pd.DataFrame = pd.DataFrame(), commission:int = 0) -> None: 
+    def __init__(self, data:pd.DataFrame = any, trades_cl:pd.DataFrame = pd.DataFrame(), trades_ac:pd.DataFrame = pd.DataFrame(), commission:int = 0, init_funds:int = 0) -> None: 
         """
         __init__
         ----
@@ -71,6 +71,8 @@ class StrategyClass(ABC):
 
         Hidden variables:
         --
+        >>> self.__init_funds = init_funds
+        >>> self.__commission = commission
         >>> self.__trade = pd.DataFrame() # New trade
         >>> self.__trades_ac = trades_ac
         >>> self.__trades_cl = trades_cl
@@ -86,6 +88,7 @@ class StrategyClass(ABC):
         self.date = data.index[-1]
 
         self.__commission = commission
+        self.__init_funds = init_funds
 
         self.__trade = pd.DataFrame()
         self.__trades_ac = trades_ac

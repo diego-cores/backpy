@@ -1,7 +1,13 @@
 """
 Utils.
 ----
-Different useful functions for the operation of main code.
+Different useful functions for the operation of main code.\n
+Functions:
+---
+>>> load_bar
+>>> has_number_on_left
+>>> max_drawdown
+>>> candles_plot
 """
 
 from matplotlib.patches import Rectangle
