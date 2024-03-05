@@ -224,10 +224,10 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
 
     mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
-    ax1 = mpl.pyplot.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
+    ax1 = mpl.pyplot.subplot2grid((6,1), (0,0), rowspan=5, colspan=1); ax1.set_yticks(__data['Close'])
     ax2 = mpl.pyplot.subplot2grid((6,1), (5,0), rowspan=1, colspan=1, sharex=ax1); ax2.set_yticks([])
-
-    if log: ax1.semilogy(__data['Close'],alpha=0); ax2.semilogy()
+    
+    if log: ax1.semilogy(__data['Close'], alpha=0); ax2.semilogy(alpha=0)
     if progress: utils.load_bar(9, 2)
 
     fig.tight_layout(); fig.subplots_adjust(hspace=0)
@@ -269,7 +269,7 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     if progress: utils.load_bar(9, 9); print('\nPlotTimer:',round(time()-t,2))
     mpl.pyplot.show(block=block)
 
-def plot_strategy(block:bool = True) -> None:
+def plot_strategy(log:bool = False, block:bool = True) -> None:
     """
     Plot strategy statistics.
     ----
@@ -279,7 +279,11 @@ def plot_strategy(block:bool = True) -> None:
     - Winnings graph.
     Parameters:
     --
+    >>> log:bool = Flase
     >>> block:bool = True
+    \n
+    log: \n
+    \tPlot your data using logarithmic scale.\n
     """
 
     if __trades.empty: raise exception.StatsError('Trades not loaded.')
@@ -295,6 +299,7 @@ def plot_strategy(block:bool = True) -> None:
     ax2.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Winnings.')
     ax3.plot(__trades.index,__trades['ProfitPer'].cumsum(), c='black', label='Return.')
 
+    if log: ax1.set_yscale('symlog'); ax3.set_yscale('symlog')
     ax1.legend(loc='upper left'); ax2.legend(loc='upper left'); ax3.legend(loc='upper left')
 
     mpl.pyplot.xticks([])
