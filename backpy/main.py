@@ -9,6 +9,7 @@ Functions:
 >>> load_data
 >>> run
 >>> plot
+>>> plot_strategy
 >>> icon_stats
 >>> trades_stats
 
@@ -20,13 +21,14 @@ Hidden variables:
 >>> __data # Saved data.
 """
 
+import matplotlib.pyplot
 import matplotlib as mpl
 
 import pandas as pd
 import numpy as np
 
-from time import time
 import types
+from time import time
 
 from . import utils
 from . import strategy
@@ -218,33 +220,24 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     """
 
     if __data is None: raise exception.PlotError('Data not loaded.')
-
-    try:
-        from mplfinance.original_flavor import candlestick_ohlc
-        import matplotlib.pyplot
-    except ModuleNotFoundError: raise exception.PlotError('Module is missing. Modules: mplfinance, matplotlib.pyplot.')
-        
     if progress: utils.load_bar(9, 1);t = time()
 
-    mpl.pyplot.close('all'); mpl.pyplot.style.use('ggplot')
-    
+    mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
     ax1 = mpl.pyplot.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
     ax2 = mpl.pyplot.subplot2grid((6,1), (5,0), rowspan=1, colspan=1, sharex=ax1); ax2.set_yticks([])
 
     if log: ax1.semilogy(__data['Close'],alpha=0); ax2.semilogy()
-
     if progress: utils.load_bar(9, 2)
 
-    ordered_data = __data[['Open','High','Low','Close']].copy(); ordered_data.insert(0, 'Date', mpl.dates.date2num(__data.index))
-    
     fig.tight_layout(); fig.subplots_adjust(hspace=0)
 
     width = (mpl.dates.date2num(__data.index).max()-mpl.dates.date2num(__data.index).min())/__data.shape[0]
 
     if progress: utils.load_bar(9, 3)
 
-    candlestick_ohlc(ax1, ordered_data.values, width=width*0.9, colorup='g',colordown='r', alpha=1)
+    candle_data = __data.copy(); candle_data.index = mpl.dates.date2num(__data.index)
+    utils.candles_plot(ax1, candle_data, width*0.9)
 
     if progress: utils.load_bar(9, 4)
 
@@ -288,15 +281,11 @@ def plot_strategy(block:bool = True) -> None:
     --
     >>> block:bool = True
     """
-    try:
-        import matplotlib.pyplot
-    except ModuleNotFoundError: raise exception.PlotError('Matplotlib.pyplot is missing.')
 
     if __trades.empty: raise exception.StatsError('Trades not loaded.')
     if not 'Profit' in __trades.columns:  raise exception.StatsError('There is no data to see.')
 
     mpl.pyplot.style.use('ggplot')
-    
     fig = mpl.pyplot.figure(figsize=(16,8))
     ax1 = mpl.pyplot.subplot2grid((6,2), (0,0), rowspan=3, colspan=1)
     ax2 = mpl.pyplot.subplot2grid((6,2), (0,1), rowspan=3, colspan=1, sharex=ax1)

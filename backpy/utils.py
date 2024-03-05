@@ -4,6 +4,11 @@ Utils.
 Different useful functions for the operation of main code.
 """
 
+from matplotlib.patches import Rectangle
+from matplotlib.axes._axes import Axes
+from matplotlib.lines import Line2D
+
+import matplotlib as mpl
 import pandas as pd
 
 def load_bar(size:int,step:int,more:str = '') -> None:
@@ -46,7 +51,7 @@ def has_number_on_left(num:float) -> bool:
     """
     return str(num).lstrip('-0').partition('.')[0] != ''
 
-def max_drawdown(values:pd.Series):
+def max_drawdown(values:pd.Series) -> float:
     """
     Maximum drawdown.
     ----
@@ -72,3 +77,43 @@ def max_drawdown(values:pd.Series):
     values.apply(calc)
 
     return max_drdwn * 100
+
+def candles_plot(ax:Axes, data:pd.DataFrame, width:float = 1, color_up:str = 'g',color_down:str = 'r', alpha:str = 1) -> None:
+    """
+    Candles draw.
+    ----
+    Parameters:
+    --
+    >>> ax:Axes
+    >>> data:pd.DataFrame
+    >>> width:float = 1
+    >>> color_up:str = 'g'
+    >>> color_down:str = 'r'
+    >>> alpha:str = 1
+    \n
+    ax: \n
+    \tAxes where it is drawn.\n
+    data: \n
+    \tData to draw.\n
+    width: \n
+    \tWidth of each candle.\n
+    color_up: \n
+    \tCandle color when price rises.\n
+    color_down: \n
+    \tCandle color when price goes down.\n
+    aplha: \n
+    \tOpacity.\n
+    """
+    OFFSET = width / 2.
+
+    def draw(row):
+        color = color_up if row['Close'] >= row['Open'] else color_down
+
+        line = Line2D(xdata=(row.name, row.name), ydata=(row['Low'], row['High']), color=color, linewidth=0.5)
+        rect = Rectangle(xy=(row.name-OFFSET, min(row['Open'], row['Close'])), width=width, height=abs(row['Close']-row['Open']), facecolor=color, edgecolor=color)
+
+        rect.set_alpha(alpha); line.set_alpha(alpha)
+        ax.add_line(line); ax.add_patch(rect)
+
+    data.apply(draw, axis=1)
+    ax.autoscale_view()
