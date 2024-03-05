@@ -224,7 +224,7 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
 
     mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
-    ax1 = mpl.pyplot.subplot2grid((6,1), (0,0), rowspan=5, colspan=1); ax1.set_yticks(__data['Close'])
+    ax1 = mpl.pyplot.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
     ax2 = mpl.pyplot.subplot2grid((6,1), (5,0), rowspan=1, colspan=1, sharex=ax1); ax2.set_yticks([])
     
     if log: ax1.semilogy(__data['Close'], alpha=0); ax2.semilogy(alpha=0)
