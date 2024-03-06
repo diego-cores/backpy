@@ -324,14 +324,14 @@ def stats_icon(prnt:bool = True) -> str:
     data_s = f"""
 Statistics of {__data_icon}:
 ----
-Last price: {round(__data['Close'].iloc[-1],1) if utils.has_number_on_left(__data['Close'].iloc[-1].max()) else __data['Close'].iloc[-1].max()}
-Maximum price: {round(__data['High'].max(),1) if utils.has_number_on_left(__data['High'].max()) else __data['High'].max()}
-Minimum price: {round(__data['Low'].min(),1) if utils.has_number_on_left(__data['Low'].min()) else __data['Low'].min()}
+Last price: {utils.round_r(__data['Close'].iloc[-1],2)}
+Maximum price: {utils.round_r(__data['High'].max(),2)}
+Minimum price: {utils.round_r(__data['Low'].min(),2)}
 Maximum volume: {__data['Volume'].max()}
 Sample size: {len(__data.index)}
-Standard deviation: {round(__data['Close'].std(),1) if utils.has_number_on_left(__data['Close'].std()) else __data['Close'].std()}
-Average price: {round(__data['Close'].mean(),1) if utils.has_number_on_left(__data['Close'].mean()) else __data['Close'].mean()}
-Average volume: {round(__data['Volume'].mean(),1)}
+Standard deviation: {utils.round_r(__data['Close'].std(),2)}
+Average price: {utils.round_r(__data['Close'].mean(),2)}
+Average volume: {utils.round_r(__data['Volume'].mean(),2)}
 ----
 {".".join(str(val) for val in [__data.index[0].day,__data.index[0].month,__data.index[0].year])+"~"+".".join(str(val) for val in [__data.index[-1].day,__data.index[-1].month,__data.index[-1].year]) if isinstance(__data.index[0], pd.Timestamp) else ""} ~ {__data_interval} ~ {__data_icon}
     """
@@ -359,17 +359,17 @@ Statistics of strategy.
 ----
 Trades: {len(__trades.index)}
 
-Return: {round(__trades['ProfitPer'].sum(),1)}%
-Average return: {round(__trades['ProfitPer'].mean(),1)}%
-Average ratio: {round((abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss'])).mean(),1)}
+Return: {utils.round_r(__trades['ProfitPer'].sum(),2)}%
+Average return: {utils.round_r(__trades['ProfitPer'].mean(),2)}%
+Average ratio: {utils.round_r((abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss'])).mean(),2)}
 
-Profit: {round(__trades['Profit'].sum(),1)}
-Profit fact: {round((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),1) if (__trades['Profit']>0).sum() > 0 and (__trades['Profit']<=0).sum() > 0 and not pd.isna(__trades['Profit']).all() else 0}
-Duration ratio: {round(__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).sum(),4) if not __trades['PositionDate'].isnull().all() else np.nan}
+Profit: {utils.round_r(__trades['Profit'].sum(),2)}
+Profit fact: {utils.round_r((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),2) if (__trades['Profit']>0).sum() > 0 and (__trades['Profit']<=0).sum() > 0 and not pd.isna(__trades['Profit']).all() else 0}
+Duration ratio: {utils.round_r(__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).sum(),2) if not __trades['PositionDate'].isnull().all() else np.nan}
 
-Max drawdown: {round(utils.max_drawdown(__trades['Profit'].dropna().cumsum()+_init_funds),1)}%
-Long exposure: {round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
-Winnings: {round((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
+Max drawdown: {utils.round_r(utils.max_drawdown(__trades['Profit'].dropna().cumsum()+_init_funds),2)}%
+Long exposure: {utils.round_r((__trades['Type']==1).sum()/__trades['Type'].count()*100,2)}%
+Winnings: {utils.round_r((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,2) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
 ----
     """
     if data: data_s += stats_icon(False)

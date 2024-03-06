@@ -5,7 +5,7 @@ Different useful functions for the operation of main code.\n
 Functions:
 ---
 >>> load_bar
->>> has_number_on_left
+>>> round_r
 >>> max_drawdown
 >>> candles_plot
 """
@@ -17,7 +17,7 @@ from matplotlib.lines import Line2D
 import matplotlib as mpl
 import pandas as pd
 
-def load_bar(size:int,step:int,more:str = '') -> None:
+def load_bar(size:int, step:int, more:str = '') -> None:
     """
     Loading bar.
     ----
@@ -43,19 +43,25 @@ def load_bar(size:int,step:int,more:str = '') -> None:
 
     print('\r['+first+per+'%%'+sec+']'+f'  {step} of {size} completed '+more, end='')
 
-def has_number_on_left(num:float) -> bool:
+def round_r(num:float, r:int = 1) -> float:
     """
-    Has number on left.
+    Round right.
     ----
-    Returns true if there is a number other than 0 to the left of the '.'.\n
+    Returns the num rounded to have at most 'r' significant numbers to the right of the '.'.\n
     Parameters:
     --
     >>> num:float
+    >>> r:int = 1
     \n
     num: \n
-    \tNumber to check.\n
+    \tNumber.\n
+    r: \n
+    \tMaximum significant numbers.\n
     """
-    return str(num).lstrip('-0').partition('.')[0] != ''
+    if int(num) != num:
+        num = round(num) if len(str(num).split('.')[0]) > r else f'{{:.{r}g}}'.format(num)
+
+    return num
 
 def max_drawdown(values:pd.Series) -> float:
     """
