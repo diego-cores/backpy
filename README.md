@@ -1,3 +1,4 @@
+![BackPy logo](images/logo.png)
 # BackPy
 BackPy is a library made in python for back testing in financial markets.
 Read Risk_notice.txt and LICENSE.
