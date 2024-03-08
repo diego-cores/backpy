@@ -367,9 +367,9 @@ Profit: {utils.round_r(__trades['Profit'].sum(),2)}
 Profit fact: {utils.round_r((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),2) if (__trades['Profit']>0).sum() > 0 and (__trades['Profit']<=0).sum() > 0 and not pd.isna(__trades['Profit']).all() else 0}
 Duration ratio: {utils.round_r(__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).sum(),2) if not __trades['PositionDate'].isnull().all() else np.nan}
 
-Max drawdown: {utils.round_r(utils.max_drawdown(__trades['Profit'].dropna().cumsum()+_init_funds),2)}%
-Long exposure: {utils.round_r((__trades['Type']==1).sum()/__trades['Type'].count()*100,2)}%
-Winnings: {utils.round_r((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,2) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
+Max drawdown: {round(utils.max_drawdown(__trades['Profit'].dropna().cumsum()+_init_funds),1)}%
+Long exposure: {round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
+Winnings: {round((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
 ----
     """
     if data: data_s += stats_icon(False)
