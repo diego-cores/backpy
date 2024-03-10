@@ -40,6 +40,10 @@ class StrategyClass(ABC):
     Hidden Functions:
     --
     >>> __before
+    >>> __idc_ema
+    >>> __idc_sma
+    >>> __idc_wma
+    >>> __act_close
     """ 
     def __init__(self, data:pd.DataFrame = any, trades_cl:pd.DataFrame = pd.DataFrame(), trades_ac:pd.DataFrame = pd.DataFrame(), commission:int = 0, init_funds:int = 0) -> None: 
         """
@@ -108,7 +112,7 @@ class StrategyClass(ABC):
         self.next()
 
         # Check if a trade needs to be closed.
-        self.__trades_ac.apply(lambda row: self.act_close(row.name) if self.__data["High"].iloc[-1] >= max(row['TakeProfit'],row['StopLoss']) or self.__data["Low"].iloc[-1] <= min(row['TakeProfit'],row['StopLoss']) else None, axis=1) 
+        self.__trades_ac.apply(lambda row: self.__act_close(index=row.name) if self.__data["High"].iloc[-1] >= max(row['TakeProfit'],row['StopLoss']) or self.__data["Low"].iloc[-1] <= min(row['TakeProfit'],row['StopLoss']) else None, axis=1) 
 
         # Concat new trade.
         if not self.__trade.empty and np.isnan(self.__trade['StopLoss'].iloc[0]) and np.isnan(self.__trade['TakeProfit'].iloc[0]): 
@@ -268,8 +272,19 @@ class StrategyClass(ABC):
         elif last != None:
             if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
-        ema = self.__data["Close"].ewm(span=length, adjust=False).mean()
-        
+        # Ema calc.
+        return self.__idc_ema(length=length, source=source, last=last)
+
+    def __idc_ema(self, length:int = any, source:str = 'Close', last:int = None) -> np.array:
+        """
+        Exponential moving average.
+        ----
+        Returns an pd.Series with all the steps of an ema with the length you indicate.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        """
+        ema = self.__data[source].ewm(span=length, adjust=False).mean()
+    
         return np.flip(ema[len(ema)-last if last != None and last < len(ema) else 0:])
     
     def idc_sma(self, length:int = any, source:str = 'Close', last:int = None):
@@ -296,7 +311,18 @@ class StrategyClass(ABC):
         elif last != None:
             if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
-        sma = self.__data["Close"].rolling(window=length).mean()
+        # Sma calc.
+        return self.__idc_sma(length=length, source=source, last=last)
+    
+    def __idc_sma(self, length:int = any, source:str = 'Close', last:int = None):
+        """
+        Simple moving average.
+        ----
+        Return an pd.Series with all the steps of an sma with the length you indicate.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        """
+        sma = self.__data[source].rolling(window=length).mean()
 
         return np.flip(sma[len(sma)-last if last != None and last < len(sma) else 0:])
     
@@ -324,6 +350,17 @@ class StrategyClass(ABC):
         elif last != None:
             if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
+        # Wma calc.
+        return self.__idc_wma(length=length, source=source, last=last)
+    
+    def __idc_wma(self, length:int = any, source:str = 'Close', last:int = None):
+        """
+        Linear weighted moving average.
+        ----
+        Return an pd.Series with all the steps of an wma with the length you indicate.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        """
         weights = [i+1 for i in range(length)]
         wma = self.__data[source].rolling(window=length).apply(lambda x: (x*weights).sum()/sum(weights), raw=True)
 
@@ -361,8 +398,9 @@ class StrategyClass(ABC):
             if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
         match ma_type:
-            case 'sma': ma = self.__data[source].rolling(window=length).mean()
-            case 'ema': ma = self.__data[source].ewm(span=length, adjust=False).mean()
+            case 'sma': ma = self.__idc_sma(length=length, source=source)
+            case 'ema': ma = self.__idc_ema(length=length, source=source)
+            case 'wma': ma = self.__idc_wma(length=length, source=source)
             case _: raise ValueError("'ma_type' only these values: 'sma', 'ema'.")
         
         bb = pd.DataFrame({'Upper':ma + (std_dev * self.__data[source].rolling(window=length).std()),
@@ -474,6 +512,17 @@ class StrategyClass(ABC):
         # Check exceptions.
         if self.__trades_ac.empty: raise exception.ActionError('There are no active trades.')
         elif not index in self.__trades_ac.index.to_list(): raise exception.ActionError('Index does not exist.')
+        # Close action.
+        return self.__act_close(index=index)
+
+    def __act_close(self, index:int = 0) -> None:
+        """
+        Close action.
+        ----
+        Close an action.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        """
         # Get trade to close.
         trade = self.__trades_ac.iloc[lambda x: x.index==index].copy()
         self.__trades_ac = self.__trades_ac.drop(trade.index)
