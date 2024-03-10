@@ -244,7 +244,7 @@ class StrategyClass(ABC):
 
         return result
         
-    def idc_ema(self, length:int = any, last:int = None) -> np.array:
+    def idc_ema(self, length:int = any, source:str = 'Close', last:int = None) -> np.array:
         """
         Exponential moving average.
         ----
@@ -252,21 +252,27 @@ class StrategyClass(ABC):
         Parameters:
         --
         >>> length:int = any
+        >>> source:str = 'Close'
         >>> last:int = None
         \n
         length: \n
         \tEma length.\n
+        source: \n
+        \tData.\n
         last: \n
         \tHow much data starting from the present backwards do you want to be returned.\n
         \tIf you leave it at None, the data for all times is returned.\n
         """
         if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
+        elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
         elif last != None:
             if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
-        ema = self.__data["Close"].ewm(span=length, adjust=False).mean(); return np.flip(ema[len(ema)-last if last != None and last < len(ema) else 0:])
+        ema = self.__data["Close"].ewm(span=length, adjust=False).mean()
+        
+        return np.flip(ema[len(ema)-last if last != None and last < len(ema) else 0:])
     
-    def idc_sma(self, length:int = any, last:int = None):
+    def idc_sma(self, length:int = any, source:str = 'Close', last:int = None):
         """
         Simple moving average.
         ----
@@ -274,19 +280,54 @@ class StrategyClass(ABC):
         Parameters:
         --
         >>> length:int = any
+        >>> source:str = 'Close'
         >>> last:int = None
         \n
         length: \n
         \tSma length.\n
+        source: \n
+        \tData.\n
         last: \n
         \tHow much data starting from the present backwards do you want to be returned.\n
         \tIf you leave it at None, the data for all times is returned.\n
         """
         if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
+        elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
         elif last != None:
             if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
-        sma = self.__data["Close"].rolling(window=length).mean(); return np.flip(sma[len(sma)-last if last != None and last < len(sma) else 0:])
+        sma = self.__data["Close"].rolling(window=length).mean()
+
+        return np.flip(sma[len(sma)-last if last != None and last < len(sma) else 0:])
+    
+    def idc_wma(self, length:int = any, source:str = 'Close', last:int = None):
+        """
+        Linear weighted moving average.
+        ----
+        Return an pd.Series with all the steps of an wma with the length you indicate.\n
+        Parameters:
+        --
+        >>> length:int = any
+        >>> source:str = 'Close'
+        >>> last:int = None
+        \n
+        length: \n
+        \Wma length.\n
+        source: \n
+        \tData.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
+        """
+        if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
+        elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
+        weights = [i+1 for i in range(length)]
+        wma = self.__data[source].rolling(window=length).apply(lambda x: (x*weights).sum()/sum(weights), raw=True)
+
+        return np.flip(wma[len(wma)-last if last != None and last < len(wma) else 0:])
     
     def idc_bb(self, length:int = any, std_dev:int = 2, ma_type:str = 'sma', source:str = 'Close', last:int = None):
         """
