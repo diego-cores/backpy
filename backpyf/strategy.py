@@ -201,29 +201,7 @@ class StrategyClass(ABC):
             if last <= 0 or last > __trades_ac.shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
         return __trades_ac.iloc[len(__trades_ac)-last if last != None and last < len(__trades_ac) else 0:]
-        
-    def idc_ema(self, period:int = any, last:int = None) -> np.array:
-        """
-        Indicator ema.
-        ----
-        Returns an np.array with all the steps of an ema with the period you indicate.\n
-        Parameters:
-        --
-        >>> period:int = any
-        >>> last:int = None
-        \n
-        period: \n
-        \tEma period.\n
-        last: \n
-        \tHow much data starting from the present backwards do you want to be returned.\n
-        \tIf you leave it at None, the data for all times is returned.\n
-        """
-        if period > 5000 or period <= 0: raise ValueError("'period' it has to be greater than 0 and less than 5000.")
-        elif last != None:
-            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
-
-        ema = self.__data["Close"].ewm(span=period, adjust=False).mean(); return np.flip(ema[len(ema)-last if last != None and last < len(ema) else 0:])
-
+    
     def idc_hvolume(self, start:int = 0, end:int = None, bar:int = 10) -> pd.DataFrame:
         """
         Indicator horizontal volume.
@@ -265,6 +243,148 @@ class StrategyClass(ABC):
         data_range.apply(vol_calc, axis=1); result["H_Volume"] += bar_list
 
         return result
+        
+    def idc_ema(self, length:int = any, last:int = None) -> np.array:
+        """
+        Exponential moving average.
+        ----
+        Returns an pd.Series with all the steps of an ema with the length you indicate.\n
+        Parameters:
+        --
+        >>> length:int = any
+        >>> last:int = None
+        \n
+        length: \n
+        \tEma length.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
+        """
+        if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
+        ema = self.__data["Close"].ewm(span=length, adjust=False).mean(); return np.flip(ema[len(ema)-last if last != None and last < len(ema) else 0:])
+    
+    def idc_sma(self, length:int = any, last:int = None):
+        """
+        Simple moving average.
+        ----
+        Return an pd.Series with all the steps of an sma with the length you indicate.\n
+        Parameters:
+        --
+        >>> length:int = any
+        >>> last:int = None
+        \n
+        length: \n
+        \tSma length.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
+        """
+        if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
+        sma = self.__data["Close"].rolling(window=length).mean(); return np.flip(sma[len(sma)-last if last != None and last < len(sma) else 0:])
+    
+    def idc_bb(self, length:int = any, std_dev:int = 2, ma_type:str = 'sma', source:str = 'Close', last:int = None):
+        """
+        Bollinger bands.
+        ----
+        Return an pd.DataFrame with the value of the upper band, the base ma and the position of the lower band for each step.\n
+        Columns: 'Upper','Base','Lower'.\n
+        Parameters:
+        --
+        >>> length:int = any
+        >>> std_dev:int = 2
+        >>> ma_type:str = 'sma'
+        >>> source:str = 'Close'
+        >>> last:int = None
+        \n
+        length: \n
+        \tWindow length.\n
+        std_dev: \n
+        \tStandard deviation.\n
+        ma_type: \n
+        \tMa type.\n
+        source: \n
+        \tData.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
+        """
+        if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
+        elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
+        match ma_type:
+            case 'sma': ma = self.__data[source].rolling(window=length).mean()
+            case 'ema': ma = self.__data[source].ewm(span=length, adjust=False).mean()
+            case _: raise ValueError("'ma_type' only these values: 'sma', 'ema'.")
+        
+        bb = pd.DataFrame({'Upper':ma + (std_dev * self.__data[source].rolling(window=length).std()),
+                           'Base':ma,
+                           'Lower':ma - (std_dev * self.__data[source].rolling(window=length).std())}, index=ma.index)
+
+        return bb.apply(lambda col: col.iloc[len(bb.index)-last if last != None and last < len(bb.index) else 0:], axis=0)
+
+    def idc_rsi():
+        """
+        Relative strength index.
+        ----
+        """
+        pass
+
+    def idc_stochastic():
+        """
+        Stochastic.
+        ----
+        """
+        pass
+
+    def idc_adx():
+        """
+        Average directional index.
+        ----
+        """
+        pass
+
+    def idc_macd():
+        """
+        Convergence/divergence of the moving average.
+        ----
+        """
+        pass
+
+    def idc_sqzmom():
+        """
+        Squeeze momentum.
+        ----
+        """
+        pass
+
+    def idc_ichimoku():
+        """
+        Ichimoku cloud.
+        ----
+        """
+        pass
+
+    def idc_fibonacci():
+        """
+        Fibonacci retracement.
+        ----
+        """
+        pass
+
+    def idc_atr():
+        """
+        Average true range.
+        ----
+        """
+        pass
     
     def act_open(self, type:int = 1, stop_loss:int = np.nan, take_profit:int = np.nan, amount:int = np.nan) -> None:
         """
