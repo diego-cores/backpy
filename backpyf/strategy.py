@@ -275,15 +275,20 @@ class StrategyClass(ABC):
         # Ema calc.
         return self.__idc_ema(length=length, source=source, last=last)
 
-    def __idc_ema(self, length:int = any, source:str = 'Close', last:int = None) -> np.array:
+    def __idc_ema(self, data:pd.Series = None, length:int = any, source:str = 'Close', last:int = None) -> np.array:
         """
         Exponential moving average.
         ----
         Returns an pd.Series with all the steps of an ema with the length you indicate.\n
         Hidden function to prevent user modification.\n
         Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of ma with your own data.\n
         """
-        ema = self.__data[source].ewm(span=length, adjust=False).mean()
+        data = self.__data[source] if data is None else data
+        ema = data.ewm(span=length, adjust=False).mean()
+        ema.name = 'ema'
     
         return np.flip(ema[len(ema)-last if last != None and last < len(ema) else 0:])
     
@@ -314,15 +319,20 @@ class StrategyClass(ABC):
         # Sma calc.
         return self.__idc_sma(length=length, source=source, last=last)
     
-    def __idc_sma(self, length:int = any, source:str = 'Close', last:int = None):
+    def __idc_sma(self, data:pd.Series = None, length:int = any, source:str = 'Close', last:int = None):
         """
         Simple moving average.
         ----
         Return an pd.Series with all the steps of an sma with the length you indicate.\n
         Hidden function to prevent user modification.\n
         Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of ma with your own data.\n
         """
-        sma = self.__data[source].rolling(window=length).mean()
+        data = self.__data[source] if data is None else data
+        sma = data.rolling(window=length).mean()
+        sma.name = 'sma'
 
         return np.flip(sma[len(sma)-last if last != None and last < len(sma) else 0:])
     
@@ -353,29 +363,35 @@ class StrategyClass(ABC):
         # Wma calc.
         return self.__idc_wma(length=length, source=source, last=last)
     
-    def __idc_wma(self, length:int = any, source:str = 'Close', last:int = None):
+    def __idc_wma(self, data:pd.Series = None, length:int = any, source:str = 'Close', last:int = None):
         """
         Linear weighted moving average.
         ----
         Return an pd.Series with all the steps of an wma with the length you indicate.\n
         Hidden function to prevent user modification.\n
         Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of ma with your own data.\n
         """
+        data = self.__data[source] if data is None else data
+
         weights = [i+1 for i in range(length)]
-        wma = self.__data[source].rolling(window=length).apply(lambda x: (x*weights).sum()/sum(weights), raw=True)
+        wma = data.rolling(window=length).apply(lambda x: (x*weights).sum()/sum(weights), raw=True)
+        wma.name = 'wma'
 
         return np.flip(wma[len(wma)-last if last != None and last < len(wma) else 0:])
     
-    def idc_bb(self, length:int = any, std_dev:int = 2, ma_type:str = 'sma', source:str = 'Close', last:int = None):
+    def idc_bb(self, length:int = 20, std_dev:float = 2, ma_type:str = 'sma', source:str = 'Close', last:int = None):
         """
         Bollinger bands.
         ----
         Return an pd.DataFrame with the value of the upper band, the base ma and the position of the lower band for each step.\n
-        Columns: 'Upper','Base','Lower'.\n
+        Columns: 'Upper','{ma_type}','Lower'.\n
         Parameters:
         --
         >>> length:int = any
-        >>> std_dev:int = 2
+        >>> std_dev:float = 2
         >>> ma_type:str = 'sma'
         >>> source:str = 'Close'
         >>> last:int = None
@@ -393,28 +409,116 @@ class StrategyClass(ABC):
         \tIf you leave it at None, the data for all times is returned.\n
         """
         if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
+        elif std_dev > 50 or std_dev < 0.001: raise ValueError("'std_dev' it has to be greater than 0.001 and less than 50.")
         elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
+        elif not ma_type in ('sma','ema','wma'): raise ValueError("'ma_type' only these values: 'sma', 'ema', 'wma'.")
         elif last != None:
             if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
+        # Bb calc.
+        return self.__idc_bb(length=length, std_dev=std_dev, ma_type=ma_type, source=source, last=last)
+    
+    def __idc_bb(self, data:pd.Series = None, length:int = 20, std_dev:float = 2, ma_type:str = 'sma', source:str = 'Close', last:int = None):
+        """
+        Bollinger bands.
+        ----
+        Return an pd.DataFrame with the value of the upper band, the base ma and the position of the lower band for each step.\n
+        Columns: 'Upper','Base','Lower'.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of ma with your own data.\n
+        """
+        data = self.__data[source] if data is None else data
+
         match ma_type:
-            case 'sma': ma = self.__idc_sma(length=length, source=source)
-            case 'ema': ma = self.__idc_ema(length=length, source=source)
-            case 'wma': ma = self.__idc_wma(length=length, source=source)
-            case _: raise ValueError("'ma_type' only these values: 'sma', 'ema'.")
+            case 'sma': ma = self.__idc_sma(data=data, length=length)
+            case 'ema': ma = self.__idc_ema(data=data, length=length)
+            case 'wma': ma = self.__idc_wma(data=data, length=length)
         
-        bb = pd.DataFrame({'Upper':ma + (std_dev * self.__data[source].rolling(window=length).std()),
-                           'Base':ma,
-                           'Lower':ma - (std_dev * self.__data[source].rolling(window=length).std())}, index=ma.index)
+        bb = pd.DataFrame({'Upper':np.flip(ma + (std_dev * data.rolling(window=length).std())),
+                           ma_type:np.flip(ma),
+                           'Lower':np.flip(ma - (std_dev * data.rolling(window=length).std()))}, index=np.flip(ma.index))
 
         return bb.apply(lambda col: col.iloc[len(bb.index)-last if last != None and last < len(bb.index) else 0:], axis=0)
 
-    def idc_rsi():
+    def idc_rsi(self, length_rsi:int = 14, length:int = 14, rsi_ma_type:str = 'wma', base_type:str = 'sma', bb_std_dev:float = 2, source:str = 'Close', last:int = None):
         """
         Relative strength index.
         ----
+        Return an pd.DataFrame with the value of rsi and 'base_type' for each step.\n
+        Columns: 'rsi',('base_type').\n
+        Parameters:
+        --
+        >>> length_rsi:int 14
+        >>> length:int = 14
+        >>> rsi_ma_type:str = 'wma'
+        >>> base_type:str = 'sma'
+        >>> bb_std_dev:float = 2
+        >>> source:str = 'Close'
+        >>> last:int = None
+        \n
+        length_rsi: \n
+        \tWindow length of 'rsi_ma_type'.\n
+        length: \n
+        \tWindow length of 'base_type'.\n
+        rsi_ma_type: \n
+        \tType of ma used for calculating rsi.\n
+        base_type: \n
+        \tType of ma base used applied to rsi.\n
+        bb_std_dev: \n
+        \tStandard deviation for bb.\n
+        source: \n
+        \tData.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
         """
-        pass
+        if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
+        elif bb_std_dev > 50 or bb_std_dev < 0.001: raise ValueError("'bb_std_dev' it has to be greater than 0.001 and less than 50.")
+        elif length > 5000 or length <= 0: raise ValueError("'length_rsi' it has to be greater than 0 and less than 5000.")
+        elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
+        elif not rsi_ma_type in ('sma','ema','wma'): raise ValueError("'rsi_ma_type' only these values: 'sma', 'ema', 'wma'.")
+        elif not base_type in ('sma','ema','wma','bb'): raise ValueError("'base_type' only these values: 'sma', 'ema', 'wma', 'bb'.")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
+        # Rsi calc.
+        return self.__idc_rsi(length_rsi=length_rsi, length=length, base_type=base_type, source=source, last=last)
+
+    def __idc_rsi(self, data:pd.Series = None, length_rsi:int = 14, length:int = 14, rsi_ma_type:str = 'wma', base_type:str = 'sma', bb_std_dev:float = 2, source:str = 'Close', last:int = None):
+        """
+        Relative strength index.
+        ----
+        Return an pd.DataFrame with the value of rsi and 'base_type' for each step.\n
+        Columns: 'rsi',('base_type').\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of ma with your own data.\n
+        """
+        delta = self.__data[source].diff() if data is None else data.diff()
+
+        match rsi_ma_type:
+            case 'sma': ma = self.__idc_sma
+            case 'ema': ma = self.__idc_ema
+            case 'wma': ma = self.__idc_wma
+
+        wma_gain = ma(data = delta.where(delta > 0, 0), length=length_rsi, source=source)
+        wma_loss = ma(data = -delta.where(delta < 0, 0), length=length_rsi, source=source)
+        rsi = np.flip(100 - (100 / (1+wma_gain/wma_loss)))
+
+        match base_type:
+            case 'sma': mv = self.__idc_sma(data=rsi, length=length, source=source)
+            case 'ema': mv = self.__idc_ema(data=rsi, length=length, source=source)
+            case 'wma': mv = self.__idc_wma(data=rsi, length=length, source=source)
+            case 'bb': mv = self.__idc_bb(data=rsi, length=length, std_dev=bb_std_dev, source=source)
+
+        rsi = pd.concat([pd.DataFrame({'rsi':rsi}), mv], axis=1)
+
+        return rsi.apply(lambda col: col.iloc[len(rsi.index)-last if last != None and last < len(rsi.index) else 0:], axis=0)
 
     def idc_stochastic():
         """
