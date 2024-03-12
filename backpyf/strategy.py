@@ -288,7 +288,6 @@ class StrategyClass(ABC):
         """
         data = self.__data[source] if data is None else data
         ema = data.ewm(span=length, adjust=False).mean()
-        ema.name = 'ema'
     
         return np.flip(ema[len(ema)-last if last != None and last < len(ema) else 0:])
     
@@ -332,7 +331,6 @@ class StrategyClass(ABC):
         """
         data = self.__data[source] if data is None else data
         sma = data.rolling(window=length).mean()
-        sma.name = 'sma'
 
         return np.flip(sma[len(sma)-last if last != None and last < len(sma) else 0:])
     
@@ -376,9 +374,8 @@ class StrategyClass(ABC):
         """
         data = self.__data[source] if data is None else data
 
-        weights = [i+1 for i in range(length)]
-        wma = data.rolling(window=length).apply(lambda x: (x*weights).sum()/sum(weights), raw=True)
-        wma.name = 'wma'
+        weight = np.arange(1, length+1)
+        wma = data.rolling(window=length).apply(lambda x: (x*weight).sum() / weight.sum(), raw=True)
 
         return np.flip(wma[len(wma)-last if last != None and last < len(wma) else 0:])
     
@@ -436,10 +433,11 @@ class StrategyClass(ABC):
             case 'sma': ma = self.__idc_sma(data=data, length=length)
             case 'ema': ma = self.__idc_ema(data=data, length=length)
             case 'wma': ma = self.__idc_wma(data=data, length=length)
-        
-        bb = pd.DataFrame({'Upper':np.flip(ma + (std_dev * data.rolling(window=length).std())),
-                           ma_type:np.flip(ma),
-                           'Lower':np.flip(ma - (std_dev * data.rolling(window=length).std()))}, index=np.flip(ma.index))
+        ma = np.flip(ma)
+        std_ = (std_dev * data.rolling(window=length).std())
+        bb = pd.DataFrame({'Upper':ma + std_,
+                           ma_type:ma,
+                           'Lower':ma - std_}, index=ma.index)
 
         return bb.apply(lambda col: col.iloc[len(bb.index)-last if last != None and last < len(bb.index) else 0:], axis=0)
 
@@ -515,6 +513,7 @@ class StrategyClass(ABC):
             case 'ema': mv = self.__idc_ema(data=rsi, length=length, source=source)
             case 'wma': mv = self.__idc_wma(data=rsi, length=length, source=source)
             case 'bb': mv = self.__idc_bb(data=rsi, length=length, std_dev=bb_std_dev, source=source)
+        if type(mv) == pd.Series: mv.name = base_type
 
         rsi = pd.concat([pd.DataFrame({'rsi':rsi}), mv], axis=1)
 
