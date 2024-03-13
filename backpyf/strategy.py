@@ -334,7 +334,7 @@ class StrategyClass(ABC):
 
         return np.flip(sma[len(sma)-last if last != None and last < len(sma) else 0:])
     
-    def idc_wma(self, length:int = any, source:str = 'Close', last:int = None):
+    def idc_wma(self, length:int = any, source:str = 'Close', invt_weight:bool = False, last:int = None):
         """
         Linear weighted moving average.
         ----
@@ -343,12 +343,15 @@ class StrategyClass(ABC):
         --
         >>> length:int = any
         >>> source:str = 'Close'
+        >>> invt_weight:bool = False
         >>> last:int = None
         \n
         length: \n
         \Wma length.\n
         source: \n
         \tData.\n
+        invt_weight: \n
+        \t\n
         last: \n
         \tHow much data starting from the present backwards do you want to be returned.\n
         \tIf you leave it at None, the data for all times is returned.\n
@@ -359,9 +362,9 @@ class StrategyClass(ABC):
             if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
         # Wma calc.
-        return self.__idc_wma(length=length, source=source, last=last)
+        return self.__idc_wma(length=length, source=source, invt_weight=invt_weight, last=last)
     
-    def __idc_wma(self, data:pd.Series = None, length:int = any, source:str = 'Close', last:int = None):
+    def __idc_wma(self, data:pd.Series = None, length:int = any, source:str = 'Close', invt_weight:bool = False, last:int = None):
         """
         Linear weighted moving average.
         ----
@@ -374,7 +377,7 @@ class StrategyClass(ABC):
         """
         data = self.__data[source] if data is None else data
 
-        weight = np.arange(1, length+1)
+        weight = np.arange(1, length+1)[::-1] if invt_weight else np.arange(1, length+1)
         wma = data.rolling(window=length).apply(lambda x: (x*weight).sum() / weight.sum(), raw=True)
 
         return np.flip(wma[len(wma)-last if last != None and last < len(wma) else 0:])
