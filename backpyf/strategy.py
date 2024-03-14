@@ -284,7 +284,7 @@ class StrategyClass(ABC):
         Function without exception handling.\n
         Data parameter:
         --
-        You can do the calculation of ma with your own data.\n
+        You can do the calculation of ema with your own data.\n
         """
         data = self.__data[source] if data is None else data
         ema = data.ewm(span=length, adjust=False).mean()
@@ -327,7 +327,7 @@ class StrategyClass(ABC):
         Function without exception handling.\n
         Data parameter:
         --
-        You can do the calculation of ma with your own data.\n
+        You can do the calculation of sma with your own data.\n
         """
         data = self.__data[source] if data is None else data
         sma = data.rolling(window=length).mean()
@@ -351,7 +351,7 @@ class StrategyClass(ABC):
         source: \n
         \tData.\n
         invt_weight: \n
-        \t\n
+        \tThe distribution of weights is done the other way around.\n
         last: \n
         \tHow much data starting from the present backwards do you want to be returned.\n
         \tIf you leave it at None, the data for all times is returned.\n
@@ -373,7 +373,7 @@ class StrategyClass(ABC):
         Function without exception handling.\n
         Data parameter:
         --
-        You can do the calculation of ma with your own data.\n
+        You can do the calculation of wma with your own data.\n
         """
         data = self.__data[source] if data is None else data
 
@@ -428,7 +428,7 @@ class StrategyClass(ABC):
         Function without exception handling.\n
         Data parameter:
         --
-        You can do the calculation of ma with your own data.\n
+        You can do the calculation of bb with your own data.\n
         """
         data = self.__data[source] if data is None else data
 
@@ -498,7 +498,7 @@ class StrategyClass(ABC):
         Function without exception handling.\n
         Data parameter:
         --
-        You can do the calculation of ma with your own data.\n
+        You can do the calculation of rsi with your own data.\n
         """
         delta = self.__data[source].diff() if data is None else data.diff()
 
@@ -512,61 +512,114 @@ class StrategyClass(ABC):
         rsi = np.flip(100 - (100 / (1+wma_gain/wma_loss)))
 
         match base_type:
-            case 'sma': mv = self.__idc_sma(data=rsi, length=length, source=source)
-            case 'ema': mv = self.__idc_ema(data=rsi, length=length, source=source)
-            case 'wma': mv = self.__idc_wma(data=rsi, length=length, source=source)
-            case 'bb': mv = self.__idc_bb(data=rsi, length=length, std_dev=bb_std_dev, source=source)
+            case 'sma': mv = self.__idc_sma(data=rsi, length=length)
+            case 'ema': mv = self.__idc_ema(data=rsi, length=length)
+            case 'wma': mv = self.__idc_wma(data=rsi, length=length)
+            case 'bb': mv = self.__idc_bb(data=rsi, length=length, std_dev=bb_std_dev)
         if type(mv) == pd.Series: mv.name = base_type
 
         rsi = pd.concat([pd.DataFrame({'rsi':rsi}), mv], axis=1)
 
         return rsi.apply(lambda col: col.iloc[len(rsi.index)-last if last != None and last < len(rsi.index) else 0:], axis=0)
 
-    def idc_stochastic():
+    def idc_stochastic(self, length_k:int = 14, smooth_k:int = 1, length_d:int = 3, d_type:int = 'sma', source:str = 'Close', last:int = None):
         """
         Stochastic.
         ----
+        Return an pd.DataFrame with the value of stochastic and 'd_type' for each step.\n
+        Columns: 'stoch',('d_type').\n
+        Parameters:
+        --
+        >>> length_k:int 14
+        >>> smooth_k:int = 1
+        >>> length_d:int = 3
+        >>> d_type:int = 'sma'
+        >>> source:str = 'Close'
+        >>> last:int = None
+        \n
+        length_k: \n
+        \tWindow length to calculate 'stoch'.\n
+        smooth_k: \n
+        \tWindow length of 'stoch'.\n
+        length_d: \n
+        \tWindow length of 'd_type'.\n
+        d_type: \n
+        \tType of ma base used applied to stochastic.\n
+        source: \n
+        \tData.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
         """
-        pass
+        if length_k > 5000 or length_k <= 0: raise ValueError("'length_k' it has to be greater than 0 and less than 5000.")
+        elif smooth_k > 5000 or smooth_k <= 0: raise ValueError("'smooth_k' it has to be greater than 0 and less than 5000.")
+        elif length_d > 5000 or smooth_k <= 0: raise ValueError("'length_d' it has to be greater than 0 and less than 5000.")
+        elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
+        elif not d_type in ('sma','ema','wma'): raise ValueError("'d_type' only these values: 'sma', 'ema', 'wma'.")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
-    def idc_adx():
+        # Calc stoch.
+        return self.__idc_stochastic(length_k=length_k, smooth_k=smooth_k, length_d=length_d, d_type=d_type, source=source, last=last)
+
+    def __idc_stochastic(self, data:pd.Series = None, length_k:int = 14, smooth_k:int = 1, length_d:int = 3, d_type:int = 'sma', source:str = 'Close', last:int = None):
+        """
+        Stochastic.
+        ----
+        Return an pd.DataFrame with the value of stochastic and 'd_type' for each step.\n
+        Columns: 'stoch',('d_type').\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of stochastic with your own data.\n
+        """
+        data = self.__data if data is None else data
+
+        low_data = self.__data['Low'].rolling(window=length_k).min()
+        high_data = self.__data['High'].rolling(window=length_k).max()
+
+        match d_type:
+            case 'sma': ma = self.__idc_sma
+            case 'ema': ma = self.__idc_ema
+            case 'wma': ma = self.__idc_wma
+
+        stoch = (((self.__data[source] - low_data) / (high_data - low_data)) * 100).rolling(window=smooth_k).mean()
+        result = pd.DataFrame({'stoch':stoch, d_type:ma(data=stoch, length=length_d)})
+
+        return result.apply(lambda col: col.iloc[len(result.index)-last if last != None and last < len(result.index) else 0:], axis=0) 
+
+    def idc_adx(self):
         """
         Average directional index.
         ----
         """
         pass
 
-    def idc_macd():
+    def idc_macd(self):
         """
         Convergence/divergence of the moving average.
         ----
         """
         pass
 
-    def idc_sqzmom():
+    def idc_sqzmom(self):
         """
         Squeeze momentum.
         ----
         """
         pass
 
-    def idc_ichimoku():
+    def idc_ichimoku(self):
         """
         Ichimoku cloud.
         ----
         """
         pass
 
-    def idc_fibonacci():
+    def idc_fibonacci(self):
         """
         Fibonacci retracement.
-        ----
-        """
-        pass
-
-    def idc_atr():
-        """
-        Average true range.
         ----
         """
         pass
