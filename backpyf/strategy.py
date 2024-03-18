@@ -382,6 +382,116 @@ class StrategyClass(ABC):
 
         return np.flip(wma[len(wma)-last if last != None and last < len(wma) else 0:])
     
+    def idc_smma(self, length:int = any, source:str = 'Close', last:int = None):
+        """
+        Smoothed moving average.
+        ---- 
+        Returns an pd.Series with all the steps of an smma with the length you indicate.\n
+        Parameters:
+        --
+        >>> length:int = any
+        >>> source:str = 'Close'
+        >>> last:int = None
+        \n
+        length: \n
+        \tSmma length.\n
+        source: \n
+        \tData.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
+        """
+        if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
+        elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
+        # Smma calc.
+        return self.__idc_smma(length=length, source=source, last=last)
+    
+    def __idc_smma(self, data:pd.Series = None, length:int = any, source:str = 'Close', last:int = None):
+        """
+        Smoothed moving average.
+        ---- 
+        Returns an pd.Series with all the steps of an smma with the length you indicate.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of ema with your own data.\n
+        """
+        data = self.__data[source] if data is None else data
+        smma = data.ewm(alpha=1/length, adjust=False).mean()
+
+        return np.flip(smma[len(smma)-last if last != None and last < len(smma) else 0:])
+    
+    def idc_smema(self, length:int = 9, method:str = 'sma', smooth:int = 5, only:bool = False, source:str = 'Close', last:int = None):
+        """
+        Smoothed exponential moving average.
+        ---- 
+        Return an pd.DataFrame with the value of ema and the smoothed ema for each step.\n
+        Columns: 'ema','smoothed'.\n
+        Parameters:
+        --
+        >>> length:int = any
+        >>> method:str = 'sma'
+        >>> smooth:int = 5
+        >>> only:bool = False
+        >>> source:str = 'Close'
+        >>> last:int = None
+        \n
+        length: \n
+        \tEma length.\n
+        method: \n
+        \tSmooth method.\n
+        smooth: \n
+        \t'method' length.\n
+        only: \n
+        \tIf left true, only one pd.Series will be returned with the values ​​of 'method'.\n
+        ma_type: \n
+        \tMa type.\n
+        source: \n
+        \tData.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
+        """
+        if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
+        elif not method in ('sma','ema','smma','wma'): raise ValueError("'method' only one of these values: ['sma','ema','smma','wma'].")
+        elif smooth > 5000 or smooth <= 0: raise ValueError("'smooth' it has to be greater than 0 and less than 5000.")
+        elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
+        # Smema calc.
+        return self.__idc_smema(length=length, method=method, smooth=smooth, only=only, source=source, last=last)
+    
+    def __idc_smema(self, data:pd.Series = None, length:int = 9, method:str = 'sma', smooth:int = 5, only:bool = False, source:str = 'Close', last:int = None):
+        """
+        Smoothed exponential moving average.
+        ---- 
+        Return an pd.DataFrame with the value of ema and the smoothed ema for each step.\n
+        Columns: 'ema','smoothed'.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of ema with your own data.\n
+        """
+        data = self.__data[source] if data is None else data
+        ema = data.ewm(span=length, adjust=False).mean()
+
+        match method:
+            case 'sma': smema = self.__idc_sma(data=ema, length=smooth)
+            case 'ema': smema = self.__idc_ema(data=ema, length=smooth)
+            case 'smma': smema = self.__idc_smma(data=ema, length=smooth)
+            case 'wma': smema = self.__idc_wma(data=ema, length=smooth)
+
+        if only: smema = np.flip(smema); return np.flip(smema[len(smema)-last if last != None and last < len(smema) else 0:])
+        smema = pd.DataFrame({'ema':ema, 'smoothed':smema}, index=ema.index)
+
+        return smema.apply(lambda col: col.iloc[len(smema.index)-last if last != None and last < len(smema.index) else 0:], axis=0)
+
     def idc_bb(self, length:int = 20, std_dev:float = 2, ma_type:str = 'sma', source:str = 'Close', last:int = None):
         """
         Bollinger bands.
@@ -411,7 +521,7 @@ class StrategyClass(ABC):
         if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
         elif std_dev > 50 or std_dev < 0.001: raise ValueError("'std_dev' it has to be greater than 0.001 and less than 50.")
         elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
-        elif not ma_type in ('sma','ema','wma'): raise ValueError("'ma_type' only these values: 'sma', 'ema', 'wma'.")
+        elif not ma_type in ('sma','ema','wma','smma'): raise ValueError("'ma_type' only these values: 'sma', 'ema', 'wma', 'smma'.")
         elif last != None:
             if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
@@ -436,6 +546,7 @@ class StrategyClass(ABC):
             case 'sma': ma = self.__idc_sma(data=data, length=length)
             case 'ema': ma = self.__idc_ema(data=data, length=length)
             case 'wma': ma = self.__idc_wma(data=data, length=length)
+            case 'smma': ma = self.__idc_smma(data=data, length=length)
         ma = np.flip(ma)
         std_ = (std_dev * data.rolling(window=length).std())
         bb = pd.DataFrame({'Upper':ma + std_,
@@ -444,7 +555,7 @@ class StrategyClass(ABC):
 
         return bb.apply(lambda col: col.iloc[len(bb.index)-last if last != None and last < len(bb.index) else 0:], axis=0)
 
-    def idc_rsi(self, length_rsi:int = 14, length:int = 14, rsi_ma_type:str = 'wma', base_type:str = 'sma', bb_std_dev:float = 2, source:str = 'Close', last:int = None):
+    def idc_rsi(self, length_rsi:int = 14, length:int = 14, rsi_ma_type:str = 'smma', base_type:str = 'sma', bb_std_dev:float = 2, source:str = 'Close', last:int = None):
         """
         Relative strength index.
         ----
@@ -480,13 +591,13 @@ class StrategyClass(ABC):
         elif bb_std_dev > 50 or bb_std_dev < 0.001: raise ValueError("'bb_std_dev' it has to be greater than 0.001 and less than 50.")
         elif length > 5000 or length <= 0: raise ValueError("'length_rsi' it has to be greater than 0 and less than 5000.")
         elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
-        elif not rsi_ma_type in ('sma','ema','wma'): raise ValueError("'rsi_ma_type' only these values: 'sma', 'ema', 'wma'.")
-        elif not base_type in ('sma','ema','wma','bb'): raise ValueError("'base_type' only these values: 'sma', 'ema', 'wma', 'bb'.")
+        elif not rsi_ma_type in ('sma','ema','wma','smma'): raise ValueError("'rsi_ma_type' only these values: 'sma', 'ema', 'wma','smma'.")
+        elif not base_type in ('sma','ema','wma','bb'): raise ValueError("'base_type' only these values: 'sma', 'ema', 'wma', 'smma', 'bb'.")
         elif last != None:
             if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
         # Rsi calc.
-        return self.__idc_rsi(length_rsi=length_rsi, length=length, base_type=base_type, source=source, last=last)
+        return self.__idc_rsi(length_rsi=length_rsi, length=length, rsi_ma_type=rsi_ma_type, base_type=base_type, bb_std_dev=bb_std_dev, source=source, last=last)
 
     def __idc_rsi(self, data:pd.Series = None, length_rsi:int = 14, length:int = 14, rsi_ma_type:str = 'wma', base_type:str = 'sma', bb_std_dev:float = 2, source:str = 'Close', last:int = None):
         """
@@ -506,15 +617,17 @@ class StrategyClass(ABC):
             case 'sma': ma = self.__idc_sma
             case 'ema': ma = self.__idc_ema
             case 'wma': ma = self.__idc_wma
+            case 'smma': ma = self.__idc_smma
 
-        wma_gain = ma(data = delta.where(delta > 0, 0), length=length_rsi, source=source)
-        wma_loss = ma(data = -delta.where(delta < 0, 0), length=length_rsi, source=source)
-        rsi = np.flip(100 - (100 / (1+wma_gain/wma_loss)))
+        ma_gain = ma(data = delta.where(delta > 0, 0), length=length_rsi, source=source)
+        ma_loss = ma(data = -delta.where(delta < 0, 0), length=length_rsi, source=source)
+        rsi = np.flip(100 - (100 / (1+ma_gain/ma_loss)))
 
         match base_type:
             case 'sma': mv = self.__idc_sma(data=rsi, length=length)
             case 'ema': mv = self.__idc_ema(data=rsi, length=length)
             case 'wma': mv = self.__idc_wma(data=rsi, length=length)
+            case 'smma': mv = self.__idc_smma(data=rsi, length=length)
             case 'bb': mv = self.__idc_bb(data=rsi, length=length, std_dev=bb_std_dev)
         if type(mv) == pd.Series: mv.name = base_type
 
@@ -555,7 +668,7 @@ class StrategyClass(ABC):
         elif smooth_k > 5000 or smooth_k <= 0: raise ValueError("'smooth_k' it has to be greater than 0 and less than 5000.")
         elif length_d > 5000 or smooth_k <= 0: raise ValueError("'length_d' it has to be greater than 0 and less than 5000.")
         elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
-        elif not d_type in ('sma','ema','wma'): raise ValueError("'d_type' only these values: 'sma', 'ema', 'wma'.")
+        elif not d_type in ('sma','ema','wma','smma'): raise ValueError("'d_type' only these values: 'sma', 'ema', 'wma', 'smma'.")
         elif last != None:
             if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
@@ -583,18 +696,71 @@ class StrategyClass(ABC):
             case 'sma': ma = self.__idc_sma
             case 'ema': ma = self.__idc_ema
             case 'wma': ma = self.__idc_wma
+            case 'smma': ma = self.__idc_smma
 
         stoch = (((self.__data[source] - low_data) / (high_data - low_data)) * 100).rolling(window=smooth_k).mean()
         result = pd.DataFrame({'stoch':stoch, d_type:ma(data=stoch, length=length_d)})
 
         return result.apply(lambda col: col.iloc[len(result.index)-last if last != None and last < len(result.index) else 0:], axis=0) 
 
-    def idc_adx(self):
+    def idc_adx(self, smooth:int = 14, length_di:int = 14, only:bool = False, last:int = None):
         """
         Average directional index.
         ----
+        Return an pd.Dataframe with the value of adx, +di and -di for each step.\n
+        Columns: 'adx','+di','-di'.\n
+        Parameters:
+        --
+        >>> smooth:int = 14
+        >>> length_di:int = 14
+        >>> only:bool = False
+        >>> last:int = None
+        \n
+        smooth: \n
+        \tSmooth length.\n
+        length_di: \n
+        \tWindow length for calculate 'di'.\n
+        only: \n
+        \tIf left true, only one pd.Series will be returned with the values ​​of adx.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
         """
-        pass
+        if smooth > 5000 or smooth <= 0: raise ValueError("'smooth' it has to be greater than 0 and less than 5000.")
+        elif length_di > 5000 or length_di <= 0: raise ValueError("'length_di' it has to be greater than 0 and less than 5000.")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
+        # Calc adx.
+        return self.__idc_adx(smooth=smooth, length_di=length_di, only=only, last=last)
+
+    def __idc_adx(self, data:pd.Series = None, smooth:int = 14, length_di:int = 14, only:bool = False, last:int = None):
+        """
+        Average directional index.
+        ----
+        Return an pd.Dataframe with the value of adx, +di and -di for each step.\n
+        Columns: 'adx','+di','-di'.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of stochastic with your own data.\n
+        """
+        data = self.__data if data is None else data
+
+        atr = self.__idc_atr(length=length_di, smooth='smma')
+
+        dm_p = data['High'].diff()
+        dm_n = -data['Low'].diff()
+
+        di_p = 100 * np.flip(self.__idc_smma(data=dm_p.where(dm_p >= 0, 0), length=length_di)/atr)
+        di_n = 100 * np.flip(self.__idc_smma(data=dm_n.where(dm_n >= 0, 0), length=length_di)/atr)
+        adx = self.__idc_smma(data=100 * np.abs((di_p - di_n) / (di_p + di_n)), length=smooth)
+
+        if only: adx = np.flip(adx); return np.flip(adx[len(adx)-last if last != None and last < len(adx) else 0:])
+        adx = pd.DataFrame({'adx':adx, '+di':di_p, '-di':di_n})
+
+        return adx.apply(lambda col: col.iloc[len(adx.index)-last if last != None and last < len(adx.index) else 0:], axis=0) 
 
     def idc_macd(self):
         """
@@ -623,7 +789,80 @@ class StrategyClass(ABC):
         ----
         """
         pass
+
+    def idc_atr(self, length:int = 14, smooth:str = 'wma', last:int = None):
+        """
+        Average true range.
+        ----
+        Return an pd.Series with the value of average true range for each step.\n
+        Parameters:
+        --
+        >>> length:int = 14
+        >>> smooth:str = 'wma'
+        >>> last:int = None
+        \n
+        length: \n
+        \tWindow length to smooth 'atr'.\n
+        smooth: \n
+        \tMa used to smooth 'atr'.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
+        """
+        if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
+        elif not smooth in ('smma', 'sma','ema','wma'): raise ValueError("'smooth' only these values: 'smma', 'sma', 'ema', 'wma'.")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
+        # Calc atr.
+        return self.__idc_atr(length=length, smooth=smooth, last=last)
     
+    def __idc_atr(self, length:int = 14, smooth:str = 'wma', last:int = None):
+        """
+        Average true range.
+        ----
+        Return an pd.Series with the value of average true range for each step.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of stochastic with your own data.\n
+        """
+        tr = np.flip(self.__idc_trange())
+
+        match smooth:
+            case 'wma':
+                atr = self.__idc_wma(data=tr, length=length, last=last)
+            case 'sma':
+                atr = self.__idc_sma(data=tr, length=length, last=last)
+            case 'ema':
+                atr = self.__idc_ema(data=tr, length=length, last=last)
+            case 'smma':
+                atr = self.__idc_smma(data=tr, length=length, last=last)
+        return atr
+
+    def __idc_trange(self, data:pd.Series = None, last:int = None):
+        """
+        True range.
+        ----
+        Return an pd.Series with the value of true range for each step.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of stochastic with your own data.\n
+        """
+        data = self.__data if data is None else data
+
+        close = data['Close'].shift(1)
+        close.fillna(data['Low'], inplace=True)
+
+        hl = data['High'] - data['Low']
+        hyc = abs(data['High'] - close)
+        lyc = abs(data['Low'] - close)
+        tr = pd.concat([hl, hyc, lyc], axis=1).max(axis=1)
+        return np.flip(tr[len(tr)-last if last != None and last < len(tr) else 0:])
+
     def act_open(self, type:int = 1, stop_loss:int = np.nan, take_profit:int = np.nan, amount:int = np.nan) -> None:
         """
         Open action.
