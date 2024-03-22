@@ -769,7 +769,21 @@ class StrategyClass(ABC):
         """
         pass
 
+    def __idc_macd(self):
+        """
+        Convergence/divergence of the moving average.
+        ----
+        """
+        pass
+
     def idc_sqzmom(self):
+        """
+        Squeeze momentum.
+        ----
+        """
+        pass
+
+    def __idc_sqzmom(self):
         """
         Squeeze momentum.
         ----
@@ -783,12 +797,65 @@ class StrategyClass(ABC):
         """
         pass
 
-    def idc_fibonacci(self):
+    def __idc_ichimoku(self):
         """
-        Fibonacci retracement.
+        Ichimoku cloud.
         ----
         """
         pass
+
+    def idc_fibonacci(self, start:int = None, end:int = 30, met:bool = False, source:str = 'Low/High'):
+        """
+        Fibonacci retracement.
+        ----
+        Return an pd.DataFrame with the fibonacci levels and values.\n
+        Columns: 'Level','Value'.\n
+        Parameters:
+        --
+        >>> start:int = None
+        >>> end:int = 30
+        >>> met:bool = False
+        >>> source:str = 'Low/High'
+        \n
+        start: \n
+        \tWhere do you want level 0 to be.\n
+        \tIf 'met' is false 'start' is the number of candles back to open the fibonacci.\n
+        \tNone == 0.\n
+        end: \n
+        \tWhere do you want level 1 to be.\n
+        \tIf 'met' is false 'end' is the number of candles back to close the fibonacci.\n
+        \tNone == 0.\n
+        met: \n
+        \tIf left false, 'start' and 'end' are the number of candles backwards,\n
+        \totherwise 'start' and 'end' are the value from which Fibonacci opens.\n
+        source: \n
+        \tData that is extracted.\n
+        \tStart and end data format: 's/s where 's' is each source.'\n
+        \tValues supported in source: ('Close', 'Open', 'High', 'Low')\n
+        \tIf left 'met' in true 'source' does not work.\n
+        """
+        if met: return self.__idc_fibonacci(start=start, end=end)
+
+        source = source.split('/')
+        if len(source) != 2 or source[0] == '' or source[1] == '' or not source[0] in ('Close', 'Open', 'High', 'Low') or not source[1] in ('Close', 'Open', 'High', 'Low'): 
+            raise ValueError("'source' it has to be in this format: 's/s' where 's' is each source.\nValues supported in source: ('Close', 'Open', 'High', 'Low')")
+        data_start = self.__data[source[1]]; data_end = self.__data[source[0]]
+
+        # Fibonacci calc.
+        return self.__idc_fibonacci(start=data_start.iloc[len(data_start)-start-1 if start != None and start < len(data_start) else 0], end=data_end.iloc[len(data_end)-end-1 if end != None and end < len(data_end) else 0])
+
+    def __idc_fibonacci(self, start:int = 10, end:int = 1):
+        """
+        Fibonacci retracement.
+        ----
+        Return an pd.DataFrame with the fibonacci levels and values.\n
+        Columns: 'Level','Value'.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        """
+        fibo_levels = np.array([0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.618, 2.618, 3.618, 4.236])
+
+        return pd.DataFrame({'Level':fibo_levels,'Value':(start + (end - start) * fibo_levels)})
 
     def idc_atr(self, length:int = 14, smooth:str = 'wma', last:int = None):
         """
