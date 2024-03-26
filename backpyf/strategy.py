@@ -13,6 +13,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 from . import exception
+from . import utils
 
 class StrategyClass(ABC):
     """
@@ -112,7 +113,7 @@ class StrategyClass(ABC):
         self.next()
 
         # Check if a trade needs to be closed.
-        self.__trades_ac.apply(lambda row: self.__act_close(index=row.name) if self.__data["High"].iloc[-1] >= max(row['TakeProfit'],row['StopLoss']) or self.__data["Low"].iloc[-1] <= min(row['TakeProfit'],row['StopLoss']) else None, axis=1) 
+        self.__trades_ac.apply(lambda row: self.__act_close(index=row.name) if (not row['Type'] and (self.__data["Low"].iloc[-1] <= row['TakeProfit'] or self.__data["High"].iloc[-1] >= row['StopLoss'])) or (row['Type'] and (self.__data["High"].iloc[-1] >= row['TakeProfit'] or self.__data["Low"].iloc[-1] <= row['StopLoss'])) else None, axis=1) 
 
         # Concat new trade.
         if not self.__trade.empty and np.isnan(self.__trade['StopLoss'].iloc[0]) and np.isnan(self.__trade['TakeProfit'].iloc[0]): 
