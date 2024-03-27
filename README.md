@@ -41,6 +41,6 @@ it is made so that you can provide your own data or use Yfinance module.
 ### Plot your data:
 ![matplotlib data plot](images/img2.png)
 ### Plot your statistics:
-![matplotlib statistics plot](images/img3.png)
+![matplotlib statistics plot](images/img6.png)
 ### Code example:
 ![code image](images/img1.png)
