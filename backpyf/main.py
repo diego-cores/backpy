@@ -269,38 +269,61 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     if progress: utils.load_bar(9, 9); print('\nPlotTimer:',round(time()-t,2))
     mpl.pyplot.show(block=block)
 
-def plot_strategy(log:bool = False, block:bool = True) -> None:
+def plot_strategy(log:bool = False, view:str = 'p/w/r/n', block:bool = True) -> None:
     """
     Plot strategy statistics.
     ----
-    Plot your strategy statistics:\n
-    - Graph of profit.
-    - Graph of return.
-    - Winnings graph.
+    Plot your strategy statistics.\n
+    View available graphics:\n
+    - 'p' = Profit graph.
+    - 'r' = Return graph.
+    - 'w' = Winnings graph.
     Parameters:
     --
     >>> log:bool = Flase
     >>> block:bool = True
+    >>> view:str = 'p/w/r/n'
     \n
     log: \n
     \tPlot your data using logarithmic scale.\n
+    view: \n
+    \tPlot your data the way you prefer.\n
+    \tThere are 4 shapes available and they all take up the entire window.\n
     """
 
     if __trades.empty: raise exception.StatsError('Trades not loaded.')
     if not 'Profit' in __trades.columns:  raise exception.StatsError('There is no data to see.')
+    view = view.lower().strip().split('/')
+    view = [i for i in view if i in ('p','w','r')]
+    if len(view) > 4 or len(view) < 1: raise exception.StatsError("'view' allowed format: 's/s/s/s' where s is the name of the graph.\nAvailable graphics: 'p','w','r'")
 
     mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
-    ax1 = mpl.pyplot.subplot2grid((6,2), (0,0), rowspan=3, colspan=1)
-    ax2 = mpl.pyplot.subplot2grid((6,2), (0,1), rowspan=3, colspan=1, sharex=ax1)
-    ax3 = mpl.pyplot.subplot2grid((6,2), (3,0), rowspan=3, colspan=1, sharex=ax1)
 
-    ax1.plot(__trades.index,__trades['Profit'].cumsum(), c='black', label='Profit.')
-    ax2.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Winnings.')
-    ax3.plot(__trades.index,__trades['ProfitPer'].cumsum(), c='black', label='Return.')
+    loc = [(0,0), (3,0), (3,1), (0,1)]; ax = None
 
-    if log: ax1.set_yscale('symlog'); ax3.set_yscale('symlog')
-    ax1.legend(loc='upper left'); ax2.legend(loc='upper left'); ax3.legend(loc='upper left')
+    for i,v in enumerate(view):
+        match len(view):
+            case 1: 
+                ax = mpl.pyplot.subplot2grid((6,2), loc[0], rowspan=6, colspan=2)
+            case 2: 
+                ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, colspan=2, sharex=ax, sharey=ax)
+            case 3: 
+                ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, colspan=2 if i==0 else 1, sharex=ax)
+            case 4: 
+                ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, colspan=1, sharex=ax, sharey=ax) 
+
+        match v:
+            case 'p':
+                ax.plot(__trades.index,__trades['Profit'].cumsum(), c='black', label='Profit.')
+                if log: ax.set_yscale('symlog')
+            case 'w':
+                ax.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Winnings.')
+            case 'r':
+                ax.plot(__trades.index,__trades['ProfitPer'].cumsum(), c='black', label='Return.')
+                if log: ax.set_yscale('symlog')
+            case _: pass
+        ax.legend(loc='upper left')
 
     mpl.pyplot.xticks([])
     mpl.pyplot.gcf().canvas.manager.set_window_title(f'Strategy statistics.')
