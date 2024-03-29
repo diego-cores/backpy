@@ -779,19 +779,90 @@ class StrategyClass(ABC):
 
         return adx.apply(lambda col: col.iloc[len(adx.index)-last if last != None and last < len(adx.index) else 0:], axis=0) 
 
-    def idc_macd(self):
+    def idc_macd(self, short_len:int = 12, long_len:int = 26, signal_len:int = 9, macd_ma_type:str = 'ema', signal_ma_typ:str = 'ema', histogram:bool = True, source:str = 'Close', last:int = None):
         """
         Convergence/divergence of the moving average.
         ----
+        Return an pd.Dataframe with the value of macd and signal for each step.\n
+        Columns: 'macd','signal',('histogram' if histogram is True).\n
+        Parameters:
+        --
+        >>> short_len:int = 12
+        >>> long_len:int = 26
+        >>> signal_len:int = 9
+        >>> macd_ma_type:str = 'ema'
+        >>> signal_ma_typ:str = 'ema'
+        >>> histogram:bool = True
+        >>> source:str = 'Close'
+        >>> last:int = None
+        \n
+        short_len: \n
+        \tShort ma length.\n
+        \tThe short ma is used to calculate macd.\n
+        long_len: \n
+        \tLong ma length.\n
+        \tThe long ma is used to calculate macd.\n
+        signal_len: \n
+        \tSignal ma length.\n
+        \tThe signal ma is the smoothed macd.\n
+        macd_ma_type: \n
+        \tType of ma to calculate macd.\n
+        signal_ma_typ: \n
+        \tType of ma to smooth macd.\n
+        histogram: \n
+        \tAn extra column will be returned with the histogram.\n
+        source: \n
+        \tData.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
         """
-        pass
+        if short_len > 5000 or short_len <= 0: raise ValueError("'short_len' it has to be greater than 0 and less than 5000.")
+        elif long_len > 5000 or long_len <= 0: raise ValueError("'long_len' it has to be greater than 0 and less than 5000.")
+        elif signal_len > 5000 or signal_len <= 0: raise ValueError("'signal_len' it has to be greater than 0 and less than 5000.")
+        elif not macd_ma_type in ('ema','sma'): raise ValueError("'macd_ma_type' only one of these values: ['ema','sma'].")
+        elif not signal_ma_typ in ('ema','sma'): raise ValueError("'signal_ma_typ' only one of these values: ['ema','sma'].")
+        elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
-    def __idc_macd(self):
+        # Calc macd.
+        return self.__idc_macd(short_len=short_len, long_len=long_len, signal_len=signal_len, macd_ma_type=macd_ma_type, signal_ma_typ=signal_ma_typ, histogram=histogram, source=source, last=last)
+
+    def __idc_macd(self, data:pd.Series = None, short_len:int = 12, long_len:int = 26, signal_len:int = 9, macd_ma_type:str = 'ema', signal_ma_typ:str = 'ema', histogram:bool = True, source:str = 'Close', last:int = None):
         """
         Convergence/divergence of the moving average.
         ----
+        Return an pd.Dataframe with the value of macd and signal for each step.\n
+        Columns: 'macd','signal'.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of stochastic with your own data.\n
         """
-        pass
+        data = self.__data if data is None else data
+
+        match macd_ma_type:
+            case 'ema':
+                macd_ma = self.__idc_ema
+            case 'sma':
+                macd_ma = self.__idc_sma
+
+        match signal_ma_typ:
+            case 'ema':
+                signal_ma = self.__idc_ema
+            case 'sma':
+                signal_ma = self.__idc_sma
+        
+        short_ema = np.flip(macd_ma(data=data[source], length=short_len))
+        long_ema = np.flip(macd_ma(data=data[source], length=long_len))
+        macd = short_ema - long_ema
+
+        signal_line = np.flip(signal_ma(data=macd, length=signal_len))
+        result = pd.DataFrame({'macd':macd, 'signal':signal_line, 'histogram':macd-signal_line})
+
+        return result.apply(lambda col: col.iloc[len(result.index)-last if last != None and last < len(result.index) else 0:], axis=0) 
 
     def idc_sqzmom(self):
         """
