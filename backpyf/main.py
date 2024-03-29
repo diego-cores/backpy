@@ -134,7 +134,7 @@ def load_data(data:pd.DataFrame = any, icon:str = None, interval:str = None, sta
 
     if statistics: stats_icon(prnt=True)
 
-def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000, commission:float = 0, prnt:bool = True, progress:bool = True) -> str:
+def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000, commission:float = 0, prnt:bool = True, progress:bool = True, beta_fastm:bool = False) -> str:
     """
     Run your strategy.
     ----
@@ -146,6 +146,7 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
     >>> commission:int = 0
     >>> prnt:bool = True
     >>> progress:bool = True
+    >>> beta_fastm:bool = False
     \n
     strategy_class: \n
     \tA class that is inherited from StrategyClass\n
@@ -161,6 +162,10 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
     \tIf it is false, an string will be returned.\n
     progress: \n
     \tProgress bar and timer.\n
+    beta_fastm: \n
+    \tEach sail's loop is calculated differently and may be faster than normal mode.\n
+    \tThis mode does not contain a loading bar.\n
+    \tFunction not yet finished.\n
 
     Alert:\n
     If strategy_class.next() prints something to the console the loading bar will not work as expected.\n
@@ -188,13 +193,21 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
 
     act_trades = pd.DataFrame()
     t = time(); step_t = time()
-
-    for f in range(__data.shape[0]):
-        if progress: utils.load_bar(__data.shape[0], f+1, f'/ Step time: {round(time()-step_t,3)}'); step_t = time()
-
-        instance = strategy_class(__data[:f+1], __trades, act_trades, commission, initial_funds)
-        act_trades, __trades = instance._StrategyClass__before()
     
+    if not beta_fastm:
+        for f in range(__data.shape[0]):
+            if progress: utils.load_bar(__data.shape[0], f+1, f'/ Step time: {round(time()-step_t,3)}'); step_t = time()
+
+            instance = strategy_class(__data[:f+1], __trades, act_trades, commission, initial_funds)
+            act_trades, __trades = instance._StrategyClass__before()
+    else: 
+        def m_loop(x):
+            global __trades; nonlocal act_trades
+
+            instance = strategy_class(__data.loc[:x.name], __trades, act_trades, commission, initial_funds)
+            act_trades, __trades = instance._StrategyClass__before()
+        __data.apply(m_loop, axis=1)
+
     if progress: print('\nRunTimer:',round(time()-t,2))
     
     if not act_trades.empty: __trades = pd.concat([__trades, act_trades.dropna(axis=1, how='all')], ignore_index=True)
