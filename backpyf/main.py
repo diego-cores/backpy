@@ -134,7 +134,7 @@ def load_data(data:pd.DataFrame = any, icon:str = None, interval:str = None, sta
 
     if statistics: stats_icon(prnt=True)
 
-def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000, commission:int = 0, prnt:bool = True, progress:bool = True) -> str:
+def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000, commission:float = 0, prnt:bool = True, progress:bool = True) -> str:
     """
     Run your strategy.
     ----

@@ -46,7 +46,7 @@ class StrategyClass(ABC):
     >>> __idc_wma
     >>> __act_close
     """ 
-    def __init__(self, data:pd.DataFrame = any, trades_cl:pd.DataFrame = pd.DataFrame(), trades_ac:pd.DataFrame = pd.DataFrame(), commission:int = 0, init_funds:int = 0) -> None: 
+    def __init__(self, data:pd.DataFrame = any, trades_cl:pd.DataFrame = pd.DataFrame(), trades_ac:pd.DataFrame = pd.DataFrame(), commission:float = 0, init_funds:int = 0) -> None: 
         """
         __init__
         ----
@@ -103,6 +103,22 @@ class StrategyClass(ABC):
 
     @abstractmethod
     def next(self) -> None: pass
+
+    def get_commission(self) -> float:
+        """
+        get_commission
+        ----
+        Return hidden variable '__commission'.
+        """
+        return self.__commission
+    
+    def get_init_founds(self) -> int:
+        """
+        get_init_founds
+        ----
+        Return hidden variable '__init_funds'.
+        """
+        return self.__init_funds
 
     def __before(self):
         """
