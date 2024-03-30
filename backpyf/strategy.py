@@ -878,19 +878,67 @@ class StrategyClass(ABC):
         """
         pass
 
-    def idc_ichimoku(self):
+    def idc_ichimoku(self, tenkan_period:int = 9, kijun_period=26, senkou_span_b_period=52, ichimoku_lines:bool = True, last:int = None):
         """
         Ichimoku cloud.
         ----
+        Return an pd.Dataframe with the value of ichimoku cloud, tenkan_sen and kijun_sen for each step.\n
+        Columns: 'senkou_a','senkou_b'.\n
+        If ichimoku lines is true these columns are added to the dataframe.\n
+        Added: 'tenkan_sen','kijun_sen'.\n
+        Parameters:
+        --
+        >>> tenkan_period:int = 12
+        >>> kijun_period:int = 26
+        >>> senkou_span_b_period:int = 9
+        >>> ichimoku_lines:str = 'ema'
+        >>> last:int = None
+        \n
+        tenkan_period: \n
+        \tWindow length to calculate tenkan.\n
+        kijun_period: \n
+        \tWindow length to calculate kijun.\n
+        senkou_span_b_period: \n
+        \tWindow length to calculate senkou span.\n
+        ichimoku_lines: \n
+        \tIf ichimoku lines is true these columns are added to the dataframe: 'tenkan_sen','kijun_sen'.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
         """
-        pass
+        if tenkan_period > 5000 or tenkan_period <= 0: raise ValueError("'tenkan_period' it has to be greater than 0 and less than 5000.")
+        elif kijun_period > 5000 or kijun_period <= 0: raise ValueError("'kijun_period' it has to be greater than 0 and less than 5000.")
+        elif senkou_span_b_period > 5000 or senkou_span_b_period <= 0: raise ValueError("'senkou_span_b_period' it has to be greater than 0 and less than 5000.")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
-    def __idc_ichimoku(self):
+        # Calc ichimoku.
+        return self.__idc_ichimoku(tenkan_period=tenkan_period, kijun_period=kijun_period, senkou_span_b_period=senkou_span_b_period, ichimoku_lines=ichimoku_lines, last=last)
+
+    def __idc_ichimoku(self, data:pd.Series = None, tenkan_period:int = 9, kijun_period=26, senkou_span_b_period=52, ichimoku_lines:bool = True, last:int = None):
         """
         Ichimoku cloud.
         ----
+        Return an pd.Dataframe with the value of ichimoku cloud, tenkan_sen and kijun_sen for each step.\n
+        Columns: 'senkou_a','senkou_b'.\n
+        If ichimoku lines is true these columns are added to the dataframe.
+        Added: 'tenkan_sen','kijun_sen'.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of stochastic with your own data.\n
         """
-        pass
+        data = self.__data if data is None else data
+
+        tenkan_sen_val = (data['High'].rolling(window=tenkan_period).max() + data['Low'].rolling(window=tenkan_period).min()) / 2
+        kijun_sen_val = (data['High'].rolling(window=kijun_period).max() + data['Low'].rolling(window=kijun_period).min()) / 2
+
+        senkou_span_a_val = ((tenkan_sen_val + kijun_sen_val) / 2)
+        senkou_span_b_val = ((data['High'].rolling(window=senkou_span_b_period).max() + data['Low'].rolling(window=senkou_span_b_period).min()) / 2)
+        senkou_span = pd.DataFrame({'senkou_a':senkou_span_a_val,'senkou_b':senkou_span_b_val, 'tenkan_sen':tenkan_sen_val,'kijun_sen':kijun_sen_val}) if ichimoku_lines else pd.DataFrame({'senkou_a':senkou_span_a_val,'senkou_b':senkou_span_b_val})
+        
+        return senkou_span.apply(lambda col: col.iloc[len(senkou_span.index)-last if last != None and last < len(senkou_span.index) else 0:], axis=0)
 
     def idc_fibonacci(self, start:int = None, end:int = 30, met:bool = False, source:str = 'Low/High'):
         """
