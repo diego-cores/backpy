@@ -864,19 +864,180 @@ class StrategyClass(ABC):
 
         return result.apply(lambda col: col.iloc[len(result.index)-last if last != None and last < len(result.index) else 0:], axis=0) 
 
-    def idc_sqzmom(self):
+    def idc_sqzmom(self, bb_len:int = 20, bb_mult:float = 1.5, kc_len:int = 20, kc_mult:float = 1.5, use_tr:bool = True, histogram_len:int = 50, source:str = 'Close', last:int = None):
         """
         Squeeze momentum.
         ----
+        This function calculates the Squeeze Momentum, which is inspired by the Squeeze Momentum Indicator available on TradingView. While the concept is based on the original indicator,\n
+        please note that this implementation may not fully replicate the exact functionality of the original.\n
+        Credit for the concept of the Squeeze Momentum goes to its original developer.\n
+        This function is an adaptation and may differ from the original version.\n
+        Please note that this function is intended for use in backtesting scenarios, where it may utilize real market data or simulated random data.\n
+        It should be used for research and educational purposes only, and should not be considered as financial advice.\n
+        Return:
+        ----
+        Return an pd.Dataframe with the value of sqz and histogram for each step.\n
+        Columns: 'sqzmom','histogram'.\n
+        Parameters:
+        --
+        >>> bb_len:int = 20
+        >>> bb_mult:float = 1.5
+        >>> kc_len:int = 20
+        >>> kc_mult:float = 1.5
+        >>> use_tr:bool = True
+        >>> histogram_len:int = 50
+        >>> source:str = 'Close'
+        >>> last:int = None
+        \n
+        bb_len: \n
+        \tBollinger band length.\n
+        bb_mult: \n
+        \tBollinger band standard deviation.\n
+        kc_len: \n
+        \tKc length.\n
+        kc_mult: \n
+        \tKc standard deviation.\n
+        use_tr: \n
+        \tIf left false, ('High'-'Low') will be used instead of the true range.\n
+        histogram_len: \n
+        \tHow many steps from the present backward do you want the histogram to be calculated.\n
+        \tIf you leave it at 0, the 'historiogram' column will not be returned.\n
+        source: \n
+        \tData.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
         """
-        pass
+        if bb_len > 5000 or bb_len <= 0: raise ValueError("'bb_len' it has to be greater than 0 and less than 5000.")
+        elif bb_mult > 50 or bb_mult < 0.001: raise ValueError("'bb_mult' it has to be greater than 0.001 and less than 50.")
+        elif kc_len > 5000 or kc_len <= 0: raise ValueError("'kc_len' it has to be greater than 0 and less than 5000.")
+        elif kc_mult > 50 or kc_mult < 0.001: raise ValueError("'bb_mult' it has to be greater than 0.001 and less than 50.")
+        elif histogram_len < 0: raise ValueError("'histogram_len' has to be greater or equal than 0.")
+        elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
 
-    def __idc_sqzmom(self):
+        # Calc sqzmom.
+        return self.__idc_sqzmom(bb_len=bb_len, bb_mult=bb_mult, kc_len=kc_len, kc_mult=kc_mult, use_tr=use_tr, histogram_len=histogram_len, source=source, last=last)
+
+    def __idc_sqzmom(self, data:pd.Series = None, bb_len:int = 20, bb_mult:float = 1.5, kc_len:int = 20, kc_mult:float = 1.5, use_tr:bool = True, histogram_len:int = 50, source:str = 'Close', last:int = None):
         """
         Squeeze momentum.
         ----
+        This function calculates the Squeeze Momentum, which is inspired by the Squeeze Momentum Indicator available on TradingView. While the concept is based on the original indicator,\n
+        please note that this implementation may not fully replicate the exact functionality of the original.\n
+        Credit for the concept of the Squeeze Momentum goes to its original developer.\n
+        This function is an adaptation and may differ from the original version.\n
+        Please note that this function is intended for use in backtesting scenarios, where it may utilize real market data or simulated random data.\n
+        It should be used for research and educational purposes only, and should not be considered as financial advice.\n
+        Return:
+        ----
+        Return an pd.Dataframe with the value of sqzmom and histogram for each step.\n
+        Columns: 'sqzmom','histogram'.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of stochastic with your own data.\n
         """
-        pass
+        data = self.__data if data is None else data
+
+        basis = np.flip(self.__idc_sma(length=bb_len))
+        dev = bb_mult * data[source].rolling(window=bb_len).std(ddof=0)
+
+        upper_bb = basis + dev
+        lower_bb = basis - dev
+
+        ma = np.flip(self.__idc_sma(length=kc_len))
+        range_ = np.flip(self.__idc_sma(data=np.flip(self.__idc_trange()) if use_tr else data['High']-data['Low'], length=kc_len))
+        
+        upper_kc = ma + range_ * kc_mult
+        lower_kc = ma - range_ * kc_mult
+
+        sqz = np.where((lower_bb > lower_kc) & (upper_bb < upper_kc), 1, 0)
+
+        if histogram_len < 1: 
+            result = pd.DataFrame({'sqzmom':pd.Series(sqz, index=data.index)})
+            return result.apply(lambda col: col.iloc[len(result.index)-last if last != None and last < len(result.index) else 0:], axis=0)
+
+        d = data[source] - ((data['Low'].rolling(window=kc_len).min() + data['High'].rolling(window=kc_len).max()) / 2 + np.flip(self.__idc_sma(length=kc_len))) / 2
+        histogram = self.__idc_rlinreg(data=d[len(d.index)-histogram_len if len(d.index) > histogram_len else 0:], length=kc_len, offset=0)
+
+        result = pd.DataFrame({'sqzmom':pd.Series(sqz, index=data.index), 'histogram':pd.Series(histogram)}, index=data.index)
+        return result.apply(lambda col: col.iloc[len(result.index)-last if last != None and last < len(result.index) else 0:], axis=0) 
+
+    def __idc_rlinreg(self, data:pd.Series = None, length:int = 5, offset:int = 1):
+        """
+        Rolling linear regression.
+        ----
+        This function is not very efficient. I recommend that the data does not exceed 50 in length.\n
+        Return an pd.Series with the value of each linear regression.\n
+        Calculated linear regression: m * (length - 1 - offset) + b\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Parameters:
+        --
+        >>> data:pd.Series = None
+        >>> length:int = 5
+        >>> offset:int = 1
+        \n
+        data: \n
+        \tYou can do the calculation of stochastic with your own data.\n
+        length: \n
+        \tLength of each window.\n
+        """
+        data = self.__data if data is None else data
+
+        x = np.arange(length)
+        y = data.rolling(window=length)
+
+        m = y.apply(lambda y: np.polyfit(x, y, 1)[0])
+        b = y.mean() - (m * np.mean(x)) 
+
+        return m * (length - 1 - offset) + b
+
+    def idc_mom(self, length:int = 10, source:str = 'Close', last:int = None):
+        """
+        Momentum.
+        ----
+        Return an pd.Series with all the steps of momentum with the length you indicate.\n
+        Parameters:
+        --
+        >>> length:int = 10
+        >>> source:str = 'Close'
+        >>> last:int = None
+        \n
+        length: \n
+        \tLength to calculate momentum.\n
+        source: \n
+        \tData.\n
+        last: \n
+        \tHow much data starting from the present backwards do you want to be returned.\n
+        \tIf you leave it at None, the data for all times is returned.\n
+        """
+        if length > 5000 or length <= 0: raise ValueError("'length' it has to be greater than 0 and less than 5000.")
+        elif not source in ('Close','Open','High','Low'): raise ValueError("'source' only one of these values: ['Close','Open','High','Low'].")
+        elif last != None:
+            if last <= 0 or last > self.__data["Close"].shape[0]: raise ValueError("Last has to be less than the length of 'data' and greater than 0.")
+
+        # Calc momentum.
+        return self.__idc_mom(length=length, source=source, last=last)
+
+    def __idc_mom(self, data:pd.Series = None, length:int = 10, source:str = 'Close', last:int = None):
+        """
+        Momentum.
+        ----
+        Return an pd.Series with all the steps of momentum with the length you indicate.\n
+        Hidden function to prevent user modification.\n
+        Function without exception handling.\n
+        Data parameter:
+        --
+        You can do the calculation of stochastic with your own data.\n
+        """
+        data = self.__data if data is None else data
+        mom = data[source] - data[source].shift(length)
+
+        return np.flip(mom[len(mom)-last if last != None and last < len(mom) else 0:])
 
     def idc_ichimoku(self, tenkan_period:int = 9, kijun_period=26, senkou_span_b_period=52, ichimoku_lines:bool = True, last:int = None):
         """
