@@ -13,7 +13,6 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 from . import exception
-from . import utils
 
 class StrategyClass(ABC):
     """
@@ -28,23 +27,68 @@ class StrategyClass(ABC):
     Create your strategy within the StrategyClass.next() structure.\n
     Functions:
     ---
-    >>> next
-    >>> prev
-    >>> prev_trades_cl
-    >>> prev_trades_ac
-    >>> idc_ema
-    >>> idc_hvolume
-    >>> act_open
-    >>> act_close
-    >>> act_mod
+    Get:
+    >>> get_init_founds
+    >>> get_commission
 
-    Hidden Functions:
-    --
-    >>> __before
+    Actions:
+    >>> act_mod
+    >>> act_close
+    >>> act_open
+
+    Hidden:
+    >>> __act_close
+
+    Prev:
+    >>> prev_trades_ac
+    >>> prev_trades_cl
+    >>> prev
+
+    Indicators:
+    >>> idc_hvolume
+    >>> idc_ema
+    >>> idc_sma
+    >>> idc_wma
+    >>> idc_smma
+    >>> idc_smema
+    >>> idc_bb
+    >>> idc_rsi
+    >>> idc_stochastic
+    >>> idc_adx
+    >>> idc_macd
+    >>> idc_sqzmom
+    >>> idc_mom
+    >>> idc_ichimoku
+    >>> idc_fibonacci
+    >>> idc_atr
+    
+    Hidden:
     >>> __idc_ema
     >>> __idc_sma
     >>> __idc_wma
-    >>> __act_close
+    >>> __idc_smma
+    >>> __idc_smema
+    >>> __idc_bb
+    >>> __idc_rsi
+    >>> __idc_stochastic
+    >>> __idc_adx
+    >>> __idc_macd
+    >>> __idc_sqzmom
+    >>> __idc_mom
+    >>> __idc_ichimoku
+    >>> __idc_fibonacci
+    >>> __idc_atr
+    
+    Utils:
+    >>> __idc_rlinreg
+    >>> __idc_trange
+
+    Others:
+    >>> next
+
+    Hidden:
+    >>> __before
+
     """ 
     def __init__(self, data:pd.DataFrame = any, trades_cl:pd.DataFrame = pd.DataFrame(), trades_ac:pd.DataFrame = pd.DataFrame(), commission:float = 0, init_funds:int = 0) -> None: 
         """
@@ -901,6 +945,7 @@ class StrategyClass(ABC):
         \tIf left false, ('High'-'Low') will be used instead of the true range.\n
         histogram_len: \n
         \tHow many steps from the present backward do you want the histogram to be calculated.\n
+        \tThe higher the number, the less efficient.\n
         \tIf you leave it at 0, the 'historiogram' column will not be returned.\n
         source: \n
         \tData.\n
@@ -960,6 +1005,7 @@ class StrategyClass(ABC):
             result = pd.DataFrame({'sqzmom':pd.Series(sqz, index=data.index)})
             return result.apply(lambda col: col.iloc[len(result.index)-last if last != None and last < len(result.index) else 0:], axis=0)
 
+        histogram_len += kc_len
         d = data[source] - ((data['Low'].rolling(window=kc_len).min() + data['High'].rolling(window=kc_len).max()) / 2 + np.flip(self.__idc_sma(length=kc_len))) / 2
         histogram = self.__idc_rlinreg(data=d[len(d.index)-histogram_len if len(d.index) > histogram_len else 0:], length=kc_len, offset=0)
 
