@@ -16,6 +16,7 @@ from matplotlib.lines import Line2D
 
 import matplotlib as mpl
 import pandas as pd
+import numpy as np
 
 def load_bar(size:int, step:int, more:str = '') -> None:
     """
@@ -62,6 +63,28 @@ def round_r(num:float, r:int = 1) -> float:
         num = round(num) if len(str(num).split('.')[0]) > r else f'{{:.{r}g}}'.format(num)
 
     return num
+
+def not_na(x:any, y:any, f:any = max):
+    """
+    If not np.nan.
+    ----
+    It passes to 'x' and 'y' by the function 'f'\n
+    if neither of them are in np.nan, otherwise it returns the value that is not np.nan,\n
+    if both are np.nan, np.nan is returned.\n
+    Parameters:
+    --
+    >>> x:any
+    >>> y:any
+    >>> f:any = max
+    \n
+    x: \n
+    \tx value.\n
+    y: \n
+    \ty value.\n
+    f: \n
+    \tFunction.\n
+    """
+    return y if np.isnan(x) else x if np.isnan(y) else f(x, y)
 
 def max_drawdown(values:pd.Series) -> float:
     """

@@ -134,7 +134,7 @@ def load_data(data:pd.DataFrame = any, icon:str = None, interval:str = None, sta
 
     if statistics: stats_icon(prnt=True)
 
-def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000, commission:int = 0, prnt:bool = True, progress:bool = True) -> str:
+def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000, commission:float = 0, prnt:bool = True, progress:bool = True, beta_fastm:bool = False) -> str:
     """
     Run your strategy.
     ----
@@ -146,6 +146,7 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
     >>> commission:int = 0
     >>> prnt:bool = True
     >>> progress:bool = True
+    >>> beta_fastm:bool = False
     \n
     strategy_class: \n
     \tA class that is inherited from StrategyClass\n
@@ -161,6 +162,10 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
     \tIf it is false, an string will be returned.\n
     progress: \n
     \tProgress bar and timer.\n
+    beta_fastm: \n
+    \tEach sail's loop is calculated differently and may be faster than normal mode.\n
+    \tThis mode does not contain a loading bar.\n
+    \tFunction not yet finished.\n
 
     Alert:\n
     If strategy_class.next() prints something to the console the loading bar will not work as expected.\n
@@ -188,13 +193,21 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
 
     act_trades = pd.DataFrame()
     t = time(); step_t = time()
-
-    for f in range(__data.shape[0]):
-        if progress: utils.load_bar(__data.shape[0], f+1, f'/ Step time: {round(time()-step_t,3)}'); step_t = time()
-
-        instance = strategy_class(__data[:f+1], __trades, act_trades, commission, initial_funds)
-        act_trades, __trades = instance._StrategyClass__before()
     
+    if not beta_fastm:
+        for f in range(__data.shape[0]):
+            if progress: utils.load_bar(__data.shape[0], f+1, f'/ Step time: {round(time()-step_t,3)}'); step_t = time()
+
+            instance = strategy_class(__data[:f+1], __trades, act_trades, commission, initial_funds)
+            act_trades, __trades = instance._StrategyClass__before()
+    else: 
+        def m_loop(x):
+            global __trades; nonlocal act_trades
+
+            instance = strategy_class(__data.loc[:x.name], __trades, act_trades, commission, initial_funds)
+            act_trades, __trades = instance._StrategyClass__before()
+        __data.apply(m_loop, axis=1)
+
     if progress: print('\nRunTimer:',round(time()-t,2))
     
     if not act_trades.empty: __trades = pd.concat([__trades, act_trades.dropna(axis=1, how='all')], ignore_index=True)
@@ -269,38 +282,61 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     if progress: utils.load_bar(9, 9); print('\nPlotTimer:',round(time()-t,2))
     mpl.pyplot.show(block=block)
 
-def plot_strategy(log:bool = False, block:bool = True) -> None:
+def plot_strategy(log:bool = False, view:str = 'p/w/r/n', block:bool = True) -> None:
     """
     Plot strategy statistics.
     ----
-    Plot your strategy statistics:\n
-    - Graph of profit.
-    - Graph of return.
-    - Winnings graph.
+    Plot your strategy statistics.\n
+    View available graphics:\n
+    - 'p' = Profit graph.
+    - 'r' = Return graph.
+    - 'w' = Winnings graph.
     Parameters:
     --
     >>> log:bool = Flase
     >>> block:bool = True
+    >>> view:str = 'p/w/r/n'
     \n
     log: \n
     \tPlot your data using logarithmic scale.\n
+    view: \n
+    \tPlot your data the way you prefer.\n
+    \tThere are 4 shapes available and they all take up the entire window.\n
     """
 
     if __trades.empty: raise exception.StatsError('Trades not loaded.')
     if not 'Profit' in __trades.columns:  raise exception.StatsError('There is no data to see.')
+    view = view.lower().strip().split('/')
+    view = [i for i in view if i in ('p','w','r')]
+    if len(view) > 4 or len(view) < 1: raise exception.StatsError("'view' allowed format: 's/s/s/s' where s is the name of the graph.\nAvailable graphics: 'p','w','r'")
 
     mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
-    ax1 = mpl.pyplot.subplot2grid((6,2), (0,0), rowspan=3, colspan=1)
-    ax2 = mpl.pyplot.subplot2grid((6,2), (0,1), rowspan=3, colspan=1, sharex=ax1)
-    ax3 = mpl.pyplot.subplot2grid((6,2), (3,0), rowspan=3, colspan=1, sharex=ax1)
 
-    ax1.plot(__trades.index,__trades['Profit'].cumsum(), c='black', label='Profit.')
-    ax2.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Winnings.')
-    ax3.plot(__trades.index,__trades['ProfitPer'].cumsum(), c='black', label='Return.')
+    loc = [(0,0), (3,0), (3,1), (0,1)]; ax = None
 
-    if log: ax1.set_yscale('symlog'); ax3.set_yscale('symlog')
-    ax1.legend(loc='upper left'); ax2.legend(loc='upper left'); ax3.legend(loc='upper left')
+    for i,v in enumerate(view):
+        match len(view):
+            case 1: 
+                ax = mpl.pyplot.subplot2grid((6,2), loc[0], rowspan=6, colspan=2)
+            case 2: 
+                ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, colspan=2, sharex=ax, sharey=ax)
+            case 3: 
+                ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, colspan=2 if i==0 else 1, sharex=ax)
+            case 4: 
+                ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, colspan=1, sharex=ax, sharey=ax) 
+
+        match v:
+            case 'p':
+                ax.plot(__trades.index,__trades['Profit'].cumsum(), c='black', label='Profit.')
+                if log: ax.set_yscale('symlog')
+            case 'w':
+                ax.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Winnings.')
+            case 'r':
+                ax.plot(__trades.index,__trades['ProfitPer'].cumsum(), c='black', label='Return.')
+                if log: ax.set_yscale('symlog')
+            case _: pass
+        ax.legend(loc='upper left')
 
     mpl.pyplot.xticks([])
     mpl.pyplot.gcf().canvas.manager.set_window_title(f'Strategy statistics.')
@@ -367,9 +403,9 @@ Profit: {utils.round_r(__trades['Profit'].sum(),2)}
 Profit fact: {utils.round_r((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),2) if (__trades['Profit']>0).sum() > 0 and (__trades['Profit']<=0).sum() > 0 and not pd.isna(__trades['Profit']).all() else 0}
 Duration ratio: {utils.round_r(__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).sum(),2) if not __trades['PositionDate'].isnull().all() else np.nan}
 
-Max drawdown: {utils.round_r(utils.max_drawdown(__trades['Profit'].dropna().cumsum()+_init_funds),2)}%
-Long exposure: {utils.round_r((__trades['Type']==1).sum()/__trades['Type'].count()*100,2)}%
-Winnings: {utils.round_r((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,2) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
+Max drawdown: {round(utils.max_drawdown(__trades['Profit'].dropna().cumsum()+_init_funds),1)}%
+Long exposure: {round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
+Winnings: {round((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
 ----
     """
     if data: data_s += stats_icon(False)
