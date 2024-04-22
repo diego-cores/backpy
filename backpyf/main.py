@@ -19,6 +19,7 @@ Hidden variables:
 >>> __data_interval # Data interval.
 >>> __data_icon # Data icon.
 >>> __data # Saved data.
+>>> __trades # Saved trades.
 """
 
 import matplotlib.pyplot
@@ -212,8 +213,9 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
     
     if not act_trades.empty: __trades = pd.concat([__trades, act_trades.dropna(axis=1, how='all')], ignore_index=True)
     
-    if prnt and not __trades.empty and 'ProfitPer' in __trades.columns: stats_trades(prnt=True)
-    elif not prnt and not __trades.empty and 'ProfitPer' in __trades.columns: return stats_trades(prnt=False)
+    try: 
+        return stats_trades(prnt=prnt)
+    except exception.StatsError: pass
 
 def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     """
@@ -389,6 +391,7 @@ def stats_trades(data:bool = False, prnt:bool = True):
     """
     if __trades.empty: raise exception.StatsError('Trades not loaded.')
     elif not 'ProfitPer' in __trades.columns:  raise exception.StatsError('There is no data to see.')
+    elif np.isnan(__trades['ProfitPer'].mean()): raise exception.StatsError('There is no data to see.') 
 
     data_s = f"""
 Statistics of strategy.
@@ -397,7 +400,7 @@ Trades: {len(__trades.index)}
 
 Return: {utils.round_r(__trades['ProfitPer'].sum(),2)}%
 Average return: {utils.round_r(__trades['ProfitPer'].mean(),2)}%
-Average ratio: {utils.round_r((abs(__trades['Close']-__trades['PositionClose']) / abs(__trades['Close']-__trades['StopLoss'])).mean(),2)}
+Average ratio: {utils.round_r((abs(__trades['Close']-__trades['TakeProfit']) / abs(__trades['Close']-__trades['StopLoss'])).mean(),2)}
 
 Profit: {utils.round_r(__trades['Profit'].sum(),2)}
 Profit fact: {utils.round_r((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),2) if (__trades['Profit']>0).sum() > 0 and (__trades['Profit']<=0).sum() > 0 and not pd.isna(__trades['Profit']).all() else 0}

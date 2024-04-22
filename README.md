@@ -3,7 +3,7 @@
 BackPy is a library made in python for back testing in financial markets.
 Read Risk_notice.txt and LICENSE.
 
-  #### Version: 0.9.2.018
+  #### Version: 0.9.2.019
 
 BackPy is a library that is used to test strategies in the market, 
 it is made so that you can provide your own data or use Yfinance module.
@@ -20,7 +20,7 @@ it is made so that you can provide your own data or use Yfinance module.
 
 1. Download the latest version from GitHub
 - Go to this project GitHub page.
-- Look for the "Releases" or "Latest release" section, I recommend versions later than 0.9.2.018.
+- Look for the "Releases" or "Latest release" section, i recommend versions later than 0.9.2.018.
 - Download the ZIP file of the latest version of the project.
 2. Unzip the ZIP file
 - Unzip the ZIP file you downloaded.

@@ -146,7 +146,7 @@ class StrategyClass(ABC):
         self.__data = data
 
     @abstractmethod
-    def next(self) -> None: pass
+    def next(self) -> None: ...
 
     def get_commission(self) -> float:
         """
