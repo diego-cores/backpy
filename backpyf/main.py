@@ -400,7 +400,7 @@ Trades: {len(__trades.index)}
 
 Return: {utils.round_r(__trades['ProfitPer'].sum(),2)}%
 Average return: {utils.round_r(__trades['ProfitPer'].mean(),2)}%
-Average ratio: {utils.round_r((abs(__trades['Close']-__trades['TakeProfit']) / abs(__trades['Close']-__trades['StopLoss'])).mean(),2)}
+Average ratio: {utils.round_r((abs(__trades['Close']-__trades['TakeProfit']) / abs(__trades['Close']-__trades['StopLoss'])).mean() if not __trades['TakeProfit'].isnull().all() and not __trades['StopLoss'].isnull().all() else 0, 2)}
 
 Profit: {utils.round_r(__trades['Profit'].sum(),2)}
 Profit fact: {utils.round_r((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),2) if (__trades['Profit']>0).sum() > 0 and (__trades['Profit']<=0).sum() > 0 and not pd.isna(__trades['Profit']).all() else 0}

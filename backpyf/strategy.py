@@ -1004,7 +1004,8 @@ class StrategyClass(ABC):
         if histogram_len < 1: 
             result = pd.DataFrame({'sqzmom':pd.Series(sqz, index=data.index)})
             return result.apply(lambda col: col.iloc[len(result.index)-last if last != None and last < len(result.index) else 0:], axis=0)
-
+        elif histogram_len > last: histogram = last
+        
         histogram_len += kc_len
         d = data[source] - ((data['Low'].rolling(window=kc_len).min() + data['High'].rolling(window=kc_len).max()) / 2 + np.flip(self.__idc_sma(length=kc_len))) / 2
         histogram = self.__idc_rlinreg(data=d[len(d.index)-histogram_len if len(d.index) > histogram_len else 0:], length=kc_len, offset=0)
