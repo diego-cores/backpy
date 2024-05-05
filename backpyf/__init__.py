@@ -3,7 +3,7 @@ Back Test Py.
 ----
 BackPy is a library that is used to test strategies in the market.
 
-  Version: 0.9.2.020
+  Version: 0.9.2.021
 
 https://github.com/Diego-Cores/BackPy
 
@@ -48,22 +48,26 @@ it is made so that you can provide your own data or use Yfinance module.
 
 Important Notice: Understanding the Risks of Trading and Financial Data Analysis.
 --
-Trading financial instruments and using financial data for analysis involves significant risks, 
-including the possibility of loss of capital. Markets can be volatile and data may contain errors. 
-Before engaging in trading activities or using financial data, it is important to understand and 
-carefully consider these risks and seek independent financial advice if necessary.
+Trading financial instruments and using financial data for analysis involves 
+significant risks, including the possibility of loss of capital. 
+Markets can be volatile and data may contain errors. 
+Before engaging in trading activities or using financial data, 
+it is important to understand and carefully consider these risks and 
+seek independent financial advice if necessary.
 
 Disclaimer Regarding Accuracy of BackPy.
 --
-It is essential to acknowledge that the backtesting software utilized
-for financial chart analysis may not be entirely accurate and could contain errors, 
+It is essential to acknowledge that the backtesting software utilized for 
+financial chart analysis may not be entirely accurate and could contain errors, 
 leading to results that may not reflect real-world outcomes.
 
 What can I do with BackPy?
 --
-- With BackPy you will be able to know the position of different indicators for each point.
+- With BackPy you will be able to know the position of 
+  different indicators for each point.
 - You can create your own indicators based on price, date and volume.
-- For each point you can consult previous data such as previous closings and active actions.
+- For each point you can consult previous data such as 
+  previous closings and active actions.
 - You can display the data with logarithmic scale or not.
 - You can print statistics of the uploaded data.
 """

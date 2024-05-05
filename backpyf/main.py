@@ -1,8 +1,9 @@
 """
 Main.
 ----
-Here are all the main functions of BackPy where:\n
-the graphs are displayed, the strategies are processed and the data is loaded.\n
+Here are all the main functions of BackPy where:
+the graphs are displayed, the strategies are processed and the data is loaded.
+
 Functions:
 ---
 >>> load_yfinance_data
@@ -42,11 +43,14 @@ __data = None
 __trades = pd.DataFrame()
 _init_funds = 0
 
-def load_yfinance_data(tickers:str = any, start:str = None, end:str = None, interval:str = '1d', statistics:bool = True, progress:bool = True) -> None:
+def load_yfinance_data(tickers:str = any, 
+                       start:str = None, end:str = None, interval:str = '1d', 
+                       statistics:bool = True, progress:bool = True) -> None:
     """
     Load yfinance data.
     ----
-    Load all data using the yfinance module.\n
+    Load all data using the yfinance module.
+
     Parameters:
     --
     >>> tickers:str = any
@@ -55,22 +59,23 @@ def load_yfinance_data(tickers:str = any, start:str = None, end:str = None, inte
     >>> interval:str = '1d'
     >>> statistics:bool = True
     >>> progress:bool = True
-    \n
-    tickers: \n
-    \tString of ticker to download.\n
-    start: \n
-    \tDownload start date string (YYYY-MM-DD) or _datetime, inclusive.\n
-    \tDefault is 99 years ago.\n
-    end: \n
-    \tDownload end date string (YYYY-MM-DD) or _datetime, exclusive.\n
-    \tDefault is now.\n
-    interval: \n
-    \tValid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo.\n
-    \tIntraday data cannot extend last 60 days.\n
-    statistics: \n
-    \tPrint statistics of the downloaded data.\n
-    progress: \n
-    \tProgress bar and timer.\n
+    
+    tickers:
+      String of ticker to download.
+    start:
+      Download start date string (YYYY-MM-DD).
+      Default is 99 years ago.
+    end:
+      Download end date string (YYYY-MM-DD).
+      Default is now.
+    interval:
+      Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo.
+      Intraday data cannot extend last 60 days.
+    statistics:
+      Print statistics of the downloaded data.
+    progress:
+      Progress bar and timer.
+
     Example:
     --
     >>> load_yfinance_data(
@@ -89,44 +94,60 @@ def load_yfinance_data(tickers:str = any, start:str = None, end:str = None, inte
         t = time() if progress else None
 
         yf.set_tz_cache_location('.\yfinance_cache')
-        __data = yf.download(tickers, start=start, end=end, interval=interval, progress=progress)
-        if __data.empty: raise exception.YfinanceError('The symbol does not exist.')
+        __data = yf.download(tickers, start=start, end=end, 
+                             interval=interval, progress=progress)
 
-        if progress: print('DataTimer:',round(time()-t,2))
-    except ModuleNotFoundError: raise exception.YfinanceError('Yfinance is not downloaded.')
-    except: raise exception.YfinanceError('Yfinance parameters error.')
+        if __data.empty: 
+            raise exception.YfinanceError('The symbol does not exist.')
+        if progress: 
+            print('DataTimer:',round(time()-t,2))
+    
+    except ModuleNotFoundError: 
+        raise exception.YfinanceError('Yfinance is not downloaded.')
+    except: 
+        raise exception.YfinanceError('Yfinance parameters error.')
     
     __data_interval = interval
     __data_icon = tickers
 
     if statistics: stats_icon(prnt=True)
 
-def load_data(data:pd.DataFrame = any, icon:str = None, interval:str = None, statistics:bool = True) -> None: 
+def load_data(data:pd.DataFrame = any, icon:str = None, 
+              interval:str = None, statistics:bool = True) -> None: 
     """
     Load any data.
     ----
-    Load data.\n
-    Parameters:
+    Load data.
+
     Parameters:
     --
     >>> data:str = any
     >>> icon:str = None
     >>> interval:str = None
     >>> statistics:bool = True
-    \n
-    data: \n
-    \tpd.Dataframe with all the data.\n
-    \tYou need to have these columns:\n
-    \t['Open', 'High', 'Low', 'Close', 'Volume']\n
-    icon: \n
-    \tString of the data icon.\n
-    interval: \n
-    \tString of the data interval.\n
-    statistics: \n
-    \tPrint statistics of the loaded data.\n
+    
+    data:
+      pd.Dataframe with all the data.
+      You need to have these columns:
+      ['Open', 'High', 'Low', 'Close', 'Volume']
+    icon:
+      String of the data icon.
+    interval:
+      String of the data interval.
+    statistics:
+      Print statistics of the loaded data.
     """
     global __data, __data_icon, __data_interval
-    if not all(col in data.columns.to_list() for col in ['Open', 'High', 'Low', 'Close', 'Volume']): raise exception.DataError("Some columns are missing columns: ['Open', 'High', 'Low', 'Close', 'Volume']")
+    
+    if not all(
+        col in data.columns.to_list() 
+        for col in ['Open', 'High', 'Low', 'Close', 'Volume']): 
+        
+        raise exception.DataError(
+            utils.text_fix("""
+            Some columns are missing columns: 
+            ['Open', 'High', 'Low', 'Close', 'Volume']
+            """, newline_exclude=True))
 
     __data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
     __data.index.name = 'Date'
@@ -135,11 +156,14 @@ def load_data(data:pd.DataFrame = any, icon:str = None, interval:str = None, sta
 
     if statistics: stats_icon(prnt=True)
 
-def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000, commission:float = 0, prnt:bool = True, progress:bool = True, beta_fastm:bool = False) -> str:
+def run(strategy_class:'strategy.StrategyClass' = any, 
+        initial_funds:int = 10000, commission:float = 0, 
+        prnt:bool = True, progress:bool = True, beta_fastm:bool = False) -> str:
     """
     Run your strategy.
     ----
-    Run your strategy.\n
+    Run your strategy.
+
     Parameters:
     --
     >>> strategy_class:'strategy.StrategyClass' = any
@@ -148,30 +172,31 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
     >>> prnt:bool = True
     >>> progress:bool = True
     >>> beta_fastm:bool = False
-    \n
-    strategy_class: \n
-    \tA class that is inherited from StrategyClass\n
-    \twhere you create your strategy in the next function.\n
-    initial_funds:\n
-    \tIt is the initial amount you start with.\n
-    \tIt is used for some statistics.\n
-    commission:\n
-    \tIt is the commission in percentage for each trade.\n
-    \tIt is used for some statistics.\n
-    prnt: \n
-    \tIf it is true, trades_stats will be printed.\n
-    \tIf it is false, an string will be returned.\n
-    progress: \n
-    \tProgress bar and timer.\n
-    beta_fastm: \n
-    \tEach sail's loop is calculated differently and may be faster than normal mode.\n
-    \tThis mode does not contain a loading bar.\n
-    \tFunction not yet finished.\n
+    
+    strategy_class:
+      A class that is inherited from StrategyClass
+      where you create your strategy in the next function.
+    initial_funds:
+      It is the initial amount you start with.
+      It is used for some statistics.
+    commission:
+      It is the commission in percentage for each trade.
+      It is used for some statistics.
+    prnt:
+      If it is true, trades_stats will be printed.
+      If it is false, an string will be returned.
+    progress:
+      Progress bar and timer.
+    beta_fastm:
+      Each sail's loop is calculated differently and 
+    may be faster than normal mode.
+      This mode does not contain a loading bar.
+      Function not yet finished.
 
-    Alert:\n
-    If strategy_class.next() prints something to the console the loading bar will not work as expected.\n
-    Recommend: 
-    >>> progress = False
+    Alert:
+    --
+    If strategy_class.next() prints something to the 
+    console the loading bar will not work as expected.\n
 
     Example:
     --
@@ -185,33 +210,45 @@ def run(strategy_class:'strategy.StrategyClass' = any, initial_funds:int = 10000
     """
     global __trades, _init_funds
 
-    if __data is None: raise exception.RunError('Data not loaded.')
-    if initial_funds < 0: raise exception.RunError("'initial_funds' cannot be less than 0.")
-    if commission < 0: raise exception.RunError("'commission' cannot be less than 0.")
-    if not __trades.empty: __trades = pd.DataFrame()
+    if __data is None: 
+        raise exception.RunError('Data not loaded.')
+    elif initial_funds < 0: 
+        raise exception.RunError("'initial_funds' cannot be less than 0.")
+    elif commission < 0: 
+        raise exception.RunError("'commission' cannot be less than 0.")
+    elif not __trades.empty: 
+        __trades = pd.DataFrame()
 
     _init_funds = initial_funds
 
     act_trades = pd.DataFrame()
-    t = time(); step_t = time()
+    t, step_t = time(), time()
     
     if not beta_fastm:
         for f in range(__data.shape[0]):
-            if progress: utils.load_bar(__data.shape[0], f+1, f'/ Step time: {round(time()-step_t,3)}'); step_t = time()
+            if progress: 
+                utils.load_bar(size=__data.shape[0], step=f+1) 
+                print(f'/ Step time: {round(time()-step_t,3)}', end='')
+                step_t = time()
 
-            instance = strategy_class(__data[:f+1], __trades, act_trades, commission, initial_funds)
+            instance = strategy_class(__data[:f+1], __trades, 
+                                      act_trades, commission, initial_funds)
             act_trades, __trades = instance._StrategyClass__before()
     else: 
         def m_loop(x):
             global __trades; nonlocal act_trades
 
-            instance = strategy_class(__data.loc[:x.name], __trades, act_trades, commission, initial_funds)
+            instance = strategy_class(__data.loc[:x.name], __trades, 
+                                      act_trades, commission, initial_funds)
             act_trades, __trades = instance._StrategyClass__before()
+
         __data.apply(m_loop, axis=1)
 
     if progress: print('\nRunTimer:',round(time()-t,2))
     
-    if not act_trades.empty: __trades = pd.concat([__trades, act_trades.dropna(axis=1, how='all')], ignore_index=True)
+    if not act_trades.empty: __trades = pd.concat([
+        __trades, act_trades.dropna(axis=1, how='all')
+        ], ignore_index=True)
     
     try: 
         return stats_trades(prnt=prnt)
@@ -221,96 +258,152 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     """
     Plot graph with trades.
     ----
-    Plot your data showing the trades made.\n
+    Plot your data showing the trades made.
+
     Parameters:
     --
     >>> log:bool = Flase
     >>> progress:bool = True
     >>> block:bool = True
-    \n
-    log: \n
-    \tPlot your data using logarithmic scale.\n
-    progress: \n
-    \tProgress bar and timer.\n
+    
+    log:
+      Plot your data using logarithmic scale.
+    progress:
+      Progress bar and timer.
     """
 
     if __data is None: raise exception.PlotError('Data not loaded.')
-    if progress: utils.load_bar(9, 1);t = time()
+    if progress: utils.load_bar(size=9, step=1)
+    t = time()
 
     mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
+
     ax1 = mpl.pyplot.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
-    ax2 = mpl.pyplot.subplot2grid((6,1), (5,0), rowspan=1, colspan=1, sharex=ax1); ax2.set_yticks([])
+
+    ax2 = mpl.pyplot.subplot2grid((6,1), (5,0), rowspan=1, 
+                                  colspan=1, sharex=ax1)
+    ax2.set_yticks([])
     
     if log: ax1.semilogy(__data['Close'], alpha=0); ax2.semilogy(alpha=0)
-    if progress: utils.load_bar(9, 2)
+    if progress: utils.load_bar(size=9, step=2)
 
     fig.tight_layout(); fig.subplots_adjust(hspace=0)
 
-    width = (mpl.dates.date2num(__data.index).max()-mpl.dates.date2num(__data.index).min())/__data.shape[0]
+    date_range = mpl.dates.date2num(__data.index)
+    width = (date_range.max() - date_range.min())/__data.shape[0]
 
-    if progress: utils.load_bar(9, 3)
+    if progress: utils.load_bar(size=9, step=3)
 
-    candle_data = __data.copy(); candle_data.index = mpl.dates.date2num(__data.index)
+    candle_data = __data.copy()
+    candle_data.index = date_range
+
     utils.candles_plot(ax1, candle_data, width*0.9)
 
-    if progress: utils.load_bar(9, 4)
+    if progress: utils.load_bar(size=9, step=4)
 
-    ax2.bar(mpl.dates.date2num(__data.index), round(__data['Volume'],0), width=width)
+    ax2.bar(date_range, round(__data['Volume'],0), width=width)
 
-    if progress: utils.load_bar(9, 5)
+    if progress: utils.load_bar(size=9, step=5)
 
-    def t_scatter(function = any, color:str = any, marker:str = any, date_label:str = 'Date'):
-        if not isinstance(function, types.FunctionType): raise TypeError("'function' is not a function.")
+    def t_scatter(function = any, color:str = any, 
+                  marker:str = any, date_label:str = 'Date'):
+        if not isinstance(function, types.FunctionType): 
+            raise TypeError("'function' is not a function.")
         elif not date_label in __trades.columns: return
-        ax1.scatter(__trades[date_label].apply(lambda x: mpl.dates.date2num(x) if x != np.nan else None) if not __trades.empty else [] , __trades.apply(function, axis=1), c=color, s = 30, marker=marker)
 
-    t_scatter(lambda row: row['PositionClose'] if row['ProfitPer'] > 0 else None, 'gold', 'x', 'PositionDate')
-    t_scatter(lambda row: row['PositionClose'] if row['ProfitPer'] <= 0 else None, 'purple', 'x', 'PositionDate')
-    if progress: utils.load_bar(9, 6)
+        ax1.scatter(
+            __trades[date_label].apply(
+                lambda x: mpl.dates.date2num(x) if x != np.nan else None
+                ) if not __trades.empty else [] , 
+            __trades.apply(function, axis=1), 
+            c=color, s = 30, 
+            marker=marker)
 
-    t_scatter(lambda row: row['TakeProfit'] if "TakeProfit" in row.index else None, 'y', '2')
-    t_scatter(lambda row: row['StopLoss'] if "StopLoss" in row.index else None, 'y', '1')
-    if progress: utils.load_bar(9, 7)
+    t_scatter(
+        lambda row: row['PositionClose'] if row['ProfitPer'] > 0 else None, 
+        'gold', 'x', 'PositionDate')
+    t_scatter(
+        lambda row: row['PositionClose'] if row['ProfitPer'] <= 0 else None, 
+        'purple', 'x', 'PositionDate')
+    if progress: utils.load_bar(size=9, step=6)
 
-    t_scatter(lambda row: (row['Low'] - (row['High'] - row['Low']) / 2 if row['Type'] else None),'g','^')
-    t_scatter(lambda row: (row['High'] + (row['High'] - row['Low']) / 2 if not row['Type'] else None),'r','v')
-    if progress: utils.load_bar(9, 8)
+    t_scatter(
+        lambda row: row['TakeProfit'] if "TakeProfit" in row.index else None, 
+        'y', '2')
+    t_scatter(
+        lambda row: row['StopLoss'] if "StopLoss" in row.index else None, 
+        'y', '1')
+    if progress: utils.load_bar(size=9, step=7)
+
+    t_scatter(
+        lambda row: (row['Low'] - (row['High'] - row['Low']) / 2 
+                     if row['Type'] else None),
+        'g', '^')
+    t_scatter(
+        lambda row: (row['High'] + (row['High'] - row['Low']) / 2 
+                     if not row['Type'] else None),
+        'r', 'v')
+    if progress: utils.load_bar(size=9, step=8)
 
     date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
     ax1.xaxis.set_major_formatter(date_format); fig.autofmt_xdate()
-    mpl.pyplot.gcf().canvas.manager.set_window_title(f'Back testing: \'{__data_icon}\' {".".join(str(val) for val in [__data.index[0].day,__data.index[0].month,__data.index[0].year])+"~"+".".join(str(val) for val in [__data.index[-1].day,__data.index[-1].month,__data.index[-1].year]) if isinstance(__data.index[0], pd.Timestamp) else ""}')
 
-    if progress: utils.load_bar(9, 9); print('\nPlotTimer:',round(time()-t,2))
+    if isinstance(__data.index[0], pd.Timestamp):
+        s_date = ".".join(str(val) for val in 
+                        [__data.index[0].day, __data.index[0].month, 
+                        __data.index[0].year])
+        
+        e_date = ".".join(str(val) for val in 
+                        [__data.index[-1].day, __data.index[-1].month, 
+                        __data.index[-1].year]
+                        ) if isinstance(__data.index[0], pd.Timestamp) else ""
+        
+        r_date = f"{s_date}~{e_date}"
+    else: r_date = ""
+    
+    mpl.pyplot.gcf().canvas.manager.set_window_title(
+        f"Back testing: '{__data_icon}' {r_date}")
+
+    if progress: utils.load_bar(size=9, step=9); print('\nPlotTimer:',round(time()-t,2))
     mpl.pyplot.show(block=block)
 
-def plot_strategy(log:bool = False, view:str = 'p/w/r/n', block:bool = True) -> None:
+def plot_strategy(log:bool = False, view:str = 'p/w/r/n', 
+                  block:bool = True) -> None:
     """
     Plot strategy statistics.
     ----
-    Plot your strategy statistics.\n
-    View available graphics:\n
+    Plot your strategy statistics.
+
+    View available graphics:
     - 'p' = Profit graph.
     - 'r' = Return graph.
     - 'w' = Winnings graph.
+
     Parameters:
     --
     >>> log:bool = Flase
     >>> block:bool = True
     >>> view:str = 'p/w/r/n'
-    \n
-    log: \n
-    \tPlot your data using logarithmic scale.\n
-    view: \n
-    \tPlot your data the way you prefer.\n
-    \tThere are 4 shapes available and they all take up the entire window.\n
+    
+    log:
+      Plot your data using logarithmic scale.
+    view:
+      Plot your data the way you prefer.
+      There are 4 shapes available and they all take up the entire window.
     """
-
-    if __trades.empty: raise exception.StatsError('Trades not loaded.')
-    if not 'Profit' in __trades.columns:  raise exception.StatsError('There is no data to see.')
     view = view.lower().strip().split('/')
     view = [i for i in view if i in ('p','w','r')]
-    if len(view) > 4 or len(view) < 1: raise exception.StatsError("'view' allowed format: 's/s/s/s' where s is the name of the graph.\nAvailable graphics: 'p','w','r'")
+
+    if __trades.empty: 
+        raise exception.StatsError('Trades not loaded.')
+    elif not 'Profit' in __trades.columns:  
+        raise exception.StatsError('There is no data to see.')
+    elif len(view) > 4 or len(view) < 1: 
+        raise exception.StatsError(utils.text_fix("""
+            'view' allowed format: 's/s/s/s' where s is the name of the graph.
+            Available graphics: 'p','w','r'
+            """, newline_exclude=True))
 
     mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
@@ -320,22 +413,36 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/n', block:bool = True) -> 
     for i,v in enumerate(view):
         match len(view):
             case 1: 
-                ax = mpl.pyplot.subplot2grid((6,2), loc[0], rowspan=6, colspan=2)
+                ax = mpl.pyplot.subplot2grid((6,2), loc[0], 
+                                             rowspan=6, colspan=2)
             case 2: 
-                ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, colspan=2, sharex=ax, sharey=ax)
+                ax = mpl.pyplot.subplot2grid((6,2), loc[i], 
+                                             rowspan=3, colspan=2, 
+                                             sharex=ax, sharey=ax)
             case 3: 
-                ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, colspan=2 if i==0 else 1, sharex=ax)
+                ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, 
+                                             colspan=2 if i==0 else 1, 
+                                             sharex=ax)
             case 4: 
-                ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, colspan=1, sharex=ax, sharey=ax) 
+                ax = mpl.pyplot.subplot2grid((6,2), loc[i], 
+                                             rowspan=3, colspan=1, 
+                                             sharex=ax, sharey=ax) 
 
         match v:
             case 'p':
-                ax.plot(__trades.index,__trades['Profit'].cumsum(), c='black', label='Profit.')
+                ax.plot(__trades.index,__trades['Profit'].cumsum(), 
+                        c='black', label='Profit.')
+                
                 if log: ax.set_yscale('symlog')
             case 'w':
-                ax.plot(__trades.index,(__trades['ProfitPer'].apply(lambda row: 1 if row>0 else -1)).cumsum(), c='black', label='Winnings.')
+                ax.plot(__trades.index,
+                        (__trades['ProfitPer'].apply(
+                            lambda row: 1 if row>0 else -1)).cumsum(), 
+                        c='black', label='Winnings.')
             case 'r':
-                ax.plot(__trades.index,__trades['ProfitPer'].cumsum(), c='black', label='Return.')
+                ax.plot(__trades.index,__trades['ProfitPer'].cumsum(), 
+                        c='black', label='Return.')
+
                 if log: ax.set_yscale('symlog')
             case _: pass
         ax.legend(loc='upper left')
@@ -348,16 +455,30 @@ def stats_icon(prnt:bool = True) -> str:
     """
     Icon statistics.
     ----
-    Statistics of the uploaded data.\n
+    Statistics of the uploaded data.
+
     Parameters:
     --
     >>> prnt:bool = True
-    \n
-    prnt: \n
-    \tIf it is true, statistics will be printed.\n
-    \tIf it is false, an string will be returned.\n
+    
+    prnt:
+      If it is true, statistics will be printed.
+      If it is false, an string will be returned.
     """
     if __data is None: raise exception.StatsError('Data not loaded.')
+
+    if isinstance(__data.index[0], pd.Timestamp):
+        s_date = ".".join(str(val) for val in 
+                        [__data.index[0].day, __data.index[0].month, 
+                        __data.index[0].year])
+        
+        e_date = ".".join(str(val) for val in 
+                        [__data.index[-1].day, __data.index[-1].month, 
+                        __data.index[-1].year]
+                        ) if isinstance(__data.index[0], pd.Timestamp) else ""
+        
+        r_date = f"{s_date}~{e_date}"
+    else: r_date = ""
 
     data_s = f"""
 Statistics of {__data_icon}:
@@ -371,27 +492,32 @@ Standard deviation: {utils.round_r(__data['Close'].std(),2)}
 Average price: {utils.round_r(__data['Close'].mean(),2)}
 Average volume: {utils.round_r(__data['Volume'].mean(),2)}
 ----
-{".".join(str(val) for val in [__data.index[0].day,__data.index[0].month,__data.index[0].year])+"~"+".".join(str(val) for val in [__data.index[-1].day,__data.index[-1].month,__data.index[-1].year]) if isinstance(__data.index[0], pd.Timestamp) else ""} ~ {__data_interval} ~ {__data_icon}
+{r_date} ~ {__data_interval} ~ {__data_icon}
     """
+
     if prnt:print(data_s) 
     else: return data_s
 
-def stats_trades(data:bool = False, prnt:bool = True):
+def stats_trades(data:bool = False, prnt:bool = True) -> str:
     """
     Trades statistics.
     ----
-    Statistics of the results.\n
+    Statistics of the results.
+
     Parameters:
     --
     >>> prnt:bool = True
-    \n
-    prnt: \n
-    \tIf it is true, statistics will be printed.\n
-    \tIf it is false, an string will be returned.\n
+    
+    prnt: 
+      If it is true, statistics will be printed.
+      If it is false, an string will be returned.
     """
-    if __trades.empty: raise exception.StatsError('Trades not loaded.')
-    elif not 'ProfitPer' in __trades.columns:  raise exception.StatsError('There is no data to see.')
-    elif np.isnan(__trades['ProfitPer'].mean()): raise exception.StatsError('There is no data to see.') 
+    if __trades.empty: 
+        raise exception.StatsError('Trades not loaded.')
+    elif not 'ProfitPer' in __trades.columns:  
+        raise exception.StatsError('There is no data to see.')
+    elif np.isnan(__trades['ProfitPer'].mean()): 
+        raise exception.StatsError('There is no data to see.') 
 
     data_s = f"""
 Statistics of strategy.
@@ -400,15 +526,32 @@ Trades: {len(__trades.index)}
 
 Return: {utils.round_r(__trades['ProfitPer'].sum(),2)}%
 Average return: {utils.round_r(__trades['ProfitPer'].mean(),2)}%
-Average ratio: {utils.round_r((abs(__trades['Close']-__trades['TakeProfit']) / abs(__trades['Close']-__trades['StopLoss'])).mean() if not __trades['TakeProfit'].isnull().all() and not __trades['StopLoss'].isnull().all() else 0, 2)}
+Average ratio: {utils.round_r(
+    (abs(__trades['Close']-__trades['TakeProfit']) / 
+        abs(__trades['Close']-__trades['StopLoss'])).mean() 
+     if not __trades['TakeProfit'].isnull().all() and 
+     not __trades['StopLoss'].isnull().all() else 0, 2)}
 
 Profit: {utils.round_r(__trades['Profit'].sum(),2)}
-Profit fact: {utils.round_r((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),2) if (__trades['Profit']>0).sum() > 0 and (__trades['Profit']<=0).sum() > 0 and not pd.isna(__trades['Profit']).all() else 0}
-Duration ratio: {utils.round_r(__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).mean()/__trades['PositionDate'].apply(lambda x: x.timestamp() if not pd.isna(x) else 0).sum(),2) if not __trades['PositionDate'].isnull().all() else np.nan}
+Profit fact: {
+    utils.round_r((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),2) 
+    if (__trades['Profit']>0).sum() > 0 and 
+    (__trades['Profit']<=0).sum() > 0 and 
+    not pd.isna(__trades['Profit']).all() else 0}
+Duration ratio: {utils.round_r(__trades['PositionDate'].apply(
+    lambda x: x.timestamp() if not pd.isna(x) else 0).mean() /
+    __trades['PositionDate'].apply(
+        lambda x: x.timestamp() if not pd.isna(x) else 0).sum()
+    ,2) if not __trades['PositionDate'].isnull().all() else np.nan}
 
-Max drawdown: {round(utils.max_drawdown(__trades['Profit'].dropna().cumsum()+_init_funds),1)}%
-Long exposure: {round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
-Winnings: {round((__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) if not ((__trades['ProfitPer']>0).sum() == 0 or __trades['ProfitPer'].count() == 0) else 0}%
+Max drawdown: {round(
+    utils.max_drawdown(__trades['Profit'].dropna().cumsum()+_init_funds),1)}%
+Long exposure: {
+    round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
+Winnings: {round(
+    (__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) 
+    if not ((__trades['ProfitPer']>0).sum() == 0 or 
+            __trades['ProfitPer'].count() == 0) else 0}%
 ----
     """
     if data: data_s += stats_icon(False)
