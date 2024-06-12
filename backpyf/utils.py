@@ -11,7 +11,7 @@ Functions:
 >>> candles_plot
 """
 
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, FancyArrowPatch 
 from matplotlib.axes._axes import Axes
 from matplotlib.lines import Line2D
 
@@ -119,9 +119,9 @@ def max_drawdown(values:pd.Series) -> float:
 
     return max_drdwn * 100
 
-def candles_plot(ax:Axes, data:pd.DataFrame, 
+def plot_candles(ax:Axes, data:pd.DataFrame, 
                  width:float = 1, color_up:str = 'g', 
-                 color_down:str = 'r', alpha:str = 1) -> None:
+                 color_down:str = 'r', alpha:float = 1) -> None:
     """
     Candles draw.
     ----
@@ -134,7 +134,7 @@ def candles_plot(ax:Axes, data:pd.DataFrame,
     >>> width:float = 1
     >>> color_up:str = 'g'
     >>> color_down:str = 'r'
-    >>> alpha:str = 1
+    >>> alpha:float = 1
     
     ax:
       Axes where it is drawn.
@@ -187,3 +187,78 @@ def text_fix(text:str, newline_exclude:bool = True) -> str:
 
     return ''.join(line.lstrip() + ('\n' if not newline_exclude else '')  
                         for line in text.split('\n'))
+
+def plot_position(trade:pd.DataFrame, ax:Axes, 
+                  color_take:str = 'g', color_stop:str = 'r', 
+                  alpha:float = 1, alpha_arrow:float = 1, 
+                  width_exit:any = 10) -> None:
+    """
+    Position draw.
+    ----
+    Plot positions on your 'ax'.
+
+    Parameters:
+    --
+    >>> trade:pd.DataFrame
+    >>> ax:Axes
+    >>> color_take:str = 'g'
+    >>> color_stop:str = 'r'
+    >>> alpha:float = 1
+    >>> alpha_arrow:float = 1,
+    >>> width_exit:any = 10
+
+    trade:
+      Trades data to draw.
+    ax:
+      Axes where it is drawn.
+    color_take:
+      Position color when the position is positive.
+    color_stop:
+      Position color when the position is negative.
+    aplha:
+      Opacity.
+    alpha_arrow:
+      Arrow opacity.
+    width_exit:
+      How many time points does the position 
+      extend forward if it is not closed.
+    
+    Info:
+    --
+    The arrow indicates where the position was closed.
+    
+    The 'color_take' indicates the place where the take profit is placed and 
+     the 'color_stop' will indicate the place where the stop loss is placed.
+    If there is no 'take profit', 
+     its figure will not be drawn; the same applies to the 'stop loss'.
+    """
+
+    def draw(row):
+      if not np.isnan(row['TakeProfit']):
+        take = Rectangle(xy=(row['Date'], min(row['TakeProfit'], row['Close'])), 
+                      width= (width_exit(row) if np.isnan(row['PositionDate']) 
+                              else row['PositionDate']-row['Date']), 
+                      height=(max(row['TakeProfit'], row['Close']) - 
+                              min(row['TakeProfit'], row['Close'])), 
+                      facecolor=color_take, edgecolor=color_take)
+        take.set_alpha(alpha)
+        ax.add_patch(take)
+      if not np.isnan(row['StopLoss']):
+        stop = Rectangle(xy=(row['Date'], min(row['Close'], row['StopLoss'])), 
+                      width=(width_exit(row) if np.isnan(row['PositionDate']) 
+                            else row['PositionDate']-row['Date']), 
+                      height=(max(row['Close'], row['StopLoss']) - 
+                              min(row['Close'], row['StopLoss'])), 
+                      facecolor=color_stop, edgecolor=color_stop)
+        stop.set_alpha(alpha)
+        ax.add_patch(stop)
+      
+      arrow = FancyArrowPatch((row['Date'], row['Close']), 
+                         (row['PositionDate'], row['PositionClose']), 
+                         arrowstyle='->', linestyle='-',
+                         mutation_scale=20, color='grey')
+      arrow.set_linestyle((0, (5, 10)))
+      arrow.set_alpha(alpha_arrow)
+      ax.add_patch(arrow)
+      
+    trade.apply(draw, axis=1)

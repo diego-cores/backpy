@@ -29,7 +29,6 @@ import matplotlib as mpl
 import pandas as pd
 import numpy as np
 
-import types
 from time import time
 
 from . import utils
@@ -103,12 +102,12 @@ def load_yfinance_data(tickers:str = any,
             print('DataTimer:',round(time()-t,2))
     
     except ModuleNotFoundError: 
-        raise exception.YfinanceError('Yfinance is not downloaded.')
+        raise exception.YfinanceError('Yfinance is not installed.')
     except: 
         raise exception.YfinanceError('Yfinance parameters error.')
     
-    __data_interval = interval
-    __data_icon = tickers
+    __data_interval = interval.strip()
+    __data_icon = tickers.strip()
 
     if statistics: stats_icon(prnt=True)
 
@@ -151,14 +150,15 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
 
     __data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
     __data.index.name = 'Date'
-    __data_icon = icon
-    __data_interval = interval
+
+    __data_icon = icon.strip()
+    __data_interval = interval.strip()
 
     if statistics: stats_icon(prnt=True)
 
 def run(strategy_class:'strategy.StrategyClass' = any, 
         initial_funds:int = 10000, commission:float = 0, 
-        prnt:bool = True, progress:bool = True, beta_fastm:bool = False) -> str:
+        prnt:bool = True, progress:bool = True, fast_mode:bool = False) -> str:
     """
     Run your strategy.
     ----
@@ -171,7 +171,7 @@ def run(strategy_class:'strategy.StrategyClass' = any,
     >>> commission:int = 0
     >>> prnt:bool = True
     >>> progress:bool = True
-    >>> beta_fastm:bool = False
+    >>> fast_mode:bool = False
     
     strategy_class:
       A class that is inherited from StrategyClass
@@ -187,9 +187,9 @@ def run(strategy_class:'strategy.StrategyClass' = any,
       If it is false, an string will be returned.
     progress:
       Progress bar and timer.
-    beta_fastm:
+    fast_mode:
       Each sail's loop is calculated differently and 
-    may be faster than normal mode.
+      may be faster than normal mode.
       This mode does not contain a loading bar.
       Function not yet finished.
 
@@ -216,40 +216,42 @@ def run(strategy_class:'strategy.StrategyClass' = any,
         raise exception.RunError("'initial_funds' cannot be less than 0.")
     elif commission < 0: 
         raise exception.RunError("'commission' cannot be less than 0.")
-    elif not __trades.empty: 
-        __trades = pd.DataFrame()
 
     _init_funds = initial_funds
-
-    act_trades = pd.DataFrame()
-    t, step_t = time(), time()
+    instance = strategy_class(commission=commission, init_funds=initial_funds)
+    t = time()
     
-    if not beta_fastm:
-        for f in range(__data.shape[0]):
-            if progress: 
-                utils.load_bar(size=__data.shape[0], step=f+1) 
+    if fast_mode:
+        __data.apply(
+            lambda x: instance._StrategyClass__before(data=__data.loc[:x.name]), 
+            axis=1)
+        
+        act_trades = instance._StrategyClass__trades_ac
+        __trades = instance._StrategyClass__trades_cl
+
+        if progress:
+            print('\nRunTimer:',round(time()-t,2))
+    else: 
+        step_t = time()
+
+        for f in range(1, __data.shape[0]+2):
+            if progress and __data.shape[0] >= f:
+                utils.load_bar(size=__data.shape[0], step=f) 
                 print(f'/ Step time: {round(time()-step_t,3)}', end='')
                 step_t = time()
+            elif progress:
+                print('\nRunTimer:',round(time()-t,2))
+                break
 
-            instance = strategy_class(__data[:f+1], __trades, 
-                                      act_trades, commission, initial_funds)
-            act_trades, __trades = instance._StrategyClass__before()
-    else: 
-        def m_loop(x):
-            global __trades; nonlocal act_trades
-
-            instance = strategy_class(__data.loc[:x.name], __trades, 
-                                      act_trades, commission, initial_funds)
-            act_trades, __trades = instance._StrategyClass__before()
-
-        __data.apply(m_loop, axis=1)
-
-    if progress: print('\nRunTimer:',round(time()-t,2))
+            instance._StrategyClass__before(data=__data[:f])
+        
+        act_trades = instance._StrategyClass__trades_ac
+        __trades = instance._StrategyClass__trades_cl
     
     if not act_trades.empty: __trades = pd.concat([
         __trades, act_trades.dropna(axis=1, how='all')
         ], ignore_index=True)
-    
+
     try: 
         return stats_trades(prnt=prnt)
     except exception.StatsError: pass
@@ -259,6 +261,14 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     Plot graph with trades.
     ----
     Plot your data showing the trades made.
+
+    Color guide:
+    - gold: 'x' = Positive position closure.
+    - purple: 'x' = Negative position closure.
+    - yellow: '2' = Take profit.
+    - yellow: '1' = Stop loss.
+    - green, '^' = Buy position.
+    - red, 'v' = Sell position.
 
     Parameters:
     --
@@ -272,9 +282,12 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
       Progress bar and timer.
     """
 
-    if __data is None: raise exception.PlotError('Data not loaded.')
-    if progress: utils.load_bar(size=9, step=1)
-    t = time()
+    if __data is None or not type(__data) is pd.DataFrame or __data.empty: 
+        raise exception.PlotError('Data not loaded.')
+    
+    if progress: 
+        t = time()
+        utils.load_bar(size=10, step=0)
 
     mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
@@ -285,32 +298,38 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
                                   colspan=1, sharex=ax1)
     ax2.set_yticks([])
     
-    if log: ax1.semilogy(__data['Close'], alpha=0); ax2.semilogy(alpha=0)
-    if progress: utils.load_bar(size=9, step=2)
+    if log: 
+        ax1.semilogy(__data['Close'], alpha=0); ax2.semilogy(alpha=0)
 
     fig.tight_layout(); fig.subplots_adjust(hspace=0)
 
     date_range = mpl.dates.date2num(__data.index)
     width = (date_range.max() - date_range.min())/__data.shape[0]
 
-    if progress: utils.load_bar(size=9, step=3)
-
     candle_data = __data.copy()
     candle_data.index = date_range
 
-    utils.candles_plot(ax1, candle_data, width*0.9)
+    utils.plot_candles(ax1, candle_data, width*0.9)
 
-    if progress: utils.load_bar(size=9, step=4)
+    if progress: 
+        utils.load_bar(size=10, step=1)
 
     ax2.bar(date_range, round(__data['Volume'],0), width=width)
 
-    if progress: utils.load_bar(size=9, step=5)
+    if progress: 
+        step = 2
+        utils.load_bar(size=10, step=step)
 
     def t_scatter(function = any, color:str = any, 
                   marker:str = any, date_label:str = 'Date'):
-        if not isinstance(function, types.FunctionType): 
+        if not callable(function): 
             raise TypeError("'function' is not a function.")
         elif not date_label in __trades.columns: return
+
+        if progress: 
+            nonlocal step
+            step += 1
+            utils.load_bar(size=10, step=step)
 
         ax1.scatter(
             __trades[date_label].apply(
@@ -326,7 +345,6 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     t_scatter(
         lambda row: row['PositionClose'] if row['ProfitPer'] <= 0 else None, 
         'purple', 'x', 'PositionDate')
-    if progress: utils.load_bar(size=9, step=6)
 
     t_scatter(
         lambda row: row['TakeProfit'] if "TakeProfit" in row.index else None, 
@@ -334,7 +352,15 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     t_scatter(
         lambda row: row['StopLoss'] if "StopLoss" in row.index else None, 
         'y', '1')
-    if progress: utils.load_bar(size=9, step=7)
+    
+    trades_c = __trades.copy()
+    trades_c['Date'] = mpl.dates.date2num(__trades['Date'])
+    trades_c['PositionDate'] = __trades['PositionDate'].apply(
+        lambda x: np.nan if pd.isna(x) else mpl.dates.date2num(x))
+    
+    utils.plot_position(trades_c, ax1, 
+                        alpha=0.3, alpha_arrow=0.8, 
+                        width_exit=lambda x: candle_data.index[-1]-x['Date'])
 
     t_scatter(
         lambda row: (row['Low'] - (row['High'] - row['Low']) / 2 
@@ -344,7 +370,6 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
         lambda row: (row['High'] + (row['High'] - row['Low']) / 2 
                      if not row['Type'] else None),
         'r', 'v')
-    if progress: utils.load_bar(size=9, step=8)
 
     date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
     ax1.xaxis.set_major_formatter(date_format); fig.autofmt_xdate()
@@ -365,7 +390,10 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     mpl.pyplot.gcf().canvas.manager.set_window_title(
         f"Back testing: '{__data_icon}' {r_date}")
 
-    if progress: utils.load_bar(size=9, step=9); print('\nPlotTimer:',round(time()-t,2))
+    if progress: 
+        utils.load_bar(size=10, step=10)
+        print('\nPlotTimer:',round(time()-t,2))
+
     mpl.pyplot.show(block=block)
 
 def plot_strategy(log:bool = False, view:str = 'p/w/r/n', 
@@ -402,7 +430,7 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/n',
     elif len(view) > 4 or len(view) < 1: 
         raise exception.StatsError(utils.text_fix("""
             'view' allowed format: 's/s/s/s' where s is the name of the graph.
-            Available graphics: 'p','w','r'
+            Available graphics: 'p','w','r'.
             """, newline_exclude=True))
 
     mpl.pyplot.style.use('ggplot')

@@ -95,7 +95,7 @@ class StrategyClass(ABC):
     >>> __before
 
     """ 
-    def __init__(self, data:pd.DataFrame = any, 
+    def __init__(self, data:pd.DataFrame = pd.DataFrame(), 
                  trades_cl:pd.DataFrame = pd.DataFrame(), 
                  trades_ac:pd.DataFrame = pd.DataFrame(),
                  commission:float = 0, init_funds:int = 0) -> None: 
@@ -106,7 +106,7 @@ class StrategyClass(ABC):
         
         Parameters:
         --
-        >>> data:pd.DataFrame = any
+        >>> data:pd.DataFrame = pd.DataFrame()
         >>> trades_cl:pd.DataFrame = pd.DataFrame()
         >>> trades_ac:pd.DataFrame = pd.DataFrame()
         
@@ -137,14 +137,20 @@ class StrategyClass(ABC):
         >>> self.__trades_cl = trades_cl
         >>> self.__data = data
         """
-        if data.empty: raise exception.StyClassError('Data is empty.')
+        if not type(data) is pd.DataFrame: 
+            raise exception.StyClassError('Data is empty.')
 
-        self.open = data["Open"].iloc[-1]
-        self.high = data["High"].iloc[-1]
-        self.low = data["Low"].iloc[-1]
-        self.close = data["Close"].iloc[-1]
-        self.volume = data["Volume"].iloc[-1]
-        self.date = data.index[-1]
+        self.open = None
+        self.high = None
+        self.low = None
+        self.close = None
+        self.volume = None
+        self.date = None
+
+        self.__data = pd.DataFrame()
+
+        if not data.empty:
+            self.__data_updater(data=data)
 
         self.__commission = commission
         self.__init_funds = init_funds
@@ -153,7 +159,7 @@ class StrategyClass(ABC):
         self.__trades_ac = trades_ac
         self.__trades_cl = trades_cl
 
-        self.__data = data
+       
 
     @abstractmethod
     def next(self) -> None: ...
@@ -173,13 +179,49 @@ class StrategyClass(ABC):
         Return hidden variable '__init_funds'.
         """
         return self.__init_funds
+    
+    def __data_updater(self, data:pd.DataFrame) -> None:
+        """
+        Data updater.
+        ----
+        All data updater.
 
-    def __before(self):
+        Parameters:
+        --
+        >>> data:pd.DataFrame
+
+        data:
+          All data from the step and previous ones.
+        """
+        if data.empty:
+            raise exception.StyClassError('Data is empty.')
+
+        self.open = data["Open"].iloc[-1]
+        self.high = data["High"].iloc[-1]
+        self.low = data["Low"].iloc[-1]
+        self.close = data["Close"].iloc[-1]
+        self.volume = data["Volume"].iloc[-1]
+        self.date = data.index[-1]
+
+        self.__data = data
+        self.__trade = pd.DataFrame()
+
+    def __before(self, data=pd.DataFrame()):
         """
         Before.
         ----
         This function is used to run trades and other things.
+
+        Parameters:
+        --
+        >>> data:pd.DataFrame = pd.DataFrame()
+
+        data:
+          Data from the current and previous steps.
         """
+        if not data.empty:
+            self.__data_updater(data=data)
+        
         self.next()
 
         # Check if a trade needs to be closed.
@@ -205,6 +247,7 @@ class StrategyClass(ABC):
                                          ignore_index=True)
 
         self.__trades_ac.reset_index(drop=True, inplace=True)
+
         return self.__trades_ac, self.__trades_cl
 
     def prev(self, label:str = None, last:int = None) -> pd.DataFrame:
