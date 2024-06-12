@@ -448,7 +448,7 @@ class StrategyClass(ABC):
         length:
           Ema length.
         source:
-          Data.
+          Allowed parameters: ('Close','Open','High','Low','Volume').
         last:
           How much data starting from the present backwards 
           do you want to be returned.
@@ -459,10 +459,10 @@ class StrategyClass(ABC):
                              'length' it has to be greater than 0 and 
                              less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low'): 
+        elif not source in ('Close','Open','High','Low','Volume'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low'].
+                             ['Close','Open','High','Low','Volume'].
                              """, newline_exclude=True))
         elif (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
@@ -511,7 +511,7 @@ class StrategyClass(ABC):
         length:
           Sma length.
         source:
-          Data.
+          Allowed parameters: ('Close','Open','High','Low','Volume').
         last:
           How much data starting from the present backwards 
           do you want to be returned.
@@ -522,10 +522,10 @@ class StrategyClass(ABC):
                              'length' it has to be greater than 0 and 
                              less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low'): 
+        elif not source in ('Close','Open','High','Low','Volume'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low'].
+                             ['Close','Open','High','Low','Volume'].
                              """, newline_exclude=True))
         elif (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
@@ -576,7 +576,7 @@ class StrategyClass(ABC):
         length:
           Wma length.
         source:
-          Data.
+          Allowed parameters: ('Close','Open','High','Low','Volume').
         invt_weight:
           The distribution of weights is done the other way around.
         last:
@@ -589,10 +589,10 @@ class StrategyClass(ABC):
                              'length' it has to be greater than 0 and 
                              less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low'): 
+        elif not source in ('Close','Open','High','Low','Volume'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low'].
+                             ['Close','Open','High','Low','Volume'].
                              """, newline_exclude=True))
         elif (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
@@ -648,7 +648,7 @@ class StrategyClass(ABC):
         length:
           Smma length.
         source:
-          Data.
+          Allowed parameters: ('Close','Open','High','Low','Volume').
         last:
           How much data starting from the present backwards 
           do you want to be returned.
@@ -659,10 +659,10 @@ class StrategyClass(ABC):
                              'length' it has to be greater than 0 and 
                              less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low'): 
+        elif not source in ('Close','Open','High','Low','Volume'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low'].
+                             ['Close','Open','High','Low','Volume'].
                              """, newline_exclude=True))
         elif (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
@@ -726,7 +726,7 @@ class StrategyClass(ABC):
         ma_type:
           Ma type.
         source:
-          Data.
+          Allowed parameters: ('Close','Open','High','Low','Volume').
         last:
           How much data starting from the present backwards 
           do you want to be returned.
@@ -747,10 +747,10 @@ class StrategyClass(ABC):
                              'smooth' it has to be greater than 0 and 
                              less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low'): 
+        elif not source in ('Close','Open','High','Low','Volume'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low'].
+                             ['Close','Open','High','Low','Volume'].
                              """, newline_exclude=True))
         elif (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
@@ -825,7 +825,7 @@ class StrategyClass(ABC):
         ma_type:
           Ma type.
         source:
-          Data.
+          Allowed parameters: ('Close','Open','High','Low').
         last:
           How much data starting from the present backwards 
           do you want to be returned.
@@ -928,7 +928,7 @@ class StrategyClass(ABC):
         bb_std_dev:
           Standard deviation for bb.
         source:
-          Data.
+          Allowed parameters: ('Close','Open','High','Low').
         last:
           How much data starting from the present backwards 
           do you want to be returned.
@@ -1052,7 +1052,7 @@ class StrategyClass(ABC):
         d_type:
           Type of ma base used applied to stochastic.
         source:
-          Data.
+          Allowed parameters: ('Close','Open','High','Low').
         last:
           How much data starting from the present backwards 
           do you want to be returned.
@@ -1260,7 +1260,7 @@ class StrategyClass(ABC):
         histogram:
           An extra column will be returned with the histogram.
         source:
-          Data.
+          Allowed parameters: ('Close','Open','High','Low').
         last:
           How much data starting from the present backwards 
           do you want to be returned.
@@ -1415,7 +1415,7 @@ class StrategyClass(ABC):
           If you leave it at 0, the 'historiogram' column 
           will not be returned.
         source:
-          Data.
+          Allowed parameters: ('Close','Open','High','Low').
         last:
           How much data starting from the present backwards 
           do you want to be returned.
@@ -1591,7 +1591,7 @@ class StrategyClass(ABC):
         length:
           Length to calculate momentum.
         source:
-          Data.
+          Allowed parameters: ('Close','Open','High','Low').
         last:
           How much data starting from the present backwards 
           do you want to be returned.
