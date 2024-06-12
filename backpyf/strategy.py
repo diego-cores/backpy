@@ -191,7 +191,7 @@ class StrategyClass(ABC):
         >>> data:pd.DataFrame
 
         data:
-          All data from the step and previous ones.
+          - All data from the step and previous ones.
         """
         if data.empty:
             raise exception.StyClassError('Data is empty.')
@@ -217,7 +217,7 @@ class StrategyClass(ABC):
         >>> data:pd.DataFrame = pd.DataFrame()
 
         data:
-          Data from the current and previous steps.
+          - Data from the current and previous steps.
         """
         if not data.empty:
             self.__data_updater(data=data)
@@ -255,7 +255,7 @@ class StrategyClass(ABC):
         Prev.
         ----
         Returns the data from the previous steps.
-        Columns: 'Open','High','Low','Close','Volume'.
+        Columns: 'Open', 'High', 'Low', 'Close', 'Volume', 'index'.
 
         Parameters:
         --
@@ -263,13 +263,14 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         label:
-          Data column, if you leave it at None all columns will be returned.
-          If you leave 'index', all indexes will be returned, 
-          ignoring the last parameter.
+          - Data column, if you leave it at None all columns will be returned.
+          - If you leave 'index', all indexes will be returned, 
+           ignoring the last parameter.
+
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         __data = self.__data
         if label == 'index': 
@@ -294,7 +295,7 @@ class StrategyClass(ABC):
         Returns the data from the closed trades.
         Columns: 'Date', 'Close', 'Low', 'High', 
         'StopLoss', 'TakeProfit', 'PositionClose', 
-        'PositionDate', 'Amount', 'ProfitPer', 'Profit', 'Type'.
+        'PositionDate', 'Amount', 'ProfitPer', 'Profit', 'Type', 'index'.
 
         Parameters:
         --
@@ -302,13 +303,44 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         label:
-          Data column, if you leave it at None all columns will be returned.
-          If you leave 'index', all indexes will be returned, 
-          ignoring the last parameter.
+          - Data column, if you leave it at None all columns will be returned.
+          - If you leave 'index', all indexes will be returned, 
+           ignoring the last parameter.
+          
         last:
-          How much data starting from the present backwards
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
+
+        Info:
+        --
+        '__trades_cl' columns, the same columns you can 
+        access with prev_trades_ac.
+
+        Date:
+          The step date where trade began.
+        Close:
+          The 'Close' of the step when the trade began.
+        Low:
+          The 'Low' of the step when the trade began.
+        High:
+          The 'High' of the step when the trade began.
+        StopLoss:
+          The stoploss position.
+        TakeProfit:
+          The takeprofit position.
+        PositionClose:
+          The 'Close' of the step in which the trade ends.
+        PositionDate:
+          The step date where trade ends.
+        Amount:
+          Chosen amount.
+        ProfitPer:
+          Trade profit in percentage.
+        Profit:
+          Trade profit based on amount.
+        Type:
+          Type of trade.
         """
         __trades_cl = self.__trades_cl
 
@@ -333,7 +365,7 @@ class StrategyClass(ABC):
         ----
         Returns the data from the active trades.
         Columns: 'Date', 'Close', 'Low', 'High', 
-        'StopLoss', 'TakeProfit', 'Amount', 'Type'.
+        'StopLoss', 'TakeProfit', 'Amount', 'Type', 'index'.
 
         Parameters:
         --
@@ -341,13 +373,44 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         label:
-          Data column, if you leave it at None all columns will be returned.
-          If you leave 'index', all indexes will be returned, 
-          ignoring the 'last' parameter.
+          - Data column, if you leave it at None all columns will be returned.
+          - If you leave 'index', all indexes will be returned, 
+           ignoring the 'last' parameter.
+          
         last:
-          How much data starting from the present backwards
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
+
+        Info:
+        --
+        '__trades_ac' columns, the same columns you can 
+        access with prev_trades_cl.
+
+        Date:
+          The step date where trade began.
+        Close:
+          The 'Close' of the step when the trade began.
+        Low:
+          The 'Low' of the step when the trade began.
+        High:
+          The 'High' of the step when the trade began.
+        StopLoss:
+          The stoploss position.
+        TakeProfit:
+          The takeprofit position.
+        PositionClose:
+          The 'Close' of the step in which the trade ends.
+        PositionDate:
+          The step date where trade ends.
+        Amount:
+          Chosen amount.
+        ProfitPer:
+          Trade profit in percentage.
+        Profit:
+          Trade profit based on amount.
+        Type:
+          Type of trade.
         """
         __trades_ac = self.__trades_ac
         if label == 'index': return __trades_ac.index
@@ -385,14 +448,16 @@ class StrategyClass(ABC):
         >>> bar:int = 10
         
         start:
-          Counting from now onwards, when you want the data capture to start to 
-          return the horizontal volume.
+          - Counting from now onwards, when you want the data capture to start to 
+           return the horizontal volume.
+          
         end:
-          Counting from now onwards, when you want the data capture to end to 
-          return the horizontal volume.
-          If left at None the data will be captured from the beginning.
+          - Counting from now onwards, when you want the data capture to end to 
+           return the horizontal volume.
+          - If left at None the data will be captured from the beginning.
+        
         bar:
-          The number of horizontal volume bars 
+          - The number of horizontal volume bars 
           (the more bars, the more precise).
         """
         if start < 0: 
@@ -446,13 +511,15 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         length:
-          Ema length.
+          - Ema length.
+        
         source:
-          Allowed parameters: ('Close','Open','High','Low','Volume').
+          - Allowed parameters: ('Close','Open','High','Low','Volume').
+        
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
@@ -509,13 +576,15 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         length:
-          Sma length.
+          - Sma length.
+
         source:
-          Allowed parameters: ('Close','Open','High','Low','Volume').
+          - Allowed parameters: ('Close','Open','High','Low','Volume').
+
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
@@ -574,15 +643,18 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         length:
-          Wma length.
+          - Wma length.
+
         source:
-          Allowed parameters: ('Close','Open','High','Low','Volume').
+          - Allowed parameters: ('Close','Open','High','Low','Volume').
+
         invt_weight:
-          The distribution of weights is done the other way around.
+          - The distribution of weights is done the other way around.
+
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
@@ -646,13 +718,15 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         length:
-          Smma length.
+          - Smma length.
+
         source:
-          Allowed parameters: ('Close','Open','High','Low','Volume').
+          - Allowed parameters: ('Close','Open','High','Low','Volume').
+
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
@@ -715,22 +789,28 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         length:
-          Ema length.
+          - Ema length.
+
         method:
-          Smooth method.
+          - Smooth method.
+
         smooth:
-          'method' length.
+          - 'method' length.
+
         only:
-          If left true, only one pd.Series will be returned with 
-          the values ​​of 'method'.
+          - If left true, only one pd.Series will be returned with 
+           the values ​​of 'method'.
+
         ma_type:
-          Ma type.
+          - Ma type.
+
         source:
-          Allowed parameters: ('Close','Open','High','Low','Volume').
+          - Allowed parameters: ('Close','Open','High','Low','Volume').
+
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
@@ -819,17 +899,21 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         length:
-          Window length.
+          - Window length.
+
         std_dev:
-          Standard deviation.
+          - Standard deviation.
+
         ma_type:
-          Ma type.
+          - Ma type.
+
         source:
-          Allowed parameters: ('Close','Open','High','Low').
+          - Allowed parameters: ('Close','Open','High','Low').
+
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
@@ -918,21 +1002,27 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         length_rsi:
-          Window length of 'rsi_ma_type'.
+          - Window length of 'rsi_ma_type'.
+
         length:
-          Window length of 'base_type'.
+          - Window length of 'base_type'.
+
         rsi_ma_type:
-          Type of ma used for calculating rsi.
+          - Type of ma used for calculating rsi.
+
         base_type:
-          Type of ma base used applied to rsi.
+          - Type of ma base used applied to rsi.
+
         bb_std_dev:
-          Standard deviation for bb.
+          - Standard deviation for bb.
+
         source:
-          Allowed parameters: ('Close','Open','High','Low').
+          - Allowed parameters: ('Close','Open','High','Low').
+
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
@@ -1044,19 +1134,24 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         length_k:
-          Window length to calculate 'stoch'.
+          - Window length to calculate 'stoch'.
+
         smooth_k:
-          Window length of 'stoch'.
+          - Window length of 'stoch'.
+
         length_d:
-          Window length of 'd_type'.
+          - Window length of 'd_type'.
+
         d_type:
-          Type of ma base used applied to stochastic.
+          - Type of ma base used applied to stochastic.
+
         source:
-          Allowed parameters: ('Close','Open','High','Low').
+          - Allowed parameters: ('Close','Open','High','Low').
+
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if length_k > 5000 or length_k <= 0: 
             raise ValueError(utils.text_fix("""
@@ -1149,16 +1244,19 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         smooth:
-          Smooth length.
+          - Smooth length.
+
         length_di:
-          Window length for calculate 'di'.
+          - Window length for calculate 'di'.
+
         only:
-          If left true, only one pd.Series will be returned with 
-          the values ​​of adx.
+          - If left true, only one pd.Series will be returned with 
+           the values ​​of adx.
+
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if smooth > 5000 or smooth <= 0: 
             raise ValueError(utils.text_fix("""
@@ -1245,26 +1343,33 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         short_len:
-          Short ma length.
-          The short ma is used to calculate macd.
+          - Short ma length.
+          - The short ma is used to calculate macd.
+
         long_len:
-          Long ma length.
-          The long ma is used to calculate macd.
+          - Long ma length.
+          - The long ma is used to calculate macd.
+
         signal_len:
-          Signal ma length.
-          The signal ma is the smoothed macd.
+          - Signal ma length.
+          - The signal ma is the smoothed macd.
+
         macd_ma_type:
-          Type of ma to calculate macd.
+          - Type of ma to calculate macd.
+
         signal_ma_typ:
-          Type of ma to smooth macd.
+          - Type of ma to smooth macd.
+
         histogram:
-          An extra column will be returned with the histogram.
+          - An extra column will be returned with the histogram.
+
         source:
-          Allowed parameters: ('Close','Open','High','Low').
+          - Allowed parameters: ('Close','Open','High','Low').
+
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if short_len > 5000 or short_len <= 0: 
             raise ValueError(utils.text_fix("""
@@ -1398,28 +1503,35 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         bb_len:
-          Bollinger band length.
+          - Bollinger band length.
+
         bb_mult:
-          Bollinger band standard deviation.
+          - Bollinger band standard deviation.
+
         kc_len:
-          Kc length.
+          - Kc length.
+
         kc_mult:
-          Kc standard deviation.
+          - Kc standard deviation.
+
         use_tr:
-          If left false, ('High'-'Low') will be used 
-          instead of the true range.
+          - If left false, ('High'-'Low') will be used 
+           instead of the true range.
+
         histogram_len:
-          How many steps from the present backward 
-          do you want the histogram to be calculated.
-          The higher the number, the less efficient.
-          If you leave it at 0, the 'historiogram' column 
-          will not be returned.
+          - How many steps from the present backward 
+           do you want the histogram to be calculated.
+          - The higher the number, the less efficient.
+          - If you leave it at 0, the 'historiogram' column 
+           will not be returned.
+
         source:
-          Allowed parameters: ('Close','Open','High','Low').
+          - Allowed parameters: ('Close','Open','High','Low').
+
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if bb_len > 5000 or bb_len <= 0: 
             raise ValueError(utils.text_fix("""
@@ -1561,9 +1673,10 @@ class StrategyClass(ABC):
         >>> offset:int = 1
         
         data:
-          You can do the calculation of stochastic with your own data.
+          - You can do the calculation of stochastic with your own data.
+
         length:
-          Length of each window.
+          - Length of each window.
         """
         data = self.__data if data is None else data
 
@@ -1589,13 +1702,15 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         length:
-          Length to calculate momentum.
+          - Length to calculate momentum.
+
         source:
-          Allowed parameters: ('Close','Open','High','Low').
+          - Allowed parameters: ('Close','Open','High','Low').
+
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
@@ -1659,18 +1774,21 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         tenkan_period:
-          Window length to calculate tenkan.
+          - Window length to calculate tenkan.
+
         kijun_period:
-          Window length to calculate kijun.
+          - Window length to calculate kijun.
+
         senkou_span_b_period:
-          Window length to calculate senkou span.
+          - Window length to calculate senkou span.
+
         ichimoku_lines:
-          If ichimoku lines is true these columns are added to the dataframe: 
-          'tenkan_sen','kijun_sen'.
+          - If ichimoku lines is true these columns are added to the dataframe: 
+           'tenkan_sen','kijun_sen'.
         last:
-          How much data starting from the present backwards 
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards 
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if tenkan_period > 5000 or tenkan_period <= 0: 
             raise ValueError(utils.text_fix("""
@@ -1761,25 +1879,28 @@ class StrategyClass(ABC):
         >>> source:str = 'Low/High'
         
         start:
-          Where do you want level 0 to be.
-          If 'met' is false 'start' is the number of candles back to 
-          open the fibonacci.
-          None == 0.
+          - Where do you want level 0 to be.
+          - If 'met' is false 'start' is the number of candles back to 
+           open the fibonacci.
+          - None == 0.
+
         end:
-          Where do you want level 1 to be.
-          If 'met' is false 'end' is the number of candles back to 
-          close the fibonacci.
-          None == 0.
+          - Where do you want level 1 to be.
+          - If 'met' is false 'end' is the number of candles back to 
+           close the fibonacci.
+          - None == 0.
+
         met:
-          If left false, 'start' and 'end' are 
-          the number of candles backwards,
-          otherwise 'start' and 'end' are 
-          the value from which Fibonacci opens.
+          - If left false, 'start' and 'end' are 
+           the number of candles backwards,
+           otherwise 'start' and 'end' are 
+           the value from which Fibonacci opens.
+
         source:
-          Data that is extracted.
-          Start and end data format: 's/s where 's' is each source.'
-          Values supported in source: ('Close', 'Open', 'High', 'Low')
-          If left 'met' in true 'source' does not work.
+          - Data that is extracted.
+          - Start and end data format: 's/s where 's' is each source.'
+          - Values supported in source: ('Close', 'Open', 'High', 'Low')
+          - If left 'met' in true 'source' does not work.
         """
         if met: return self.__idc_fibonacci(start=start, end=end)
 
@@ -1834,13 +1955,15 @@ class StrategyClass(ABC):
         >>> last:int = None
         
         length:
-          Window length to smooth 'atr'.
+          - Window length to smooth 'atr'.
+
         smooth:
-          Ma used to smooth 'atr'.
+          - Ma used to smooth 'atr'.
+
         last:
-          How much data starting from the present backwards
-          do you want to be returned.
-          If you leave it at None, the data for all times is returned.
+          - How much data starting from the present backwards
+           do you want to be returned.
+          - If you leave it at None, the data for all times is returned.
         """
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
@@ -1933,16 +2056,48 @@ class StrategyClass(ABC):
         >>> amount:int = np.nan
         
         type:
-          0 is a sell position, 1 is a buy position.
+          - 0 is a sell position, 1 is a buy position.
+
         stop_loss:
-          The price where the stop loss will go, 
-          if it is left at np.nan the position is opened without stop loss.
+          - The price where the stop loss will go, 
+           if it is left at np.nan the position is opened without stop loss.
+
         take_profit:
-          The price where the take profit will go, 
-          if it is left at np.nan the position is opened without take profit.
+          - The price where the take profit will go, 
+           if it is left at np.nan the position is opened without take profit.
+
         amount:
-          The amount of imaginary points with which 
-          you would enter the position.
+          - The amount of imaginary points with which 
+           you would enter the position.
+
+        Info:
+        --
+        '__trade' columns, the same columns you can access with prev_trades.
+
+        Date:
+          The step date where trade began.
+        Close:
+          The 'Close' of the step when the trade began.
+        Low:
+          The 'Low' of the step when the trade began.
+        High:
+          The 'High' of the step when the trade began.
+        StopLoss:
+          The stoploss position.
+        TakeProfit:
+          The takeprofit position.
+        PositionClose:
+          The 'Close' of the step in which the trade ends.
+        PositionDate:
+          The step date where trade ends.
+        Amount:
+          Chosen amount.
+        ProfitPer:
+          Trade profit in percentage.
+        Profit:
+          Trade profit based on amount.
+        Type:
+          Type of trade.
         """
         # Check if type is 1 or 0.
         if not type in {1,0}: 
@@ -1985,7 +2140,7 @@ class StrategyClass(ABC):
         >>> index:int = 0
         
         index:
-          The index of the active trade you want to close.
+          - The index of the active trade you want to close.
         """
         # Check exceptions.
         if self.__trades_ac.empty: 
@@ -2051,15 +2206,17 @@ class StrategyClass(ABC):
         >>> new_take:int = None
         
         index:
-          The index of the active trade you want to modify.
+          - The index of the active trade you want to modify.
+
         new_stop:
-          The price where the new stop loss will be,
-          if it is left at None the stop loss will not be modified and 
-          if it is left at np.nan the stop loss will be removed.
+          - The price where the new stop loss will be,
+           if it is left at None the stop loss will not be modified and 
+           if it is left at np.nan the stop loss will be removed.
+
         new_take:
-          The price where the new take profit will be,
-          if it is left at None the take profit will not be modified and 
-          if it is left at np.nan the take profit will be removed.
+          - The price where the new take profit will be,
+           if it is left at None the take profit will not be modified and 
+           if it is left at np.nan the take profit will be removed.
         """
         # Check exceptions.
         if self.__trades_ac.empty: 

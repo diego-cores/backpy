@@ -60,20 +60,25 @@ def load_yfinance_data(tickers:str = any,
     >>> progress:bool = True
     
     tickers:
-      String of ticker to download.
+      - String of ticker to download.
+
     start:
-      Download start date string (YYYY-MM-DD).
-      Default is 99 years ago.
+      - Download start date string (YYYY-MM-DD).
+      - Default is 99 years ago.
+
     end:
-      Download end date string (YYYY-MM-DD).
-      Default is now.
+      - Download end date string (YYYY-MM-DD).
+      - Default is now.
+
     interval:
-      Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo.
-      Intraday data cannot extend last 60 days.
+      - Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo.
+      - Intraday data cannot extend last 60 days.
+
     statistics:
-      Print statistics of the downloaded data.
+      - Print statistics of the downloaded data.
+
     progress:
-      Progress bar and timer.
+      - Progress bar and timer.
 
     Example:
     --
@@ -126,15 +131,18 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
     >>> statistics:bool = True
     
     data:
-      pd.Dataframe with all the data.
-      You need to have these columns:
-      ['Open', 'High', 'Low', 'Close', 'Volume']
+      - pd.Dataframe with all the data.
+      - You need to have these columns:
+       ['Open', 'High', 'Low', 'Close', 'Volume']
+
     icon:
-      String of the data icon.
+      - String of the data icon.
+
     interval:
-      String of the data interval.
+      - String of the data interval.
+
     statistics:
-      Print statistics of the loaded data.
+      - Print statistics of the loaded data.
     """
     global __data, __data_icon, __data_interval
     
@@ -174,29 +182,34 @@ def run(strategy_class:'strategy.StrategyClass' = any,
     >>> fast_mode:bool = False
     
     strategy_class:
-      A class that is inherited from StrategyClass
-      where you create your strategy in the next function.
+      - A class that is inherited from StrategyClass
+       where you create your strategy in the next function.
+
     initial_funds:
-      It is the initial amount you start with.
-      It is used for some statistics.
+      - It is the initial amount you start with.
+      - It is used for some statistics.
+
     commission:
-      It is the commission in percentage for each trade.
-      It is used for some statistics.
+      - It is the commission in percentage for each trade.
+      - It is used for some statistics.
+
     prnt:
-      If it is true, trades_stats will be printed.
-      If it is false, an string will be returned.
+      - If it is true, trades_stats will be printed.
+      - If it is false, an string will be returned.
+
     progress:
-      Progress bar and timer.
+      - Progress bar and timer.
+
     fast_mode:
-      Each sail's loop is calculated differently and 
-      may be faster than normal mode.
-      This mode does not contain a loading bar.
-      Function not yet finished.
+      - Each sail's loop is calculated differently and 
+       may be faster than normal mode.
+      - This mode does not contain a loading bar.
+      - Function not yet finished.
 
     Alert:
     --
     If strategy_class.next() prints something to the 
-    console the loading bar will not work as expected.\n
+     console the loading bar will not work as expected.
 
     Example:
     --
@@ -277,9 +290,10 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     >>> block:bool = True
     
     log:
-      Plot your data using logarithmic scale.
+      - Plot your data using logarithmic scale.
+
     progress:
-      Progress bar and timer.
+      - Progress bar and timer.
     """
 
     if __data is None or not type(__data) is pd.DataFrame or __data.empty: 
@@ -415,10 +429,11 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/n',
     >>> view:str = 'p/w/r/n'
     
     log:
-      Plot your data using logarithmic scale.
+      - Plot your data using logarithmic scale.
+
     view:
-      Plot your data the way you prefer.
-      There are 4 shapes available and they all take up the entire window.
+      - Plot your data the way you prefer.
+      - There are 4 shapes available and they all take up the entire window.
     """
     view = view.lower().strip().split('/')
     view = [i for i in view if i in ('p','w','r')]
@@ -490,8 +505,8 @@ def stats_icon(prnt:bool = True) -> str:
     >>> prnt:bool = True
     
     prnt:
-      If it is true, statistics will be printed.
-      If it is false, an string will be returned.
+      - If it is true, statistics will be printed.
+      - If it is false, an string will be returned.
     """
     if __data is None: raise exception.StatsError('Data not loaded.')
 
@@ -537,8 +552,29 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
     >>> prnt:bool = True
     
     prnt: 
-      If it is true, statistics will be printed.
-      If it is false, an string will be returned.
+      - If it is true, statistics will be printed.
+      - If it is false, an string will be returned.
+
+    Info:
+    --
+    Trades: 
+      The number of operations performed.
+    Return:
+      The total percentage earned.
+    Average return:
+      The average percentage earned.
+    Average ratio:
+      The average ratio.
+    Profit:
+      The total amount earned.
+    Profit fact:
+      The profit factor is calculated by dividing total profits by total losses.
+    Max drawdown:
+      The biggest drawdown the 'profit' has ever had.
+    Long exposure:
+      What percentage of traders are long.
+    Winnings:
+      Percentage of operations won.
     """
     if __trades.empty: 
         raise exception.StatsError('Trades not loaded.')
@@ -566,11 +602,6 @@ Profit fact: {
     if (__trades['Profit']>0).sum() > 0 and 
     (__trades['Profit']<=0).sum() > 0 and 
     not pd.isna(__trades['Profit']).all() else 0}
-Duration ratio: {utils.round_r(__trades['PositionDate'].apply(
-    lambda x: x.timestamp() if not pd.isna(x) else 0).mean() /
-    __trades['PositionDate'].apply(
-        lambda x: x.timestamp() if not pd.isna(x) else 0).sum()
-    ,2) if not __trades['PositionDate'].isnull().all() else np.nan}
 
 Max drawdown: {round(
     utils.max_drawdown(__trades['Profit'].dropna().cumsum()+_init_funds),1)}%
