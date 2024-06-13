@@ -448,8 +448,8 @@ class StrategyClass(ABC):
         >>> bar:int = 10
         
         start:
-          - Counting from now onwards, when you want the data capture to start to 
-           return the horizontal volume.
+          - Counting from now onwards, when you want the data capture to start 
+           to return the horizontal volume.
           
         end:
           - Counting from now onwards, when you want the data capture to end to 

@@ -276,10 +276,7 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     Plot your data showing the trades made.
 
     Color guide:
-    - gold: 'x' = Positive position closure.
-    - purple: 'x' = Negative position closure.
-    - yellow: '2' = Take profit.
-    - yellow: '1' = Stop loss.
+    - gold: 'x' = Position close.
     - green, '^' = Buy position.
     - red, 'v' = Sell position.
 
@@ -301,7 +298,7 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     
     if progress: 
         t = time()
-        utils.load_bar(size=10, step=0)
+        utils.load_bar(size=2, step=0)
 
     mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
@@ -326,64 +323,18 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     utils.plot_candles(ax1, candle_data, width*0.9)
 
     if progress: 
-        utils.load_bar(size=10, step=1)
+        utils.load_bar(size=2, step=1)
 
     ax2.bar(date_range, round(__data['Volume'],0), width=width)
 
-    if progress: 
-        step = 2
-        utils.load_bar(size=10, step=step)
-
-    def t_scatter(function = any, color:str = any, 
-                  marker:str = any, date_label:str = 'Date'):
-        if not callable(function): 
-            raise TypeError("'function' is not a function.")
-        elif not date_label in __trades.columns: return
-
-        if progress: 
-            nonlocal step
-            step += 1
-            utils.load_bar(size=10, step=step)
-
-        ax1.scatter(
-            __trades[date_label].apply(
-                lambda x: mpl.dates.date2num(x) if x != np.nan else None
-                ) if not __trades.empty else [] , 
-            __trades.apply(function, axis=1), 
-            c=color, s = 30, 
-            marker=marker)
-
-    t_scatter(
-        lambda row: row['PositionClose'] if row['ProfitPer'] > 0 else None, 
-        'gold', 'x', 'PositionDate')
-    t_scatter(
-        lambda row: row['PositionClose'] if row['ProfitPer'] <= 0 else None, 
-        'purple', 'x', 'PositionDate')
-
-    t_scatter(
-        lambda row: row['TakeProfit'] if "TakeProfit" in row.index else None, 
-        'y', '2')
-    t_scatter(
-        lambda row: row['StopLoss'] if "StopLoss" in row.index else None, 
-        'y', '1')
-    
     trades_c = __trades.copy()
-    trades_c['Date'] = mpl.dates.date2num(__trades['Date'])
-    trades_c['PositionDate'] = __trades['PositionDate'].apply(
+    trades_c['Date'] = mpl.dates.date2num(trades_c['Date'])
+    trades_c['PositionDate'] = trades_c['PositionDate'].apply(
         lambda x: np.nan if pd.isna(x) else mpl.dates.date2num(x))
     
     utils.plot_position(trades_c, ax1, 
                         alpha=0.3, alpha_arrow=0.8, 
                         width_exit=lambda x: candle_data.index[-1]-x['Date'])
-
-    t_scatter(
-        lambda row: (row['Low'] - (row['High'] - row['Low']) / 2 
-                     if row['Type'] else None),
-        'g', '^')
-    t_scatter(
-        lambda row: (row['High'] + (row['High'] - row['Low']) / 2 
-                     if not row['Type'] else None),
-        'r', 'v')
 
     date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
     ax1.xaxis.set_major_formatter(date_format); fig.autofmt_xdate()
@@ -405,7 +356,7 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
         f"Back testing: '{__data_icon}' {r_date}")
 
     if progress: 
-        utils.load_bar(size=10, step=10)
+        utils.load_bar(size=2, step=2)
         print('\nPlotTimer:',round(time()-t,2))
 
     mpl.pyplot.show(block=block)

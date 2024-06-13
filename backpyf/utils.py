@@ -31,9 +31,10 @@ def load_bar(size:int, step:int) -> None:
     >>> step:int
     
     size:
-      Number of steps.
+      - Number of steps.
+    
     step:
-      step.
+      - step.
     """
     per = str(int(step/size*100))
     load = '*'*int(46*step/size) + ' '*(46-int(46*step/size))
@@ -48,7 +49,7 @@ def round_r(num:float, r:int = 1) -> float:
     Round right.
     ----
     Returns the num rounded to have at most 'r' 
-    significant numbers to the right of the '.'.
+     significant numbers to the right of the '.'.
 
     Parameters:
     --
@@ -56,9 +57,10 @@ def round_r(num:float, r:int = 1) -> float:
     >>> r:int = 1
     
     num: 
-      Number.
+      - Number.
+    
     r:
-      Maximum significant numbers.
+      - Maximum significant numbers.
     """
     if int(num) != num:
         num = (round(num) 
@@ -72,9 +74,9 @@ def not_na(x:any, y:any, f:any = max):
     If not np.nan.
     ----
     It passes to 'x' and 'y' by the function 'f'
-    if neither of them are in np.nan, otherwise it returns 
-    the value that is not np.nan,
-    if both are np.nan, np.nan is returned.
+     if neither of them are in np.nan, otherwise it returns 
+     the value that is not np.nan,
+     if both are np.nan, np.nan is returned.
 
     Parameters:
     --
@@ -83,11 +85,13 @@ def not_na(x:any, y:any, f:any = max):
     >>> f:any = max
     
     x:
-      x value.
+      - x value.
+    
     y:
-      y value.
+      - y value.
+    
     f:
-      Function.
+      - Function.
     """
     return y if np.isnan(x) else x if np.isnan(y) else f(x, y)
 
@@ -102,7 +106,7 @@ def max_drawdown(values:pd.Series) -> float:
     >>> values:pd.Series
     
     values:
-      The ordered data.
+      - The ordered data.
     """
     if values.empty: return 0
     max_drdwn, max_val = 0, values[values.index[0]]
@@ -137,17 +141,22 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     >>> alpha:float = 1
     
     ax:
-      Axes where it is drawn.
+      - Axes where it is drawn.
+    
     data:
-      Data to draw.
+      - Data to draw.
+    
     width:
-      Width of each candle.
+      - Width of each candle.
+    
     color_up:
-      Candle color when price rises.
+      - Candle color when price rises.
+    
     color_down:
-      Candle color when price goes down.
+      - Candle color when price goes down.
+    
     aplha:
-      Opacity.
+      - Opacity.
     """
     OFFSET = width / 2.
 
@@ -180,18 +189,20 @@ def text_fix(text:str, newline_exclude:bool = True) -> str:
     >>> newline_exclude:bool = True
 
     text:
-      Text to process.
+      - Text to process.
+    
     newline_exclude:
-      Leave it true if you want it to exclude line breaks.
+      - Leave it true if you want it to exclude line breaks.
     """
 
     return ''.join(line.lstrip() + ('\n' if not newline_exclude else '')  
                         for line in text.split('\n'))
 
 def plot_position(trade:pd.DataFrame, ax:Axes, 
-                  color_take:str = 'g', color_stop:str = 'r', 
-                  alpha:float = 1, alpha_arrow:float = 1, 
-                  width_exit:any = 10) -> None:
+                  color_take:str = 'green', color_stop:str = 'red', 
+                  color_close:str = 'gold', alpha:float = 1, 
+                  alpha_arrow:float = 1, operation_route:bool = True, 
+                  width_exit:any = lambda x: 9) -> None:
     """
     Position draw.
     ----
@@ -201,31 +212,48 @@ def plot_position(trade:pd.DataFrame, ax:Axes,
     --
     >>> trade:pd.DataFrame
     >>> ax:Axes
-    >>> color_take:str = 'g'
-    >>> color_stop:str = 'r'
+    >>> color_take:str = 'green'
+    >>> color_stop:str = 'red'
+    >>> color_close:str = 'gold'
     >>> alpha:float = 1
-    >>> alpha_arrow:float = 1,
-    >>> width_exit:any = 10
+    >>> alpha_arrow:float = 1
+    >>> operation_route:bool = True
+    >>> width_exit:any = lambda x: 9
 
     trade:
-      Trades data to draw.
+      - Trades data to draw.
+    
     ax:
-      Axes where it is drawn.
+      - Axes where it is drawn.
+    
     color_take:
-      Position color when the position is positive.
+      - Position color when the position is positive.
+    
     color_stop:
-      Position color when the position is negative.
+      - Position color when the position is negative.
+    
+    color_close:
+      - Color of close marker.
+    
     aplha:
-      Opacity.
+      - Opacity.
+    
     alpha_arrow:
-      Arrow opacity.
+      - Opacity of arrow, type marker, and close marker.
+
+    operation_route:
+      - True or false to trace the route of the operation.
+    
     width_exit:
-      How many time points does the position 
-      extend forward if it is not closed.
+      - How many time points does the position 
+       extend forward if it is not closed.
+      - It has to be a function that takes 'trade'.
     
     Info:
     --
-    The arrow indicates where the position was closed.
+    The arrow and 'x' marker indicates where the position was closed.
+
+    The 'V' and '^' markers indicate the direction of the position.
     
     The 'color_take' indicates the place where the take profit is placed and 
      the 'color_stop' will indicate the place where the stop loss is placed.
@@ -234,25 +262,46 @@ def plot_position(trade:pd.DataFrame, ax:Axes,
     """
 
     def draw(row):
-      if not np.isnan(row['TakeProfit']):
-        take = Rectangle(xy=(row['Date'], min(row['TakeProfit'], row['Close'])), 
-                      width= (width_exit(row) if np.isnan(row['PositionDate']) 
+      if not np.isnan(row['TakeProfit']): # Drawing of the 'TakeProfit' shape.
+          take = Rectangle(xy=(row['Date'], row['Close']), 
+                        width= (width_exit(row) if np.isnan(row['PositionDate']) 
+                                else row['PositionDate']-row['Date']), 
+                        height=row['TakeProfit']-row['Close'], 
+                        facecolor=color_take, edgecolor=color_take)
+          take.set_alpha(alpha)
+          ax.add_patch(take)
+      if not np.isnan(row['StopLoss']): # Drawing of the 'StopLoss' shape.
+          stop = Rectangle(xy=(row['Date'], row['Close']), 
+                        width=(width_exit(row) if np.isnan(row['PositionDate']) 
                               else row['PositionDate']-row['Date']), 
-                      height=(max(row['TakeProfit'], row['Close']) - 
-                              min(row['TakeProfit'], row['Close'])), 
-                      facecolor=color_take, edgecolor=color_take)
-        take.set_alpha(alpha)
-        ax.add_patch(take)
-      if not np.isnan(row['StopLoss']):
-        stop = Rectangle(xy=(row['Date'], min(row['Close'], row['StopLoss'])), 
-                      width=(width_exit(row) if np.isnan(row['PositionDate']) 
-                            else row['PositionDate']-row['Date']), 
-                      height=(max(row['Close'], row['StopLoss']) - 
-                              min(row['Close'], row['StopLoss'])), 
-                      facecolor=color_stop, edgecolor=color_stop)
-        stop.set_alpha(alpha)
-        ax.add_patch(stop)
+                        height=row['StopLoss']-row['Close'], 
+                        facecolor=color_stop, edgecolor=color_stop)
+          stop.set_alpha(alpha)
+          ax.add_patch(stop)
+      if operation_route:# Draw route of the operation.
+          cl = 'green' if row['Close'] < row['PositionClose'] else 'red'
+
+          route  = Rectangle(xy=(row['Date'], row['Close']), 
+                          width=row['PositionDate']-row['Date'], 
+                          height=row['PositionClose']-row['Close'], 
+                          facecolor=cl, edgecolor=cl)
+          
+          route.set_alpha(alpha)
+          ax.add_patch(route)
+
+      # Drawing of the closing marker of the operation.
+      ax.scatter(row['PositionDate'], row['PositionClose'], 
+                 c=color_close, s=30, marker='x', alpha=alpha_arrow)
       
+      # Drawing of the position type marker.
+      conv = (('Low', color_take, '^') if row['Type'] else 
+              ('High', color_stop, 'V'))
+
+      ax.scatter(row['Date'], 
+                 row[conv[0]] - (row['High'] - row['Low']) / 2, 
+                 c=conv[1], s=30, marker=conv[2], alpha=alpha_arrow)
+      
+      # Arrow drawing.
       arrow = FancyArrowPatch((row['Date'], row['Close']), 
                          (row['PositionDate'], row['PositionClose']), 
                          arrowstyle='->', linestyle='-',
