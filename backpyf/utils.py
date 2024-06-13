@@ -268,6 +268,7 @@ def plot_position(trade:pd.DataFrame, ax:Axes,
                                 else row['PositionDate']-row['Date']), 
                         height=row['TakeProfit']-row['Close'], 
                         facecolor=color_take, edgecolor=color_take)
+          
           take.set_alpha(alpha)
           ax.add_patch(take)
       if not np.isnan(row['StopLoss']): # Drawing of the 'StopLoss' shape.
@@ -276,10 +277,14 @@ def plot_position(trade:pd.DataFrame, ax:Axes,
                               else row['PositionDate']-row['Date']), 
                         height=row['StopLoss']-row['Close'], 
                         facecolor=color_stop, edgecolor=color_stop)
+          
           stop.set_alpha(alpha)
           ax.add_patch(stop)
       if operation_route:# Draw route of the operation.
-          cl = 'green' if row['Close'] < row['PositionClose'] else 'red'
+          cl = ('green' if (row['Close'] < row['PositionClose'] and 
+                            row['Type'] == 1) or 
+                            (row['Close'] > row['PositionClose'] and 
+                             row['Type'] == 0) else 'red')
 
           route  = Rectangle(xy=(row['Date'], row['Close']), 
                           width=row['PositionDate']-row['Date'], 
@@ -292,13 +297,12 @@ def plot_position(trade:pd.DataFrame, ax:Axes,
       # Drawing of the closing marker of the operation.
       ax.scatter(row['PositionDate'], row['PositionClose'], 
                  c=color_close, s=30, marker='x', alpha=alpha_arrow)
-      
+  
       # Drawing of the position type marker.
       conv = (('Low', color_take, '^') if row['Type'] else 
-              ('High', color_stop, 'V'))
+              ('High', color_stop, 'v'))
 
-      ax.scatter(row['Date'], 
-                 row[conv[0]] - (row['High'] - row['Low']) / 2, 
+      ax.scatter(row['Date'], row[conv[0]] - (row['High'] - row['Low']) / 2, 
                  c=conv[1], s=30, marker=conv[2], alpha=alpha_arrow)
       
       # Arrow drawing.
