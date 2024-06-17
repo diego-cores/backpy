@@ -200,8 +200,9 @@ def text_fix(text:str, newline_exclude:bool = True) -> str:
 
 def plot_position(trade:pd.DataFrame, ax:Axes, 
                   color_take:str = 'green', color_stop:str = 'red', 
-                  color_close:str = 'gold', alpha:float = 1, 
-                  alpha_arrow:float = 1, operation_route:bool = True, 
+                  color_close:str = 'gold', all:bool = True,
+                  alpha:float = 1, alpha_arrow:float = 1, 
+                  operation_route:bool = True, 
                   width_exit:any = lambda x: 9) -> None:
     """
     Position draw.
@@ -215,6 +216,7 @@ def plot_position(trade:pd.DataFrame, ax:Axes,
     >>> color_take:str = 'green'
     >>> color_stop:str = 'red'
     >>> color_close:str = 'gold'
+    >>> all:bool = True
     >>> alpha:float = 1
     >>> alpha_arrow:float = 1
     >>> operation_route:bool = True
@@ -234,6 +236,10 @@ def plot_position(trade:pd.DataFrame, ax:Axes,
     
     color_close:
       - Color of close marker.
+
+    all:
+      - If 'True', everything will be drawn.
+      - If 'False', only points will be drawn.
     
     aplha:
       - Opacity.
@@ -262,56 +268,61 @@ def plot_position(trade:pd.DataFrame, ax:Axes,
     """
 
     def draw(row):
-      if not np.isnan(row['TakeProfit']): # Drawing of the 'TakeProfit' shape.
-          take = Rectangle(xy=(row['Date'], row['Close']), 
-                        width= (width_exit(row) if np.isnan(row['PositionDate']) 
+        # Drawing of the 'TakeProfit' shape.
+        if not np.isnan(row['TakeProfit']) and all: 
+            take = Rectangle(xy=(row['Date'], row['Close']), 
+                          width= (width_exit(row) 
+                                  if np.isnan(row['PositionDate']) 
+                                  else row['PositionDate']-row['Date']), 
+                          height=row['TakeProfit']-row['Close'], 
+                          facecolor=color_take, edgecolor=color_take)
+            
+            take.set_alpha(alpha)
+            ax.add_patch(take)
+        # Drawing of the 'StopLoss' shape.
+        if not np.isnan(row['StopLoss']) and all: 
+            stop = Rectangle(xy=(row['Date'], row['Close']), 
+                          width=(width_exit(row) 
+                                  if np.isnan(row['PositionDate']) 
                                 else row['PositionDate']-row['Date']), 
-                        height=row['TakeProfit']-row['Close'], 
-                        facecolor=color_take, edgecolor=color_take)
-          
-          take.set_alpha(alpha)
-          ax.add_patch(take)
-      if not np.isnan(row['StopLoss']): # Drawing of the 'StopLoss' shape.
-          stop = Rectangle(xy=(row['Date'], row['Close']), 
-                        width=(width_exit(row) if np.isnan(row['PositionDate']) 
-                              else row['PositionDate']-row['Date']), 
-                        height=row['StopLoss']-row['Close'], 
-                        facecolor=color_stop, edgecolor=color_stop)
-          
-          stop.set_alpha(alpha)
-          ax.add_patch(stop)
-      if operation_route:# Draw route of the operation.
-          cl = ('green' if (row['Close'] < row['PositionClose'] and 
-                            row['Type'] == 1) or 
-                            (row['Close'] > row['PositionClose'] and 
-                             row['Type'] == 0) else 'red')
+                          height=row['StopLoss']-row['Close'], 
+                          facecolor=color_stop, edgecolor=color_stop)
+            
+            stop.set_alpha(alpha)
+            ax.add_patch(stop)
+        # Draw route of the operation.
+        if operation_route and all:
+            cl = ('green' if (row['Close'] < row['PositionClose'] and 
+                              row['Type'] == 1) or 
+                              (row['Close'] > row['PositionClose'] and 
+                              row['Type'] == 0) else 'red')
 
-          route  = Rectangle(xy=(row['Date'], row['Close']), 
-                          width=row['PositionDate']-row['Date'], 
-                          height=row['PositionClose']-row['Close'], 
-                          facecolor=cl, edgecolor=cl)
-          
-          route.set_alpha(alpha)
-          ax.add_patch(route)
+            route  = Rectangle(xy=(row['Date'], row['Close']), 
+                            width=row['PositionDate']-row['Date'], 
+                            height=row['PositionClose']-row['Close'], 
+                            facecolor=cl, edgecolor=cl)
+            
+            route.set_alpha(alpha)
+            ax.add_patch(route)
 
-      # Drawing of the closing marker of the operation.
-      ax.scatter(row['PositionDate'], row['PositionClose'], 
-                 c=color_close, s=30, marker='x', alpha=alpha_arrow)
-  
-      # Drawing of the position type marker.
-      conv = (('Low', color_take, '^') if row['Type'] else 
-              ('High', color_stop, 'v'))
+        # Arrow drawing.
+        arrow = FancyArrowPatch((row['Date'], row['Close']), 
+                          (row['PositionDate'], row['PositionClose']), 
+                          arrowstyle='->', linestyle='-',
+                          mutation_scale=20, color='grey')
+        arrow.set_linestyle((0, (5, 10)))
+        arrow.set_alpha(alpha_arrow)
+        ax.add_patch(arrow)
 
-      ax.scatter(row['Date'], row[conv[0]] - (row['High'] - row['Low']) / 2, 
-                 c=conv[1], s=30, marker=conv[2], alpha=alpha_arrow)
-      
-      # Arrow drawing.
-      arrow = FancyArrowPatch((row['Date'], row['Close']), 
-                         (row['PositionDate'], row['PositionClose']), 
-                         arrowstyle='->', linestyle='-',
-                         mutation_scale=20, color='grey')
-      arrow.set_linestyle((0, (5, 10)))
-      arrow.set_alpha(alpha_arrow)
-      ax.add_patch(arrow)
-      
+        # Drawing of the closing marker of the operation.
+        ax.scatter(row['PositionDate'], row['PositionClose'], 
+                  c=color_close, s=30, marker='x', alpha=alpha_arrow)
+    
+        # Drawing of the position type marker.
+        conv = (('Low', color_take, '^') if row['Type'] else 
+                ('High', color_stop, 'v'))
+
+        ax.scatter(row['Date'], row[conv[0]] - (row['High'] - row['Low']) / 2, 
+                  c=conv[1], s=30, marker=conv[2], alpha=alpha_arrow)
+        
     trade.apply(draw, axis=1)

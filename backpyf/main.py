@@ -268,8 +268,9 @@ def run(strategy_class:'strategy.StrategyClass' = any,
     try: 
         return stats_trades(prnt=prnt)
     except exception.StatsError: pass
-
-def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
+    
+def plot(log:bool = False, progress:bool = True, 
+         position:str = 'complex', block:bool = True) -> None:
     """
     Plot graph with trades.
     ----
@@ -284,6 +285,7 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
     --
     >>> log:bool = Flase
     >>> progress:bool = True
+    >>> position:str = 'complex'
     >>> block:bool = True
     
     log:
@@ -291,10 +293,23 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
 
     progress:
       - Progress bar and timer.
+
+    position:
+      - The way the positions were drawn.
+      - Available options: ('complex', 'simple').
+      - If left at None or 'none', positions will not be drawn.
+      - The "complex" option takes a long time to process.
+
+    block:
+      - If 'True', the script execution is paused until
+       all figure windows are closed. 
+      - If 'False', the script continues running after displaying the figures.
     """
 
     if __data is None or not type(__data) is pd.DataFrame or __data.empty: 
         raise exception.PlotError('Data not loaded.')
+    elif position and not position.lower() in ('complex', 'simple', 'none'):
+        raise exception.PlotError(f"'{position}' Not a valid option for: 'position'.")
     
     if progress: 
         t = time()
@@ -327,14 +342,16 @@ def plot(log:bool = False, progress:bool = True, block:bool = True) -> None:
 
     ax2.bar(date_range, round(__data['Volume'],0), width=width)
 
-    trades_c = __trades.copy()
-    trades_c['Date'] = mpl.dates.date2num(trades_c['Date'])
-    trades_c['PositionDate'] = trades_c['PositionDate'].apply(
-        lambda x: np.nan if pd.isna(x) else mpl.dates.date2num(x))
-    
-    utils.plot_position(trades_c, ax1, 
-                        alpha=0.3, alpha_arrow=0.8, 
-                        width_exit=lambda x: candle_data.index[-1]-x['Date'])
+    if position and position.lower() != 'none':
+        trades_c = __trades.copy()
+        trades_c['Date'] = mpl.dates.date2num(trades_c['Date'])
+        trades_c['PositionDate'] = trades_c['PositionDate'].apply(
+            lambda x: np.nan if pd.isna(x) else mpl.dates.date2num(x))
+        
+        utils.plot_position(trades_c, ax1, 
+                          all=True if position.lower() == 'complex' else False,
+                          alpha=0.3, alpha_arrow=0.8, 
+                          width_exit=lambda x: candle_data.index[-1]-x['Date'])
 
     date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
     ax1.xaxis.set_major_formatter(date_format); fig.autofmt_xdate()
@@ -376,8 +393,8 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/n',
     Parameters:
     --
     >>> log:bool = Flase
-    >>> block:bool = True
     >>> view:str = 'p/w/r/n'
+    >>> block:bool = True
     
     log:
       - Plot your data using logarithmic scale.
@@ -385,6 +402,11 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/n',
     view:
       - Plot your data the way you prefer.
       - There are 4 shapes available and they all take up the entire window.
+
+    block:
+      - If True, the script execution is paused until
+       all figure windows are closed. 
+      - If False, the script continues running after displaying the figures.
     """
     view = view.lower().strip().split('/')
     view = [i for i in view if i in ('p','w','r')]
