@@ -474,20 +474,19 @@ def stats_icon(prnt:bool = True) -> str:
         r_date = f"{s_date}~{e_date}"
     else: r_date = ""
 
-    data_s = f"""
-Statistics of {__data_icon}:
-----
-Last price: {utils.round_r(__data['Close'].iloc[-1],2)}
-Maximum price: {utils.round_r(__data['High'].max(),2)}
-Minimum price: {utils.round_r(__data['Low'].min(),2)}
-Maximum volume: {__data['Volume'].max()}
-Sample size: {len(__data.index)}
-Standard deviation: {utils.round_r(__data['Close'].std(),2)}
-Average price: {utils.round_r(__data['Close'].mean(),2)}
-Average volume: {utils.round_r(__data['Volume'].mean(),2)}
-----
-{r_date} ~ {__data_interval} ~ {__data_icon}
-    """
+    data_s = utils.text_fix(f"""
+    Statistics of {__data_icon}:
+    ----
+    Last price: {utils.round_r(__data['Close'].iloc[-1],2)}
+    Maximum price: {utils.round_r(__data['High'].max(),2)}
+    Minimum price: {utils.round_r(__data['Low'].min(),2)}
+    Maximum volume: {__data['Volume'].max()}
+    Sample size: {len(__data.index)}
+    Standard deviation: {utils.round_r(__data['Close'].std(),2)}
+    Average price: {utils.round_r(__data['Close'].mean(),2)}
+    Average volume: {utils.round_r(__data['Volume'].mean(),2)}
+    ----
+    {r_date} ~ {__data_interval} ~ {__data_icon}""", newline_exclude=False)
 
     if prnt:print(data_s) 
     else: return data_s
@@ -534,36 +533,35 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
     elif np.isnan(__trades['ProfitPer'].mean()): 
         raise exception.StatsError('There is no data to see.') 
 
-    data_s = f"""
-Statistics of strategy.
-----
-Trades: {len(__trades.index)}
+    data_s = utils.text_fix(f"""
+    Statistics of strategy.
+    ----
+    Trades: {len(__trades.index)}
 
-Return: {utils.round_r(__trades['ProfitPer'].sum(),2)}%
-Average return: {utils.round_r(__trades['ProfitPer'].mean(),2)}%
-Average ratio: {utils.round_r(
-    (abs(__trades['Close']-__trades['TakeProfit']) / 
-        abs(__trades['Close']-__trades['StopLoss'])).mean() 
-     if not __trades['TakeProfit'].isnull().all() and 
-     not __trades['StopLoss'].isnull().all() else 0, 2)}
+    Return: {utils.round_r(__trades['ProfitPer'].sum(),2)}%
+    Average return: {utils.round_r(__trades['ProfitPer'].mean(),2)}%
+    Average ratio: {utils.round_r(
+        (abs(__trades['Close']-__trades['TakeProfit']) / 
+            abs(__trades['Close']-__trades['StopLoss'])).mean() 
+        if not __trades['TakeProfit'].isnull().all() and 
+        not __trades['StopLoss'].isnull().all() else 0, 2)}
 
-Profit: {utils.round_r(__trades['Profit'].sum(),2)}
-Profit fact: {
-    utils.round_r((__trades['Profit']>0).sum()/(__trades['Profit']<=0).sum(),2) 
-    if (__trades['Profit']>0).sum() > 0 and 
-    (__trades['Profit']<=0).sum() > 0 and 
-    not pd.isna(__trades['Profit']).all() else 0}
+    Profit: {utils.round_r(__trades['Profit'].sum(),2)}
+    Profit fact: {
+        utils.round_r(__trades[__trades['Profit']>0]['Profit'].sum()/
+                      abs(__trades[__trades['Profit']<=0]['Profit'].sum()),2) 
+        if not pd.isna(__trades['Profit']).all() else 0}
 
-Max drawdown: {round(
-    utils.max_drawdown(__trades['Profit'].dropna().cumsum()+_init_funds),1)}%
-Long exposure: {
-    round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
-Winnings: {round(
-    (__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) 
-    if not ((__trades['ProfitPer']>0).sum() == 0 or 
-            __trades['ProfitPer'].count() == 0) else 0}%
-----
-    """
+    Max drawdown: {round(
+        utils.max_drawdown(__trades['Profit'].dropna().cumsum()+
+                           _init_funds),1)}%
+    Long exposure: {
+        round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
+    Winnings: {round(
+        (__trades['ProfitPer']>0).sum()/__trades['ProfitPer'].count()*100,1) 
+        if not ((__trades['ProfitPer']>0).sum() == 0 or 
+                __trades['ProfitPer'].count() == 0) else 0}%
+    ----""", newline_exclude=False)
     if data: data_s += stats_icon(False)
     
     if prnt: print(data_s)
