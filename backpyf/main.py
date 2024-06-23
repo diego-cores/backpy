@@ -572,7 +572,9 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
     Profit fact: {
         utils.round_r(__trades[__trades['Profit']>0]['Profit'].sum()/
                       abs(__trades[__trades['Profit']<=0]['Profit'].sum()),2) 
-        if not pd.isna(__trades['Profit']).all() else 0}
+        if not pd.isna(__trades['Profit']).all() and
+         (__trades['Profit']>0).sum() > 0 and
+          (__trades['Profit']<=0).sum() > 0 else 0}
 
     Max drawdown: {round(
         utils.max_drawdown(__trades['Profit'].dropna().cumsum()+
