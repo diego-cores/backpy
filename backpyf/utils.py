@@ -121,7 +121,7 @@ def max_drawdown(values:pd.Series) -> float:
                 max_drdwn = drdwn
     values.apply(calc)
 
-    return max_drdwn * 100
+    return max_drdwn
 
 def plot_candles(ax:Axes, data:pd.DataFrame, 
                  width:float = 1, color_up:str = 'g', 
@@ -198,7 +198,7 @@ def text_fix(text:str, newline_exclude:bool = True) -> str:
     return ''.join(line.lstrip() + ('\n' if not newline_exclude else '')  
                         for line in text.split('\n'))
 
-def plot_position(trade:pd.DataFrame, ax:Axes, 
+def plot_position(trades:pd.DataFrame, ax:Axes, 
                   color_take:str = 'green', color_stop:str = 'red', 
                   color_close:str = 'gold', all:bool = True,
                   alpha:float = 1, alpha_arrow:float = 1, 
@@ -211,7 +211,7 @@ def plot_position(trade:pd.DataFrame, ax:Axes,
 
     Parameters:
     --
-    >>> trade:pd.DataFrame
+    >>> trades:pd.DataFrame
     >>> ax:Axes
     >>> color_take:str = 'green'
     >>> color_stop:str = 'red'
@@ -222,7 +222,7 @@ def plot_position(trade:pd.DataFrame, ax:Axes,
     >>> operation_route:bool = True
     >>> width_exit:any = lambda x: 9
 
-    trade:
+    trades:
       - Trades data to draw.
     
     ax:
@@ -304,25 +304,27 @@ def plot_position(trade:pd.DataFrame, ax:Axes,
             
             route.set_alpha(alpha)
             ax.add_patch(route)
-
+      
         # Arrow drawing.
-        arrow = FancyArrowPatch((row['Date'], row['Close']), 
-                          (row['PositionDate'], row['PositionClose']), 
-                          arrowstyle='->', linestyle='-',
-                          mutation_scale=20, color='grey')
-        arrow.set_linestyle((0, (5, 10)))
-        arrow.set_alpha(alpha_arrow)
-        ax.add_patch(arrow)
+        ax.arrow(row['Date'], row['Close'], 
+                row['PositionDate']-row['Date'], 
+                row['PositionClose']-row['Close'], 
+                linestyle='dashed', color='grey',
+                alpha=alpha_arrow)
 
-        # Drawing of the closing marker of the operation.
-        ax.scatter(row['PositionDate'], row['PositionClose'], 
-                  c=color_close, s=30, marker='x', alpha=alpha_arrow)
+    trades.apply(draw, axis=1)
+
+    # Drawing of the closing marker of the operation.
+    ax.scatter(trades['PositionDate'], trades['PositionClose'], 
+              c=color_close, s=30, marker='x', alpha=alpha_arrow)
+
+    # Drawing of the position type marker.
+    ax.scatter(trades['Date'], 
+               trades.apply(lambda x: x['Low'] - (x['High'] - x['Low']) / 2 
+                            if x['Type'] == 1 else None, axis=1), 
+               c=color_take, s=30, marker='^', alpha=alpha_arrow)
     
-        # Drawing of the position type marker.
-        conv = (('Low', color_take, '^') if row['Type'] else 
-                ('High', color_stop, 'v'))
-
-        ax.scatter(row['Date'], row[conv[0]] - (row['High'] - row['Low']) / 2, 
-                  c=conv[1], s=30, marker=conv[2], alpha=alpha_arrow)
-        
-    trade.apply(draw, axis=1)
+    ax.scatter(trades['Date'], 
+               trades.apply(lambda x: x['High'] + (x['High'] - x['Low']) / 2 
+                            if x['Type'] != 1 else None, axis=1),
+               c=color_stop, s=30, marker='v', alpha=alpha_arrow)

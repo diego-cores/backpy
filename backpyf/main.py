@@ -578,7 +578,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
 
     Max drawdown: {round(
         utils.max_drawdown(__trades['Profit'].dropna().cumsum()+
-                           _init_funds),1)}%
+                           _init_funds)*100,1)}%
     Long exposure: {
         round((__trades['Type']==1).sum()/__trades['Type'].count()*100,1)}%
     Winnings: {round(
