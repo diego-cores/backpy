@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='backpyf',
-    version='0.9.2.030',
+    version='0.9.2.031',
     packages=find_packages(),
     description='''BackPy is a library made in python for back testing in 
     financial markets. Read Risk_notice.txt and LICENSE.''',

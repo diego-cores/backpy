@@ -158,24 +158,19 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     aplha:
       - Opacity.
     """
-    OFFSET = width / 2.
+    color = data.apply(
+               lambda x: color_up if x['Close'] >= x['Open'] else color_down, 
+               axis=1)
 
-    def draw(row):
-        color = color_up if row['Close'] >= row['Open'] else color_down
+    # Drawing vertical lines.
+    ax.vlines(data.index, data['Low'], data['High'], color=color)
 
-        line = Line2D(xdata=(row.name, row.name), 
-                      ydata=(row['Low'], row['High']), 
-                      color=color, linewidth=0.5)
-        rect = Rectangle(xy=(row.name-OFFSET, min(row['Open'], row['Close'])), 
-                         width=width, 
-                         height=abs(row['Close']-row['Open']), 
-                         facecolor=color, edgecolor=color)
+    # Bar drawing.
+    ax.bar(data.index, abs(data['Close']-data['Open']), width,
+           bottom=data.apply(lambda x: min(x['Open'], x['Close']), axis=1), 
+           color=color, alpha=alpha)
 
-        rect.set_alpha(alpha); line.set_alpha(alpha)
-        ax.add_line(line); ax.add_patch(rect)
-
-    data.apply(draw, axis=1)
-    ax.autoscale_view()
+    ax.set_ylim(data['Low'].min()*0.98, data['High'].max()*1.02)
 
 def text_fix(text:str, newline_exclude:bool = True) -> str:
     """
@@ -279,6 +274,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
             
             take.set_alpha(alpha)
             ax.add_patch(take)
+
         # Drawing of the 'StopLoss' shape.
         if not np.isnan(row['StopLoss']) and all: 
             stop = Rectangle(xy=(row['Date'], row['Close']), 
@@ -290,6 +286,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
             
             stop.set_alpha(alpha)
             ax.add_patch(stop)
+
         # Draw route of the operation.
         if operation_route and all:
             cl = ('green' if (row['Close'] < row['PositionClose'] and 

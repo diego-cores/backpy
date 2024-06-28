@@ -309,11 +309,12 @@ def plot(log:bool = False, progress:bool = True,
     if __data is None or not type(__data) is pd.DataFrame or __data.empty: 
         raise exception.PlotError('Data not loaded.')
     elif position and not position.lower() in ('complex', 'simple', 'none'):
-        raise exception.PlotError(f"'{position}' Not a valid option for: 'position'.")
+        raise exception.PlotError(
+            f"'{position}' Not a valid option for: 'position'.")
     
     if progress: 
         t = time()
-        utils.load_bar(size=2, step=0)
+        utils.load_bar(size=4, step=0)
 
     mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
@@ -335,10 +336,13 @@ def plot(log:bool = False, progress:bool = True,
     candle_data = __data.copy()
     candle_data.index = date_range
 
+    if progress: 
+        utils.load_bar(size=4, step=1)
+
     utils.plot_candles(ax1, candle_data, width*0.9)
 
     if progress: 
-        utils.load_bar(size=2, step=1)
+        utils.load_bar(size=4, step=2)
 
     ax2.bar(date_range, round(__data['Volume'],0), width=width)
 
@@ -352,6 +356,9 @@ def plot(log:bool = False, progress:bool = True,
                           all=True if position.lower() == 'complex' else False,
                           alpha=0.3, alpha_arrow=0.8, 
                           width_exit=lambda x: candle_data.index[-1]-x['Date'])
+    
+    if progress: 
+        utils.load_bar(size=4, step=3)
 
     date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
     ax1.xaxis.set_major_formatter(date_format); fig.autofmt_xdate()
@@ -373,7 +380,7 @@ def plot(log:bool = False, progress:bool = True,
         f"Back testing: '{__data_icon}' {r_date}")
 
     if progress: 
-        utils.load_bar(size=2, step=2)
+        utils.load_bar(size=4, step=4)
         print('\nPlotTimer:',round(time()-t,2))
 
     mpl.pyplot.show(block=block)
