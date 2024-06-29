@@ -330,21 +330,18 @@ def plot(log:bool = False, progress:bool = True,
 
     fig.tight_layout(); fig.subplots_adjust(hspace=0)
 
-    date_range = mpl.dates.date2num(__data.index)
-    width = (date_range.max() - date_range.min())/__data.shape[0]
-
     candle_data = __data.copy()
-    candle_data.index = date_range
+    candle_data.index = mpl.dates.date2num(__data.index)
 
     if progress: 
         utils.load_bar(size=4, step=1)
 
-    utils.plot_candles(ax1, candle_data, width*0.9)
+    utils.plot_candles(ax1, candle_data, 0.9)
 
     if progress: 
         utils.load_bar(size=4, step=2)
 
-    ax2.bar(date_range, round(__data['Volume'],0), width=width)
+    ax2.bar(candle_data.index, __data['Volume'], width=1)
 
     if position and position.lower() != 'none':
         trades_c = __trades.copy()
