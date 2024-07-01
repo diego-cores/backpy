@@ -318,9 +318,7 @@ def plot(log:bool = False, progress:bool = True,
 
     mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
-
     ax1 = mpl.pyplot.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
-
     ax2 = mpl.pyplot.subplot2grid((6,1), (5,0), rowspan=1, 
                                   colspan=1, sharex=ax1)
     ax2.set_yticks([])
@@ -336,12 +334,14 @@ def plot(log:bool = False, progress:bool = True,
     if progress: 
         utils.load_bar(size=4, step=1)
 
-    utils.plot_candles(ax1, candle_data, 0.9)
+    width = np.median(np.diff(candle_data.index))
+    utils.plot_candles(ax1, candle_data, width*0.9)
 
     if progress: 
         utils.load_bar(size=4, step=2)
 
-    ax2.bar(candle_data.index, __data['Volume'], width=1)
+    ax2.fill_between(candle_data.index, __data['Volume'], step='mid')
+    ax2.set_ylim(None, __data['Volume'].max()*1.5)
 
     if position and position.lower() != 'none':
         trades_c = __trades.copy()

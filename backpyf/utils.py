@@ -11,9 +11,8 @@ Functions:
 >>> candles_plot
 """
 
-from matplotlib.patches import Rectangle, FancyArrowPatch 
+from matplotlib.patches import Rectangle 
 from matplotlib.axes._axes import Axes
-from matplotlib.lines import Line2D
 
 import matplotlib as mpl
 import pandas as pd
