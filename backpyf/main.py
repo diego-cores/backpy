@@ -14,6 +14,10 @@ Functions:
 >>> icon_stats
 >>> trades_stats
 
+Hidden functions:
+---
+>>> _data_info
+
 Variables:
 --
 >>> alert = True # Show alerts in the console.
@@ -49,6 +53,18 @@ __data = None
 
 __trades = pd.DataFrame()
 _init_funds = 0
+
+def _data_info() -> tuple:
+    """
+    Data info.
+    ----
+    Returns all 'data' variables except '__data'.
+
+    Order:
+    --
+    >>> (__data_interval, __data_width, __data_icon)
+    """
+    return __data_interval, __data_width, __data_icon
 
 def load_yfinance_data(tickers:str = any, 
                        start:str = None, end:str = None, interval:str = '1d', 

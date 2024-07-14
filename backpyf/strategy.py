@@ -156,9 +156,7 @@ class StrategyClass(ABC):
         if not data.empty:
             self.__data_updater(data=data)
 
-        self.width = main.__data_width
-        self.icon = main.__data_icon
-        self.interval = main.__data_interval
+        self.interval, self.width, self.icon = main._data_info()
 
         self.__commission = commission
         self.__init_funds = init_funds
