@@ -14,10 +14,15 @@ Functions:
 >>> icon_stats
 >>> trades_stats
 
+Variables:
+--
+>>> alert = True # Show alerts in the console.
+
 Hidden variables:
 --
 >>> _init_funds # Initial funds.
 >>> __data_interval # Data interval.
+>>> __data_width # Data index width.
 >>> __data_icon # Data icon.
 >>> __data # Saved data.
 >>> __trades # Saved trades.
@@ -35,7 +40,10 @@ from . import utils
 from . import strategy
 from . import exception
 
+alert = True
+
 __data_interval = None
+__data_width = None
 __data_icon = None
 __data = None
 
@@ -90,7 +98,7 @@ def load_yfinance_data(tickers:str = any,
     >>> statistics=False, 
     >>> progress=True)
     """
-    global __data_interval, __data_icon, __data
+    global __data_interval, __data_width, __data_icon, __data
 
     try:
         import yfinance as yf
@@ -100,9 +108,13 @@ def load_yfinance_data(tickers:str = any,
         yf.set_tz_cache_location('.\yfinance_cache')
         __data = yf.download(tickers, start=start, end=end, 
                              interval=interval, progress=progress)
-
+        
         if __data.empty: 
             raise exception.YfinanceError('The symbol does not exist.')
+        
+        __data.index = mpl.dates.date2num(__data.index)
+        __data_width = utils.calc_width(__data.index)
+
         if progress: 
             print('DataTimer:',round(time()-t,2))
     
@@ -144,8 +156,8 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
     statistics:
       - Print statistics of the loaded data.
     """
-    global __data, __data_icon, __data_interval
-    
+    global __data_interval, __data_width, __data_icon, __data
+    # Exceptions.
     if not all(
         col in data.columns.to_list() 
         for col in ['Open', 'High', 'Low', 'Close', 'Volume']): 
@@ -158,6 +170,8 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
 
     __data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
     __data.index.name = 'Date'
+    __data.index = utils.correct_index(__data.index)
+    __data_width = utils.calc_width(__data.index)
 
     __data_icon = icon.strip()
     __data_interval = interval.strip()
@@ -221,14 +235,17 @@ def run(strategy_class:'strategy.StrategyClass' = any,
     FristStrategy:
     >>> class FristStrategy(backpy.StrategyClass)
     """
-    global __trades, _init_funds
-
+    global __trades, _init_funds, __data_width
+    # Exceptions.
     if __data is None: 
         raise exception.RunError('Data not loaded.')
     elif initial_funds < 0: 
         raise exception.RunError("'initial_funds' cannot be less than 0.")
     elif commission < 0: 
         raise exception.RunError("'commission' cannot be less than 0.")
+    # Corrections.
+    __data.index = utils.correct_index(__data.index)
+    __data_width = utils.calc_width(__data.index, True)
 
     _init_funds = initial_funds
     instance = strategy_class(commission=commission, init_funds=initial_funds)
@@ -236,7 +253,8 @@ def run(strategy_class:'strategy.StrategyClass' = any,
     
     if fast_mode:
         __data.apply(
-            lambda x: instance._StrategyClass__before(data=__data.loc[:x.name]), 
+            lambda x: instance._StrategyClass__before(
+                data=__data.iloc[:x.name]), 
             axis=1)
         
         act_trades = instance._StrategyClass__trades_ac
@@ -256,7 +274,7 @@ def run(strategy_class:'strategy.StrategyClass' = any,
                 print('\nRunTimer:',round(time()-t,2))
                 break
 
-            instance._StrategyClass__before(data=__data[:f])
+            instance._StrategyClass__before(data=__data.iloc[:f])
         
         act_trades = instance._StrategyClass__trades_ac
         __trades = instance._StrategyClass__trades_cl
@@ -305,12 +323,15 @@ def plot(log:bool = False, progress:bool = True,
        all figure windows are closed. 
       - If 'False', the script continues running after displaying the figures.
     """
-
+    # Exceptions.
     if __data is None or not type(__data) is pd.DataFrame or __data.empty: 
         raise exception.PlotError('Data not loaded.')
     elif position and not position.lower() in ('complex', 'simple', 'none'):
         raise exception.PlotError(
             f"'{position}' Not a valid option for: 'position'.")
+    # Corrections.
+    __data.index = utils.correct_index(__data.index)
+    __data_width = utils.calc_width(__data.index, True)
     
     if progress: 
         t = time()
@@ -328,31 +349,22 @@ def plot(log:bool = False, progress:bool = True,
 
     fig.tight_layout(); fig.subplots_adjust(hspace=0)
 
-    candle_data = __data.copy()
-    candle_data.index = mpl.dates.date2num(__data.index)
-
     if progress: 
         utils.load_bar(size=4, step=1)
 
-    width = np.median(np.diff(candle_data.index))
-    utils.plot_candles(ax1, candle_data, width*0.9)
+    utils.plot_candles(ax1, __data, __data_width*0.9)
 
     if progress: 
         utils.load_bar(size=4, step=2)
 
-    ax2.fill_between(candle_data.index, __data['Volume'], step='mid')
+    ax2.fill_between(__data.index, __data['Volume'], step='mid')
     ax2.set_ylim(None, __data['Volume'].max()*1.5)
 
-    if position and position.lower() != 'none':
-        trades_c = __trades.copy()
-        trades_c['Date'] = mpl.dates.date2num(trades_c['Date'])
-        trades_c['PositionDate'] = trades_c['PositionDate'].apply(
-            lambda x: np.nan if pd.isna(x) else mpl.dates.date2num(x))
-        
-        utils.plot_position(trades_c, ax1, 
+    if position and position.lower() != 'none' and not __trades.empty:
+        utils.plot_position(__trades, ax1, 
                           all=True if position.lower() == 'complex' else False,
                           alpha=0.3, alpha_arrow=0.8, 
-                          width_exit=lambda x: candle_data.index[-1]-x['Date'])
+                          width_exit=lambda x: __data.index[-1]-x['Date'])
     
     if progress: 
         utils.load_bar(size=4, step=3)
@@ -360,21 +372,18 @@ def plot(log:bool = False, progress:bool = True,
     date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
     ax1.xaxis.set_major_formatter(date_format); fig.autofmt_xdate()
 
-    if isinstance(__data.index[0], pd.Timestamp):
-        s_date = ".".join(str(val) for val in 
-                        [__data.index[0].day, __data.index[0].month, 
-                        __data.index[0].year])
-        
-        e_date = ".".join(str(val) for val in 
-                        [__data.index[-1].day, __data.index[-1].month, 
-                        __data.index[-1].year]
-                        ) if isinstance(__data.index[0], pd.Timestamp) else ""
-        
-        r_date = f"{s_date}~{e_date}"
-    else: r_date = ""
+    ix_date = mpl.dates.num2date(__data.index)
+
+    s_date = ".".join(str(val) for val in 
+                    [ix_date[0].day, ix_date[0].month, 
+                    ix_date[0].year])
+    
+    e_date = ".".join(str(val) for val in 
+                    [ix_date[-1].day, ix_date[-1].month, 
+                    ix_date[-1].year])
     
     mpl.pyplot.gcf().canvas.manager.set_window_title(
-        f"Back testing: '{__data_icon}' {r_date}")
+        f"Back testing: '{__data_icon}' {s_date}~{e_date}")
 
     if progress: 
         utils.load_bar(size=4, step=4)
@@ -415,6 +424,7 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/n',
     view = view.lower().strip().split('/')
     view = [i for i in view if i in ('p','w','r')]
 
+    # Exceptions.
     if __trades.empty: 
         raise exception.StatsError('Trades not loaded.')
     elif not 'Profit' in __trades.columns:  
@@ -485,6 +495,7 @@ def stats_icon(prnt:bool = True) -> str:
       - If it is true, statistics will be printed.
       - If it is false, an string will be returned.
     """
+    # Exceptions.
     if __data is None: raise exception.StatsError('Data not loaded.')
 
     if isinstance(__data.index[0], pd.Timestamp):
@@ -552,6 +563,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
     Winnings:
       Percentage of operations won.
     """
+    # Exceptions.
     if __trades.empty: 
         raise exception.StatsError('Trades not loaded.')
     elif not 'ProfitPer' in __trades.columns:  

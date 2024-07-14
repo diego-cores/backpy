@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 
 from . import exception
 from . import utils
+from . import main
 
 class StrategyClass(ABC):
     """
@@ -127,6 +128,9 @@ class StrategyClass(ABC):
         >>> self.close = data["Close"].iloc[-1]
         >>> self.volume = data["Volume"].iloc[-1]
         >>> self.date = data.index[-1]
+        >>> self.width = main.__data_width
+        >>> self.icon = main.__data_icon
+        >>> self.interval = main.__data_interval
 
         Hidden variables:
         --
@@ -152,14 +156,16 @@ class StrategyClass(ABC):
         if not data.empty:
             self.__data_updater(data=data)
 
+        self.width = main.__data_width
+        self.icon = main.__data_icon
+        self.interval = main.__data_interval
+
         self.__commission = commission
         self.__init_funds = init_funds
 
         self.__trade = pd.DataFrame()
         self.__trades_ac = trades_ac
         self.__trades_cl = trades_cl
-
-       
 
     @abstractmethod
     def next(self) -> None: ...
@@ -559,7 +565,7 @@ class StrategyClass(ABC):
         data = self.__data[source] if data is None else data
         ema = data.ewm(span=length, adjust=False).mean()
     
-        return np.flip(ema[len(ema)-last 
+        return np.flip(ema.iloc[len(ema)-last 
                            if last != None and last < len(ema) else 0:])
     
     def idc_sma(self, length:int = any, source:str = 'Close', last:int = None):
@@ -624,7 +630,7 @@ class StrategyClass(ABC):
         data = self.__data[source] if data is None else data
         sma = data.rolling(window=length).mean()
 
-        return np.flip(sma[len(sma)-last 
+        return np.flip(sma.iloc[len(sma)-last 
                            if last != None and last < len(sma) else 0:])
     
     def idc_wma(self, length:int = any, source:str = 'Close', 
@@ -700,7 +706,7 @@ class StrategyClass(ABC):
         wma = data.rolling(window=length).apply(
             lambda x: (x*weight).sum() / weight.sum(), raw=True)
 
-        return np.flip(wma[len(wma)-last 
+        return np.flip(wma.iloc[len(wma)-last 
                            if last != None and last < len(wma) else 0:])
     
     def idc_smma(self, length:int = any, 
@@ -766,7 +772,7 @@ class StrategyClass(ABC):
         data = self.__data[source] if data is None else data
         smma = data.ewm(alpha=1/length, adjust=False).mean()
 
-        return np.flip(smma[len(smma)-last 
+        return np.flip(smma.iloc[len(smma)-last 
                             if last != None and last < len(smma) else 0:])
     
     def idc_smema(self, length:int = 9, method:str = 'sma', 
@@ -871,7 +877,7 @@ class StrategyClass(ABC):
 
         if only: 
             smema = np.flip(smema)
-            return np.flip(smema[len(smema)-last 
+            return np.flip(smema.iloc[len(smema)-last 
                                  if last != None and last < len(smema) else 0:])
         
         smema = pd.DataFrame({'ema':ema, 'smoothed':smema}, index=ema.index)
@@ -1311,7 +1317,7 @@ class StrategyClass(ABC):
 
         if only: 
             adx = np.flip(adx) 
-            return np.flip(adx[len(adx)-last 
+            return np.flip(adx.iloc[len(adx)-last 
                                if last != None and last < len(adx) else 0:])
         adx = pd.DataFrame({'adx':adx, '+di':di_p, '-di':di_n})
 
@@ -1636,13 +1642,13 @@ class StrategyClass(ABC):
                 lambda col: col.iloc[len(result.index)-last 
                                      if last != None and 
                                      last < len(result.index) else 0:], axis=0)
-        elif histogram_len > last: histogram = last
+        elif last and histogram_len > last: histogram = last
         
         histogram_len += kc_len
         d = data[source] - ((data['Low'].rolling(window=kc_len).min() + 
                              data['High'].rolling(window=kc_len).max()) / 2 + 
                              np.flip(self.__idc_sma(length=kc_len))) / 2
-        histogram = self.__idc_rlinreg(data=d[len(d.index)-histogram_len 
+        histogram = self.__idc_rlinreg(data=d.loc[len(d.index)-histogram_len 
                                               if len(d.index) > histogram_len 
                                               else 0:], length=kc_len, offset=0)
 
@@ -1750,7 +1756,7 @@ class StrategyClass(ABC):
         data = self.__data if data is None else data
         mom = data[source] - data[source].shift(length)
 
-        return np.flip(mom[len(mom)-last 
+        return np.flip(mom.iloc[len(mom)-last 
                            if last != None and last < len(mom) else 0:])
 
     def idc_ichimoku(self, tenkan_period:int = 9, kijun_period=26, 
@@ -2033,7 +2039,7 @@ class StrategyClass(ABC):
         hyc = abs(data['High'] - close)
         lyc = abs(data['Low'] - close)
         tr = pd.concat([hl, hyc, lyc], axis=1).max(axis=1)
-        return np.flip(tr[len(tr)-last 
+        return np.flip(tr.iloc[len(tr)-last 
                           if last != None and last < len(tr) else 0:])
 
     def act_open(self, type:int = 1, stop_loss:int = np.nan, 

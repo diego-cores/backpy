@@ -7,8 +7,13 @@ Functions:
 ---
 >>> load_bar
 >>> round_r
+>>> not_na
+>>> correct_index
+>>> calc_width
 >>> max_drawdown
->>> candles_plot
+>>> plot_candles
+>>> text_fix
+>>> plot_position
 """
 
 from matplotlib.patches import Rectangle 
@@ -17,6 +22,9 @@ from matplotlib.axes._axes import Axes
 import matplotlib as mpl
 import pandas as pd
 import numpy as np
+
+from . import utils
+from . import main
 
 def load_bar(size:int, step:int) -> None:
     """
@@ -94,13 +102,62 @@ def not_na(x:any, y:any, f:any = max):
     """
     return y if np.isnan(x) else x if np.isnan(y) else f(x, y)
 
+def correct_index(index:pd.Index) -> np.ndarray:
+    """
+    Correct index.
+    ----
+    Returns the correct index.
+     Correct the index by changing it to float.
+
+    Parameter:
+    --
+    >>> index:pd.Index
+
+    index:
+      - data.index.
+    """
+    if not all(isinstance(ix, float) for ix in index):
+        index = mpl.dates.date2num(index)
+        print(utils.text_fix("""
+              The 'index' has been automatically corrected. 
+              To resolve this, use a valid index.
+              """)) if main.alert else None
+    
+    return index
+
+def calc_width(index:pd.Index, alert:bool = False) -> float:
+    """
+    Calc width.
+    ----
+    Returns the width of 'index' if not already calculated.
+
+    Parameters:
+    --
+    >>> index:pd.Index
+    >>> alert:bool = False
+
+    index:
+      - data.index.
+    alert:
+      - If the alert is printed.
+    """
+    if isinstance(main.__data_width, float) and main.__data_width > 0: 
+        return main.__data_width
+        
+    print(utils.text_fix("""
+          The 'data_width' has been automatically corrected. 
+          To resolve this, use a valid width.
+          """)) if main.alert and alert else None
+    
+    return np.median(np.diff(index))
+
 def max_drawdown(values:pd.Series) -> float:
     """
     Maximum drawdown.
     ----
     Returns the maximum drawdown.
 
-    Parameters:
+    Parameter:
     --
     >>> values:pd.Series
     
@@ -162,7 +219,7 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
                axis=1)
 
     # Drawing vertical lines.
-    ax.vlines(data.index, data['Low'], data['High'], color=color)
+    ax.vlines(data.index, data['Low'], data['High'], color=color, alpha=alpha)
 
     # Bar drawing.
     ax.bar(data.index, abs(data['Close']-data['Open']), width,
@@ -265,9 +322,10 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
         # Drawing of the 'TakeProfit' shape.
         if not np.isnan(row['TakeProfit']) and all: 
             take = Rectangle(xy=(row['Date'], row['Close']), 
-                          width= (width_exit(row) 
-                                  if np.isnan(row['PositionDate']) 
-                                  else row['PositionDate']-row['Date']), 
+                          width=(width_exit(row) 
+                                if ('PositionDate' not in row.index or 
+                                    np.isnan(row['PositionDate'])) 
+                                else row['PositionDate']-row['Date']), 
                           height=row['TakeProfit']-row['Close'], 
                           facecolor=color_take, edgecolor=color_take)
             
@@ -278,7 +336,8 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
         if not np.isnan(row['StopLoss']) and all: 
             stop = Rectangle(xy=(row['Date'], row['Close']), 
                           width=(width_exit(row) 
-                                  if np.isnan(row['PositionDate']) 
+                                if ('PositionDate' not in row.index or 
+                                    np.isnan(row['PositionDate'])) 
                                 else row['PositionDate']-row['Date']), 
                           height=row['StopLoss']-row['Close'], 
                           facecolor=color_stop, edgecolor=color_stop)
@@ -287,32 +346,35 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
             ax.add_patch(stop)
 
         # Draw route of the operation.
-        if operation_route and all:
-            cl = ('green' if (row['Close'] < row['PositionClose'] and 
-                              row['Type'] == 1) or 
-                              (row['Close'] > row['PositionClose'] and 
-                              row['Type'] == 0) else 'red')
+        if 'PositionDate' in row.index and not np.isnan(row['PositionDate']):
+            if operation_route and all:
+                cl = ('green' if (row['Close'] < row['PositionClose'] and 
+                                  row['Type'] == 1) or 
+                                  (row['Close'] > row['PositionClose'] and 
+                                  row['Type'] == 0) else 'red')
 
-            route  = Rectangle(xy=(row['Date'], row['Close']), 
-                            width=row['PositionDate']-row['Date'], 
-                            height=row['PositionClose']-row['Close'], 
-                            facecolor=cl, edgecolor=cl)
+                route  = Rectangle(xy=(row['Date'], row['Close']), 
+                                width=row['PositionDate']-row['Date'], 
+                                height=row['PositionClose']-row['Close'], 
+                                facecolor=cl, edgecolor=cl)
             
-            route.set_alpha(alpha)
-            ax.add_patch(route)
+                route.set_alpha(alpha)
+                ax.add_patch(route)
       
-        # Arrow drawing.
-        ax.arrow(row['Date'], row['Close'], 
-                row['PositionDate']-row['Date'], 
-                row['PositionClose']-row['Close'], 
-                linestyle='dashed', color='grey',
-                alpha=alpha_arrow)
+            # Arrow drawing.
+            ax.arrow(row['Date'], row['Close'], 
+                    row['PositionDate']-row['Date'], 
+                    row['PositionClose']-row['Close'], 
+                    linestyle='-', color='grey', alpha=alpha_arrow, 
+                    width=abs(row['PositionClose']-row['Close'])*0.00001)
 
     trades.apply(draw, axis=1)
 
     # Drawing of the closing marker of the operation.
-    ax.scatter(trades['PositionDate'], trades['PositionClose'], 
-              c=color_close, s=30, marker='x', alpha=alpha_arrow)
+    if ('PositionDate' in trades.columns and 
+        'PositionClose' in trades.columns):
+        ax.scatter(trades['PositionDate'], trades['PositionClose'], 
+                  c=color_close, s=30, marker='x', alpha=alpha_arrow)
 
     # Drawing of the position type marker.
     ax.scatter(trades['Date'], 
