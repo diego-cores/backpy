@@ -181,7 +181,8 @@ def max_drawdown(values:pd.Series) -> float:
 
 def plot_candles(ax:Axes, data:pd.DataFrame, 
                  width:float = 1, color_up:str = 'g', 
-                 color_down:str = 'r', alpha:float = 1) -> None:
+                 color_down:str = 'r', color_n:str = 'k',
+                 alpha:float = 1) -> None:
     """
     Candles draw.
     ----
@@ -194,6 +195,7 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     >>> width:float = 1
     >>> color_up:str = 'g'
     >>> color_down:str = 'r'
+    >>> color_n:str = 'b'
     >>> alpha:float = 1
     
     ax:
@@ -210,19 +212,24 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     
     color_down:
       - Candle color when price goes down.
+
+    color_n:
+      - Candle color when the price does not move.
     
     aplha:
       - Opacity.
     """
     color = data.apply(
-               lambda x: color_up if x['Close'] >= x['Open'] else color_down, 
+               lambda x: (color_n if x['Close'] == x['Open'] else
+                   color_up if x['Close'] >= x['Open'] else color_down), 
                axis=1)
 
     # Drawing vertical lines.
     ax.vlines(data.index, data['Low'], data['High'], color=color, alpha=alpha)
 
     # Bar drawing.
-    ax.bar(data.index, abs(data['Close']-data['Open']), width,
+    hgh = abs(data['Close']-data['Open'])
+    ax.bar(data.index, hgh.where(hgh > 0, data['Close'].diff().mean()), width,
            bottom=data.apply(lambda x: min(x['Open'], x['Close']), axis=1), 
            color=color, alpha=alpha)
 

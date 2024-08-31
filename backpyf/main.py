@@ -373,8 +373,9 @@ def plot(log:bool = False, progress:bool = True,
     if progress: 
         utils.load_bar(size=4, step=2)
 
-    ax2.fill_between(__data.index, __data['Volume'], step='mid')
-    ax2.set_ylim(None, __data['Volume'].max()*1.5)
+    if __data['Volume'].max() > 0:
+      ax2.fill_between(__data.index, __data['Volume'], step='mid')
+      ax2.set_ylim(None, __data['Volume'].max()*1.5)
 
     if position and position.lower() != 'none' and not __trades.empty:
         utils.plot_position(__trades, ax1, 
@@ -386,7 +387,8 @@ def plot(log:bool = False, progress:bool = True,
         utils.load_bar(size=4, step=3)
 
     date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
-    ax1.xaxis.set_major_formatter(date_format); fig.autofmt_xdate()
+    ax1.xaxis.set_major_formatter(date_format)
+    fig.autofmt_xdate()
 
     ix_date = mpl.dates.num2date(__data.index)
 
