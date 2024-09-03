@@ -389,7 +389,7 @@ class StrategyClass(ABC):
         Info:
         --
         '__trades_ac' columns, the same columns you can 
-        access with prev_trades_cl.
+        access with 'prev_trades_cl'.
 
         Date:
           The step date where trade began.
@@ -2040,7 +2040,7 @@ class StrategyClass(ABC):
         return np.flip(tr.iloc[len(tr)-last 
                           if last != None and last < len(tr) else 0:])
 
-    def act_open(self, type:int = 1, stop_loss:int = np.nan, 
+    def act_open(self, type:bool = 1, stop_loss:int = np.nan, 
                  take_profit:int = np.nan, amount:int = np.nan) -> None:
         """
         Open action.
@@ -2054,21 +2054,22 @@ class StrategyClass(ABC):
 
         Parameters:
         --
-        >>> type:int = 1
+        >>> type:bool = 1
         >>> stop_loss:int = np.nan
         >>> take_profit:int = np.nan
         >>> amount:int = np.nan
         
         type:
           - 0 is a sell position, 1 is a buy position.
+          - Other values that Python evaluates to booleans are supported.
 
         stop_loss:
           - The price where the stop loss will go, 
-           if it is left at np.nan the position is opened without stop loss.
+           if it is left at np.nan or None the position is opened without stop loss.
 
         take_profit:
           - The price where the take profit will go, 
-           if it is left at np.nan the position is opened without take profit.
+           if it is left at np.nan or None the position is opened without take profit.
 
         amount:
           - The amount of imaginary points with which 
@@ -2076,7 +2077,7 @@ class StrategyClass(ABC):
 
         Info:
         --
-        '__trade' columns, the same columns you can access with prev_trades.
+        '__trade' columns, the same columns you can access with 'prev_trades'.
 
         Date:
           The step date where trade began.
@@ -2103,13 +2104,19 @@ class StrategyClass(ABC):
         Type:
           Type of trade.
         """
-        # Check if type is 1 or 0.
+        # Convert to boolean.
+        type = int(bool(type))
+
+        # Check if 'stop_loss' or 'take_profit' is None.
+        stop_loss = stop_loss or np.nan
+        take_profit = take_profit or np.nan
+
+        # Check exceptions.
         if not type in {1,0}: 
             raise exception.ActionError("'type' only 1 or 0.")
-        # Check exceptions.
-        if amount <= 0: 
+        elif amount <= 0: 
             raise exception.ActionError("'amount' can only be greater than 0.")
-        if ((type and (self.__data["Close"].iloc[-1] <= stop_loss or 
+        elif ((type and (self.__data["Close"].iloc[-1] <= stop_loss or 
                        self.__data["Close"].iloc[-1] >= take_profit)) or 
             (not type and (self.__data["Close"].iloc[-1] >= stop_loss or 
                            self.__data["Close"].iloc[-1] <= take_profit))): 

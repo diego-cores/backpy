@@ -194,7 +194,7 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
 
     if statistics: stats_icon(prnt=True)
 
-def run(strategy_class:'strategy.StrategyClass' = any, 
+def run(cls:'strategy.StrategyClass' = any, 
         initial_funds:int = 10000, commission:float = 0, 
         prnt:bool = True, progress:bool = True, fast_mode:bool = False) -> str:
     """
@@ -204,14 +204,14 @@ def run(strategy_class:'strategy.StrategyClass' = any,
 
     Parameters:
     --
-    >>> strategy_class:'strategy.StrategyClass' = any
+    >>> cls:'strategy.StrategyClass' = any
     >>> initial_funds:int = 10000
     >>> commission:int = 0
     >>> prnt:bool = True
     >>> progress:bool = True
     >>> fast_mode:bool = False
     
-    strategy_class:
+    cls:
       - A class that is inherited from StrategyClass
        where you create your strategy in the next function.
 
@@ -259,12 +259,18 @@ def run(strategy_class:'strategy.StrategyClass' = any,
         raise exception.RunError("'initial_funds' cannot be less than 0.")
     elif commission < 0: 
         raise exception.RunError("'commission' cannot be less than 0.")
+    elif not issubclass(cls, strategy.StrategyClass):
+        raise exception.RunError(
+            f"'{cls.__name__}' is not a subclass of 'strategy.StrategyClass'")
+    elif cls.__abstractmethods__:
+        raise exception.RunError(
+            "The implementation of the 'next' abstract method is missing.")
     # Corrections.
     __data.index = utils.correct_index(__data.index)
     __data_width = utils.calc_width(__data.index, True)
 
     _init_funds = initial_funds
-    instance = strategy_class(commission=commission, init_funds=initial_funds)
+    instance = cls(commission=commission, init_funds=initial_funds)
     t = time()
     
     if fast_mode:
@@ -599,8 +605,8 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
     Average ratio: {utils.round_r(
         (abs(__trades['Close']-__trades['TakeProfit']) / 
             abs(__trades['Close']-__trades['StopLoss'])).mean() 
-        if not __trades['TakeProfit'].isnull().all() and 
-        not __trades['StopLoss'].isnull().all() else 0, 2)}
+        if not __trades['TakeProfit'].apply(lambda x: x is None or x <= 0).all() and 
+        not __trades['StopLoss'].apply(lambda x: x is None or x <= 0).all() else 0, 2)}
 
     Profit: {utils.round_r(__trades['Profit'].sum(),2)}
     Profit fact: {
