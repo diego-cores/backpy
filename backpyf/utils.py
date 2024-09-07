@@ -1,19 +1,22 @@
 """
-Utils.
-----
-Different useful functions for the operation of main code.
+Utils Module.
+
+Contains various utility functions for the operation of the main code.
 
 Functions:
----
->>> load_bar
->>> round_r
->>> not_na
->>> correct_index
->>> calc_width
->>> max_drawdown
->>> plot_candles
->>> text_fix
->>> plot_position
+    load_bar: Function to print a loading bar.
+    round_r: Function to round a number to a specified number of significant 
+        digits to the right of the decimal point.
+    not_na: Function to apply a specified function to two values if neither is 
+        `np.nan`, or return the non-`np.nan` value, or `np.nan` if both are 
+        `np.nan`.
+    correct_index: Function to correct index by converting it to float.
+    calc_width: Function to calulate the width of 'index' 
+        if it has not been calculated already.
+    max_drawdown: Function to return the maximum drawdown from the given data.
+    text_fix: Function to fix or adjust text.
+    plot_candles: Function to plot candles on a given `Axes`.
+    plot_position: Function to plot a trading position.
 """
 
 from matplotlib.patches import Rectangle 
@@ -29,20 +32,14 @@ from . import main
 def load_bar(size:int, step:int) -> None:
     """
     Loading bar.
-    ----
-    Print the loading bar.
 
-    Parameters:
-    --
-    >>> size:int
-    >>> step:int
-    
-    size:
-      - Number of steps.
-    
-    step:
-      - step.
+    Prints a loading bar.
+
+    Args:
+        size (int): Number of steps in the loading bar.
+        step (int): Current step in the loading process.
     """
+
     per = str(int(step/size*100))
     load = '*'*int(46*step/size) + ' '*(46-int(46*step/size))
 
@@ -54,21 +51,23 @@ def load_bar(size:int, step:int) -> None:
 def round_r(num:float, r:int = 1) -> float:
     """
     Round right.
-    ----
-    Returns the num rounded to have at most 'r' 
-     significant numbers to the right of the '.'.
 
-    Parameters:
-    --
-    >>> num:float
-    >>> r:int = 1
-    
-    num: 
-      - Number.
-    
-    r:
-      - Maximum significant numbers.
+    Rounds `num` to have at most `r` significant digits to the right of the 
+    decimal point. If `num` is `np.nan` or evaluates to `None`, it returns 0.
+
+    Args:
+        num (float): The number to round.
+        r (int, optional): Maximum number of significant digits to the right of 
+            the decimal point. Defaults to 1.
+
+    Returns:
+        float: The rounded number, or 0 if `num` is `np.nan` or evaluates to 
+            `None`.
     """
+
+    if np.isnan(num) or not bool(num):
+        return 0
+
     if int(num) != num:
         num = (round(num) 
                if len(str(num).split('.')[0]) > r 
@@ -76,46 +75,40 @@ def round_r(num:float, r:int = 1) -> float:
 
     return num
 
-def not_na(x:any, y:any, f:any = max):
+def not_na(x:any, y:any, f:callable = max):
     """
     If not np.nan.
-    ----
-    It passes to 'x' and 'y' by the function 'f'
-     if neither of them are in np.nan, otherwise it returns 
-     the value that is not np.nan,
-     if both are np.nan, np.nan is returned.
 
-    Parameters:
-    --
-    >>> x:any
-    >>> y:any
-    >>> f:any = max
-    
-    x:
-      - x value.
-    
-    y:
-      - y value.
-    
-    f:
-      - Function.
+    Applies function `f` to `x` and `y` if neither of them are `np.nan`. If one 
+    of them is `np.nan`, returns the value that is not `np.nan`. If both are 
+    `np.nan`, `np.nan` is returned.
+
+    Args:
+        x (any): The first value.
+        y (any): The second value.
+        f (callable, optional): Function to apply to `x` and `y` if neither is 
+            `np.nan`. Defaults to `max`.
+
+    Returns:
+        any: The result of applying `f` to `x` and `y`, or the non-`np.nan` value, 
+            or `np.nan` if both are `np.nan`.
     """
+
     return y if np.isnan(x) else x if np.isnan(y) else f(x, y)
 
 def correct_index(index:pd.Index) -> np.ndarray:
     """
     Correct index.
-    ----
-    Returns the correct index.
-     Correct the index by changing it to float.
 
-    Parameter:
-    --
-    >>> index:pd.Index
+    Correct `index` by converting it to float
 
-    index:
-      - data.index.
+    Args:
+        index (pd.Index): The `index` of the data to be corrected.
+
+    Returns:
+        np.ndarray: The corrected `index`.
     """
+
     if not all(isinstance(ix, float) for ix in index):
         index = mpl.dates.date2num(index)
         print(utils.text_fix("""
@@ -128,19 +121,18 @@ def correct_index(index:pd.Index) -> np.ndarray:
 def calc_width(index:pd.Index, alert:bool = False) -> float:
     """
     Calc width.
-    ----
-    Returns the width of 'index' if not already calculated.
+    
+    Calculate the width of `index` if it has not been calculated already.
 
-    Parameters:
-    --
-    >>> index:pd.Index
-    >>> alert:bool = False
+    Args:
+        index (pd.Index): The index of the data.
+        alert (bool, optional): If `True`, an alert will be printed. Defaults to 
+            False.
 
-    index:
-      - data.index.
-    alert:
-      - If the alert is printed.
+    Returns:
+        float: The width of `index`.
     """
+
     if isinstance(main.__data_width, float) and main.__data_width > 0: 
         return main.__data_width
         
@@ -154,16 +146,16 @@ def calc_width(index:pd.Index, alert:bool = False) -> float:
 def max_drawdown(values:pd.Series) -> float:
     """
     Maximum drawdown.
-    ----
-    Returns the maximum drawdown.
 
-    Parameter:
-    --
-    >>> values:pd.Series
-    
-    values:
-      - The ordered data.
+    Calculate the maximum drawdown of `values`.
+
+    Args:
+        values (pd.Series): The ordered data to calculate the maximum drawdown.
+
+    Returns:
+        float: The maximum drawdown from the given data.
     """
+
     if values.empty: return 0
     max_drdwn, max_val = 0, values[values.index[0]]
 
@@ -179,46 +171,45 @@ def max_drawdown(values:pd.Series) -> float:
 
     return max_drdwn
 
+def text_fix(text:str, newline_exclude:bool = True) -> str:
+    """
+    Text fix.
+
+    Processes the `text` to remove common leading spaces and to remove line breaks or not. 
+
+    Args:
+        text (str): Text to process.
+        newline_exclude (bool, optional): If True, excludes line breaks. Default is True.
+
+    Returns:
+        str: `text` without the common leading spaces on each line.
+    """
+
+    return ''.join(line.lstrip() + ('\n' if not newline_exclude else '')  
+                        for line in text.split('\n'))
+
 def plot_candles(ax:Axes, data:pd.DataFrame, 
                  width:float = 1, color_up:str = 'g', 
                  color_down:str = 'r', color_n:str = 'k',
                  alpha:float = 1) -> None:
     """
     Candles draw.
-    ----
-    Plot candles on your 'ax'.
 
-    Parameters:
-    --
-    >>> ax:Axes
-    >>> data:pd.DataFrame
-    >>> width:float = 1
-    >>> color_up:str = 'g'
-    >>> color_down:str = 'r'
-    >>> color_n:str = 'b'
-    >>> alpha:float = 1
-    
-    ax:
-      - Axes where it is drawn.
-    
-    data:
-      - Data to draw.
-    
-    width:
-      - Width of each candle.
-    
-    color_up:
-      - Candle color when price rises.
-    
-    color_down:
-      - Candle color when price goes down.
+    Plots candles on the provided `ax`.
 
-    color_n:
-      - Candle color when the price does not move.
-    
-    aplha:
-      - Opacity.
+    Args:
+        ax (Axes): The `Axes` object where the candles will be drawn.
+        data (pd.DataFrame): Data to draw the candles.
+        width (float, optional): Width of each candle. Defaults to 1.
+        color_up (str, optional): Color of the candle when the price rises. 
+            Defaults to 'g'.
+        color_down (str, optional): Color of the candle when the price falls. 
+            Defaults to 'r'.
+        color_n (str, optional): Color of the candle when the price does not move. 
+            Defaults to 'k'.
+        alpha (float, optional): Opacity of the candles. Defaults to 1.
     """
+
     color = data.apply(
                lambda x: (color_n if x['Close'] == x['Open'] else
                    color_up if x['Close'] >= x['Open'] else color_down), 
@@ -235,27 +226,6 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
 
     ax.set_ylim(data['Low'].min()*0.98, data['High'].max()*1.02)
 
-def text_fix(text:str, newline_exclude:bool = True) -> str:
-    """
-    Text fix.
-    ----
-    Returns 'text' without the common leading spaces on each line.
-
-    Parameters:
-    --
-    >>> text:str
-    >>> newline_exclude:bool = True
-
-    text:
-      - Text to process.
-    
-    newline_exclude:
-      - Leave it true if you want it to exclude line breaks.
-    """
-
-    return ''.join(line.lstrip() + ('\n' if not newline_exclude else '')  
-                        for line in text.split('\n'))
-
 def plot_position(trades:pd.DataFrame, ax:Axes, 
                   color_take:str = 'green', color_stop:str = 'red', 
                   color_close:str = 'gold', all:bool = True,
@@ -263,66 +233,29 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
                   operation_route:bool = True, 
                   width_exit:any = lambda x: 9) -> None:
     """
-    Position draw.
-    ----
-    Plot positions on your 'ax'.
+    Position Draw.
 
-    Parameters:
-    --
-    >>> trades:pd.DataFrame
-    >>> ax:Axes
-    >>> color_take:str = 'green'
-    >>> color_stop:str = 'red'
-    >>> color_close:str = 'gold'
-    >>> all:bool = True
-    >>> alpha:float = 1
-    >>> alpha_arrow:float = 1
-    >>> operation_route:bool = True
-    >>> width_exit:any = lambda x: 9
+    Plots positions on your `ax`.
 
-    trades:
-      - Trades data to draw.
-    
-    ax:
-      - Axes where it is drawn.
-    
-    color_take:
-      - Position color when the position is positive.
-    
-    color_stop:
-      - Position color when the position is negative.
-    
-    color_close:
-      - Color of close marker.
+    Args:
+        trades (pd.DataFrame): Trades data to draw.
+        ax (Axes): Axes where it is drawn.
+        color_take (str, optional): Color for positive positions. Default is 'green'.
+        color_stop (str, optional): Color for negative positions. Default is 'red'.
+        color_close (str, optional): Color of the close marker. Default is 'gold'.
+        all (bool, optional): If True, draws all elements. If False, only draws points. Default is True.
+        alpha (float, optional): Opacity of the elements. Default is 1.
+        alpha_arrow (float, optional): Opacity of arrow, type marker, and close marker. Default is 1.
+        operation_route (bool, optional): If True, traces the route of the operation. Default is True.
+        width_exit (any, optional): Function that specifies how many time points the position 
+            extends forward if not closed. Default is a lambda function with a width of 9.
 
-    all:
-      - If 'True', everything will be drawn.
-      - If 'False', only points will be drawn.
-    
-    aplha:
-      - Opacity.
-    
-    alpha_arrow:
-      - Opacity of arrow, type marker, and close marker.
-
-    operation_route:
-      - True or false to trace the route of the operation.
-    
-    width_exit:
-      - How many time points does the position 
-       extend forward if it is not closed.
-      - It has to be a function that takes 'trade'.
-    
     Info:
-    --
-    The arrow and 'x' marker indicates where the position was closed.
-
-    The 'V' and '^' markers indicate the direction of the position.
-    
-    The 'color_take' indicates the place where the take profit is placed and 
-     the 'color_stop' will indicate the place where the stop loss is placed.
-    If there is no 'take profit', 
-     its figure will not be drawn; the same applies to the 'stop loss'.
+        The arrow and 'x' markers indicate where the position was closed.
+        The 'V' and '^' markers indicate the direction of the position.
+        The 'color_take' indicates where the take profit is placed and the 'color_stop'
+        indicates where the stop loss is placed. If there is no take profit, its marker 
+        will not be drawn; the same applies to the stop loss.
     """
 
     def draw(row):

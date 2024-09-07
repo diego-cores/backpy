@@ -1,12 +1,11 @@
 """
-Strategy.
-----
-Here is the main class that has to be inherited in order to 
-create your own strategy.
+Strategy Module.
 
-Class:
----
->>> StrategyClass
+This module contains the main class that must be inherited to create your 
+own strategy.
+
+Classes:
+    StrategyClass: This is the class you have to inherit to create your strategy.
 """
 
 import pandas as pd
@@ -21,126 +20,94 @@ from . import main
 class StrategyClass(ABC):
     """
     StrategyClass.
-    ----
+
     This is the class you have to inherit to create your strategy.
 
-    Example:
-    --
-    >>> class Strategy(backpy.StrategyClass)
+    To use the functions, use the `self` instance. Create your strategy 
+    within the `StrategyClass.next()` structure.
 
-    To use the functions use the self instance.
-    Create your strategy within the StrategyClass.next() structure.
+    Attributes:
+        open: Last 'Open' value from `data`.
+        high: Last 'High' value from `data`.
+        low: Last 'Low' value from `data`.
+        close: Last 'Close' value from `data`.
+        volume: Last 'Volume' value from `data`.
+        date: Last index from `data`.
+        width: Data width from `main.__data_width`.
+        icon: Data icon from `main.__data_icon`.
+        interval: Data interval from `main.__data_interval`.
 
-    Functions:
-    ---
-    Get:
-    >>> get_init_founds
-    >>> get_commission
+    Private Attributes:
+        __init_funds: Initial funds for the strategy.
+        __commission: Commission per trade.
+        __trade: DataFrame for new trades.
+        __trades_ac: DataFrame for open trades.
+        __trades_cl: DataFrame for closed trades.
+        __data: DataFrame containing all data.
 
-    Actions:
-    >>> act_mod
-    >>> act_close
-    >>> act_open
+    Methods:
+        get_init_funds: Returns the initial funds for the strategy.
+        get_commission: Returns the commission per trade.
+        act_mod: Modifies an existing trade.
+        act_close: Closes an existing trade.
+        act_open: Opens a new trade.
+        prev_trades_ac: Retrieves previously opened trades.
+        prev_trades_cl: Retrieves previously closed trades.
+        prev: Recovers all step data.
+        idc_hvolume: Calculates the horizontal volume.
+        idc_ema: Calculates the Exponential Moving Average (EMA) indicator.
+        idc_sma: Calculates the Simple Moving Average (SMA) indicator.
+        idc_wma: Calculates the Weighted Moving Average (WMA) indicator.
+        idc_smma: Calculates the Smoothed Moving Average (SMMA) indicator.
+        idc_sema: Calculates the Smoothed Exponential Moving Average (SEMA) indicator.
+        idc_bb: Calculates the Bollinger Bands indicator (BB).
+        idc_rsi: Calculates the Relative Strength Index (RSI).
+        idc_stochastic: Calculates the Stochastic Oscillator indicator.
+        idc_adx: Calculates the Average Directional Index (ADX).
+        idc_macd: Calculates the Moving Average Convergence Divergence (MACD).
+        idc_sqzmom: Calculates the Squeeze Momentum indicator.
+        idc_mom: Calculates the Momentum indicator (MOM).
+        idc_ichimoku: Calculates the Ichimoku indicator.
+        idc_fibonacci: Calculates Fibonacci retracement levels.
+        idc_atr: Calculates the Average True Range (ATR).
 
-    Hidden:
-    >>> __act_close
+    Private Methods:
+        __act_close: Closes an existing trade.
+        __idc_ema: Calculates the Exponential Moving Average (EMA) indicator.
+        __idc_sma: Calculates the Simple Moving Average (SMA) indicator.
+        __idc_wma: Calculates the Weighted Moving Average (WMA) indicator.
+        __idc_smma: Calculates the Smoothed Moving Average (SMMA) indicator.
+        __idc_sema: Calculates the Smoothed Exponential Moving Average (SEMA) indicator.
+        __idc_bb: Calculates the Bollinger Bands indicator (BB).
+        __idc_rsi: Calculates the Relative Strength Index (RSI).
+        __idc_stochastic: Calculates the Stochastic Oscillator indicator.
+        __idc_adx: Calculates the Average Directional Index (ADX).
+        __idc_macd: Calculates the Moving Average Convergence Divergence (MACD).
+        __idc_sqzmom: Calculates the Squeeze Momentum indicator.
+        __idc_mom: Calculates the Momentum indicator (MOM).
+        __idc_ichimoku: Calculates the Ichimoku indicator.
+        __idc_fibonacci: Calculates Fibonacci retracement levels.
+        __idc_atr: Calculates the Average True Range (ATR).
+        __before: This function is used to run trades and other operations.
+    """
 
-    Prev:
-    >>> prev_trades_ac
-    >>> prev_trades_cl
-    >>> prev
-
-    Indicators:
-    >>> idc_hvolume
-    >>> idc_ema
-    >>> idc_sma
-    >>> idc_wma
-    >>> idc_smma
-    >>> idc_smema
-    >>> idc_bb
-    >>> idc_rsi
-    >>> idc_stochastic
-    >>> idc_adx
-    >>> idc_macd
-    >>> idc_sqzmom
-    >>> idc_mom
-    >>> idc_ichimoku
-    >>> idc_fibonacci
-    >>> idc_atr
-    
-    Hidden:
-    >>> __idc_ema
-    >>> __idc_sma
-    >>> __idc_wma
-    >>> __idc_smma
-    >>> __idc_smema
-    >>> __idc_bb
-    >>> __idc_rsi
-    >>> __idc_stochastic
-    >>> __idc_adx
-    >>> __idc_macd
-    >>> __idc_sqzmom
-    >>> __idc_mom
-    >>> __idc_ichimoku
-    >>> __idc_fibonacci
-    >>> __idc_atr
-    
-    Utils:
-    >>> __idc_rlinreg
-    >>> __idc_trange
-
-    Others:
-    >>> next
-
-    Hidden:
-    >>> __before
-
-    """ 
     def __init__(self, data:pd.DataFrame = pd.DataFrame(), 
                  trades_cl:pd.DataFrame = pd.DataFrame(), 
                  trades_ac:pd.DataFrame = pd.DataFrame(),
                  commission:float = 0, init_funds:int = 0) -> None: 
         """
         __init__
-        ----
-        Builder.
-        
-        Parameters:
-        --
-        >>> data:pd.DataFrame = pd.DataFrame()
-        >>> trades_cl:pd.DataFrame = pd.DataFrame()
-        >>> trades_ac:pd.DataFrame = pd.DataFrame()
-        
-        data:
-          All data from the step and previous ones.
-        trades_cl:
-          Closed trades.
-        trades_ac:
-          Open trades.
-        commission:
-          Commission per trade.
-        
-        Variables:
-        --
-        >>> self.open = data["Open"].iloc[-1]
-        >>> self.high = data["High"].iloc[-1]
-        >>> self.low = data["Low"].iloc[-1]
-        >>> self.close = data["Close"].iloc[-1]
-        >>> self.volume = data["Volume"].iloc[-1]
-        >>> self.date = data.index[-1]
-        >>> self.width = main.__data_width
-        >>> self.icon = main.__data_icon
-        >>> self.interval = main.__data_interval
 
-        Hidden variables:
-        --
-        >>> self.__init_funds = init_funds
-        >>> self.__commission = commission
-        >>> self.__trade = pd.DataFrame() # New trade
-        >>> self.__trades_ac = trades_ac
-        >>> self.__trades_cl = trades_cl
-        >>> self.__data = data
+        Builder for initializing the class.
+
+        Args:
+            data (pd.DataFrame): All data from the step and previous ones.
+            trades_cl (pd.DataFrame): Closed trades.
+            trades_ac (pd.DataFrame): Open trades.
+            commission (float): Commission per trade.
+            init_founds (int): Initial funds for the strategy.
         """
+
         if not type(data) is pd.DataFrame: 
             raise exception.StyClassError('Data is empty.')
 
@@ -170,33 +137,34 @@ class StrategyClass(ABC):
 
     def get_commission(self) -> float:
         """
-        get_commission
-        ----
-        Return hidden variable '__commission'.
+        Get __commission.
+
+        Returns:
+            float: The value of the hidden variable `__commission`.
         """
+
         return self.__commission
     
-    def get_init_founds(self) -> int:
+    def get_init_funds(self) -> int:
         """
-        get_init_founds
-        ----
-        Return hidden variable '__init_funds'.
+        Get __init_funds.
+
+        Returns:
+            float: The value of the hidden variable `__init_funds`.
         """
+
         return self.__init_funds
     
     def __data_updater(self, data:pd.DataFrame) -> None:
         """
         Data updater.
-        ----
-        All data updater.
 
-        Parameters:
-        --
-        >>> data:pd.DataFrame
+        Updates all data with the provided DataFrame.
 
-        data:
-          - All data from the step and previous ones.
+        Args:
+            data (pd.DataFrame): All data from the step and previous ones.
         """
+
         if data.empty:
             raise exception.StyClassError('Data is empty.')
 
@@ -213,16 +181,13 @@ class StrategyClass(ABC):
     def __before(self, data=pd.DataFrame()):
         """
         Before.
-        ----
-        This function is used to run trades and other things.
 
-        Parameters:
-        --
-        >>> data:pd.DataFrame = pd.DataFrame()
+        This function is used to run trades and other operations.
 
-        data:
-          - Data from the current and previous steps.
+        Args:
+            data (pd.DataFrame): Data from the current and previous steps.
         """
+
         if not data.empty:
             self.__data_updater(data=data)
         
@@ -257,25 +222,30 @@ class StrategyClass(ABC):
     def prev(self, label:str = None, last:int = None) -> pd.DataFrame:
         """
         Prev.
-        ----
-        Returns the data from the previous steps.
-        Columns: 'Open', 'High', 'Low', 'Close', 'Volume', 'index'.
 
-        Parameters:
-        --
-        >>> label:str = None
-        >>> last:int = None
+        This function returns the values of `data`.
         
-        label:
-          - Data column, if you leave it at None all columns will be returned.
-          - If you leave 'index', all indexes will be returned, 
-           ignoring the last parameter.
+        Args:
+            label (str, optional): Data column to return. If None, all columns 
+                are returned. If 'index', only indexes are returned, ignoring 
+                the `last` parameter.
+            last (int, optional): Number of steps to return starting from the 
+                present. If None, data for all times is returned.
 
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Info:
+            `data` columns.
+
+            - Open: The 'Open' price of the step.
+            - High: The 'High' price of the step.
+            - Low: The 'Low' price of the step.
+            - Close: The 'Close' price of the step.
+            - Volume: The 'Volume' of the step.
+            - index: The 'Index' of the step.
+
+        Returns:
+            pd.Dataframe: Dataframe containing the data of previous steps.
         """
+
         __data = self.__data
         if label == 'index': 
             return __data.index
@@ -295,59 +265,38 @@ class StrategyClass(ABC):
     def prev_trades_cl(self, label:str = None, last:int = None) -> pd.DataFrame:
         """
         Prev of trades closed.
-        ----
-        Returns the data from the closed trades.
-        Columns: 'Date', 'Close', 'Low', 'High', 
-        'StopLoss', 'TakeProfit', 'PositionClose', 
-        'PositionDate', 'Amount', 'ProfitPer', 'Profit', 'Type', 'index'.
 
-        Parameters:
-        --
-        >>> label:str = None
-        >>> last:int = None
-        
-        label:
-          - Data column, if you leave it at None all columns will be returned.
-          - If you leave 'index', all indexes will be returned, 
-           ignoring the last parameter.
-          
-        last:
-          - How much data starting from the present backwards
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        This function returns the values of `trades_cl`.
+
+        Args:
+            label (str, optional): Data column to return. If None, all columns 
+                are returned. If 'index', only indexes are returned, ignoring 
+                the `last` parameter.
+            last (int, optional): Number of steps to return starting from the 
+                present. If None, data for all times is returned.
 
         Info:
-        --
-        '__trades_cl' columns, the same columns you can 
-        access with prev_trades_ac.
+            `__trades_cl` columns, the same columns you can access with 
+            `prev_trades_ac`.
 
-        Date:
-          The step date where trade began.
-        Close:
-          The 'Close' of the step when the trade began.
-        Low:
-          The 'Low' of the step when the trade began.
-        High:
-          The 'High' of the step when the trade began.
-        StopLoss:
-          The stoploss position.
-        TakeProfit:
-          The takeprofit position.
-        PositionClose:
-          The 'Close' of the step in which the trade ends.
-        PositionDate:
-          The step date where trade ends.
-        Amount:
-          Chosen amount.
-        ProfitPer:
-          Trade profit in percentage.
-        Profit:
-          Trade profit based on amount.
-        Type:
-          Type of trade.
+            - Date: The step date when the trade began.
+            - Close: The 'Close' price at the trade's start.
+            - Low: The lowest price at the trade's start.
+            - High: The highest price at the trade's start.
+            - StopLoss: The stop loss position.
+            - TakeProfit: The take profit position.
+            - PositionClose: The 'Close' price when the trade ends.
+            - PositionDate: The step date when the trade ends.
+            - Amount: Chosen amount.
+            - ProfitPer: Trade profit in percentage.
+            - Profit: Trade profit based on amount.
+            - Type: Type of trade.
+
+        Returns:
+            pd.Dataframe: Dataframe containing the data from closed trades.
         """
-        __trades_cl = self.__trades_cl
 
+        __trades_cl = self.__trades_cl
         if label == 'index': return __trades_cl.index
         elif __trades_cl.empty: return pd.DataFrame()
         elif label != None: __trades_cl = __trades_cl[label]
@@ -366,56 +315,33 @@ class StrategyClass(ABC):
     def prev_trades_ac(self, label:str = None, last:int = None) -> pd.DataFrame:
         """
         Prev of trades active.
-        ----
-        Returns the data from the active trades.
-        Columns: 'Date', 'Close', 'Low', 'High', 
-        'StopLoss', 'TakeProfit', 'Amount', 'Type', 'index'.
 
-        Parameters:
-        --
-        >>> label:str = None
-        >>> last:int = None
-        
-        label:
-          - Data column, if you leave it at None all columns will be returned.
-          - If you leave 'index', all indexes will be returned, 
-           ignoring the 'last' parameter.
-          
-        last:
-          - How much data starting from the present backwards
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        This function returns the values of `trades_ac`.
+
+        Args:
+            label (str, optional): Data column to return. If None, all columns 
+                are returned. If 'index', only indexes are returned, ignoring 
+                the `last` parameter.
+            last (int, optional): Number of steps to return starting from the 
+                present. If None, data for all times is returned.
 
         Info:
-        --
-        '__trades_ac' columns, the same columns you can 
-        access with 'prev_trades_cl'.
+            `__trades_ac` columns, the same columns you can access with 
+            `prev_trades_cl`.
 
-        Date:
-          The step date where trade began.
-        Close:
-          The 'Close' of the step when the trade began.
-        Low:
-          The 'Low' of the step when the trade began.
-        High:
-          The 'High' of the step when the trade began.
-        StopLoss:
-          The stoploss position.
-        TakeProfit:
-          The takeprofit position.
-        PositionClose:
-          The 'Close' of the step in which the trade ends.
-        PositionDate:
-          The step date where trade ends.
-        Amount:
-          Chosen amount.
-        ProfitPer:
-          Trade profit in percentage.
-        Profit:
-          Trade profit based on amount.
-        Type:
-          Type of trade.
+            - Date: The step date when the trade began.
+            - Close: The 'Close' price at the trade's start.
+            - Low: The lowest price at the trade's start.
+            - High: The highest price at the trade's start.
+            - StopLoss: The stop loss position.
+            - TakeProfit: The take profit position.
+            - Amount: Chosen amount.
+            - Type: Type of trade.
+        
+        Returns:
+            pd.Dataframe: Dataframe containing the data from active trades.
         """
+
         __trades_ac = self.__trades_ac
         if label == 'index': return __trades_ac.index
         elif __trades_ac.empty: return pd.DataFrame()
@@ -436,34 +362,29 @@ class StrategyClass(ABC):
                     bar:int = 10) -> pd.DataFrame:
         """
         Indicator horizontal volume.
-        ----
-        Return a pd.DataFrame with the position of each bar and the volume.
-        Columns: 'Pos','H_Volume'.
+
+        This function calculates the horizontal volume.
 
         Alert:
-        --
-        Using this function with the 'end' parameter set to None
-        is not recommended and may cause slowness in the program.
+            Using this function with the `end` parameter set to None is not 
+            recommended and may cause slowness in the program.
 
-        Parameters:
-        --
-        >>> start:int = 0
-        >>> end:int = None
-        >>> bar:int = 10
-        
-        start:
-          - Counting from now onwards, when you want the data capture to start 
-           to return the horizontal volume.
-          
-        end:
-          - Counting from now onwards, when you want the data capture to end to 
-           return the horizontal volume.
-          - If left at None the data will be captured from the beginning.
-        
-        bar:
-          - The number of horizontal volume bars 
-          (the more bars, the more precise).
+        Args:
+            start (int, optional): Starting point from now to capture the 
+                horizontal volume. Defaults to 0.
+            end (int, optional): Ending point from now to capture the horizontal 
+                volume. If None, data is captured from the beginning.
+            bar (int): Number of horizontal volume bars. More bars increase 
+                precision.
+
+        Returns:
+            pd.Dataframe: DataFrame with the position of each bar and the volume.
+
+        Columns:
+            - 'Pos'
+            - 'H_Volume'
         """
+
         if start < 0: 
             raise ValueError("'start' must be greater or equal than 0.")
         elif end != None:
@@ -501,30 +422,23 @@ class StrategyClass(ABC):
         return result
         
     def idc_ema(self, length:int = any, 
-                source:str = 'Close', last:int = None) -> np.array:
+                source:str = 'Close', last:int = None) -> np.ndarray:
         """
-        Exponential moving average.
-        ----
-        Returns an pd.Series with all the steps of an ema 
-        with the length you indicate.
+        Exponential moving average (EMA).
 
-        Parameters:
-        --
-        >>> length:int = any
-        >>> source:str = 'Close'
-        >>> last:int = None
-        
-        length:
-          - Ema length.
-        
-        source:
-          - Allowed parameters: ('Close','Open','High','Low','Volume').
-        
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        This function calculates the EMA.
+
+        Args:
+            length (int): The length of the EMA.
+            source (str): The data source for the EMA calculation. Allowed 
+                parameters are 'Close', 'Open', 'High', 'Low', and 'Volume'.
+            last (int, optional): Number of data points to return from the 
+                present backwards. If None, returns data for all time.
+
+        Returns:
+            np.ndarray: Array containing the EMA values for each step.
         """
+
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
@@ -546,50 +460,47 @@ class StrategyClass(ABC):
         return self.__idc_ema(length=length, source=source, last=last)
 
     def __idc_ema(self, data:pd.Series = None, length:int = any, 
-                  source:str = 'Close', last:int = None) -> np.array:
+                  source:str = 'Close', last:int = None) -> np.ndarray:
         """
-        Exponential moving average.
-        ----
-        Returns an pd.Series with all the steps of an ema 
-        with the length you indicate.
+        Exponential Moving Average (EMA).
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the EMA.
 
-        Data parameter:
-        --
-        You can do the calculation of ema with your own data.
+        Note:
+            This function is hidden to prevent user modification and does not 
+            include exception handling.
+
+        Args:
+            data (pd.Series): Series of data to perform the EMA calculation.
+
+        Returns:
+            np.ndarray: Array containing the EMA values for each step.
         """
+
         data = self.__data[source] if data is None else data
         ema = data.ewm(span=length, adjust=False).mean()
     
         return np.flip(ema.iloc[len(ema)-last 
                            if last != None and last < len(ema) else 0:])
     
-    def idc_sma(self, length:int = any, source:str = 'Close', last:int = None):
+    def idc_sma(self, length:int = any, 
+                source:str = 'Close', last:int = None) -> np.ndarray:
         """
-        Simple moving average.
-        ----
-        Return an pd.Series with all the steps of an sma 
-        with the length you indicate.
+        Simple Moving Average (SMA).
 
-        Parameters:
-        --
-        >>> length:int = any
-        >>> source:str = 'Close'
-        >>> last:int = None
+        This function calculates the SMA.
+
+        Args:
+            length (int): Length of the SMA.
+            source (str): Data source for SMA calculation. Allowed values are 
+                          ('Close', 'Open', 'High', 'Low', 'Volume').
+            last (int, optional): Number of data points to return from the present 
+                                  backwards. If None, returns data for all times.
         
-        length:
-          - Sma length.
-
-        source:
-          - Allowed parameters: ('Close','Open','High','Low','Volume').
-
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Returns:
+            np.ndarray: Array containing the SMA values for each step.
         """
+
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
@@ -611,20 +522,23 @@ class StrategyClass(ABC):
         return self.__idc_sma(length=length, source=source, last=last)
     
     def __idc_sma(self, data:pd.Series = None, length:int = any, 
-                  source:str = 'Close', last:int = None):
+                  source:str = 'Close', last:int = None) -> np.ndarray:
         """
-        Simple moving average.
-        ----
-        Return an pd.Series with all the steps of an sma 
-        with the length you indicate.
+        Simple Moving Average (SMA).
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the SMA.
 
-        Data parameter:
-        --
-        You can do the calculation of sma with your own data.
+        Note:
+            This function is hidden to prevent user modification and does not 
+            include exception handling.
+
+        Args:
+            data (pd.Series): Series of data to perform the SMA calculation.
+
+        Returns:
+            np.ndarray: Array containing the SMA values for each step.
         """
+
         data = self.__data[source] if data is None else data
         sma = data.rolling(window=length).mean()
 
@@ -632,34 +546,24 @@ class StrategyClass(ABC):
                            if last != None and last < len(sma) else 0:])
     
     def idc_wma(self, length:int = any, source:str = 'Close', 
-                invt_weight:bool = False, last:int = None):
+                invt_weight:bool = False, last:int = None) -> np.ndarray:
         """
-        Linear weighted moving average.
-        ----
-        Return an pd.Series with all the steps of an wma 
-        with the length you indicate.
+        Weighted Moving Average (WMA).
 
-        Parameters:
-        --
-        >>> length:int = any
-        >>> source:str = 'Close'
-        >>> invt_weight:bool = False
-        >>> last:int = None
-        
-        length:
-          - Wma length.
+        This function calculates the WMA.
 
-        source:
-          - Allowed parameters: ('Close','Open','High','Low','Volume').
+        Args:
+            length (int): Length of the WMA.
+            source (str): Data source for WMA calculation. Allowed values are 
+                          ('Close', 'Open', 'High', 'Low', 'Volume').
+            invt_weight (bool): If True, the distribution of weights is reversed.
+            last (int, optional): Number of data points to return from the present 
+                                  backwards. If None, returns data for all times.
 
-        invt_weight:
-          - The distribution of weights is done the other way around.
-
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Returns:
+            np.ndarray: Array containing the WMA values for each step.
         """
+
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
@@ -683,20 +587,23 @@ class StrategyClass(ABC):
     
     def __idc_wma(self, data:pd.Series = None, 
                   length:int = any, source:str = 'Close', 
-                  invt_weight:bool = False, last:int = None):
+                  invt_weight:bool = False, last:int = None) -> np.ndarray:
         """
-        Linear weighted moving average.
-        ----
-        Return an pd.Series with all the steps of an wma 
-        with the length you indicate.
+        Weighted Moving Average (WMA).
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the WMA.
 
-        Data parameter:
-        --
-        You can do the calculation of wma with your own data.
+        Note:
+            This function is hidden to prevent user modification and does not 
+            include exception handling.
+
+        Args:
+            data (pd.Series): Series of data to perform the WMA calculation.
+
+        Returns:
+            np.ndarray: Array containing the WMA values for each step.
         """
+
         data = self.__data[source] if data is None else data
 
         weight = (np.arange(1, length+1)[::-1] 
@@ -708,30 +615,23 @@ class StrategyClass(ABC):
                            if last != None and last < len(wma) else 0:])
     
     def idc_smma(self, length:int = any, 
-                 source:str = 'Close', last:int = None):
+                 source:str = 'Close', last:int = None) -> np.ndarray:
         """
-        Smoothed moving average.
-        ---- 
-        Returns an pd.Series with all the steps of an smma 
-        with the length you indicate.
+        Smoothed Moving Average (SMMA).
 
-        Parameters:
-        --
-        >>> length:int = any
-        >>> source:str = 'Close'
-        >>> last:int = None
-        
-        length:
-          - Smma length.
+        This function calculates the SMMA.
 
-        source:
-          - Allowed parameters: ('Close','Open','High','Low','Volume').
+        Args:
+            length (int): Length of the SMMA.
+            source (str): Data source for SMMA calculation. Allowed values are 
+                          ('Close', 'Open', 'High', 'Low', 'Volume').
+            last (int, optional): Number of data points to return from the present 
+                                  backwards. If None, returns data for all times.
 
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Returns:
+            np.ndarray: Array containing the SMMA values for each step.
         """
+
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
@@ -753,69 +653,58 @@ class StrategyClass(ABC):
         return self.__idc_smma(length=length, source=source, last=last)
     
     def __idc_smma(self, data:pd.Series = None, length:int = any, 
-                   source:str = 'Close', last:int = None):
+                   source:str = 'Close', last:int = None) -> np.ndarray:
         """
-        Smoothed moving average.
-        ---- 
-        Returns an pd.Series with all the steps of an smma 
-        with the length you indicate.
+        Smoothed Moving Average (SMMA).
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the SMMA.
 
-        Data parameter:
-        --
-        You can do the calculation of ema with your own data.
+        Note:
+            This function is hidden to prevent user modification and does not 
+            include exception handling.
+
+        Args:
+            data (pd.Series): Series of data to perform the SMMA calculation.
+
+        Returns:
+            np.ndarray: Array containing the SMMA values for each step.
         """
+
         data = self.__data[source] if data is None else data
         smma = data.ewm(alpha=1/length, adjust=False).mean()
 
         return np.flip(smma.iloc[len(smma)-last 
                             if last != None and last < len(smma) else 0:])
     
-    def idc_smema(self, length:int = 9, method:str = 'sma', 
+    def idc_sema(self, length:int = 9, method:str = 'sma', 
                   smooth:int = 5, only:bool = False, 
-                  source:str = 'Close', last:int = None):
+                  source:str = 'Close', last:int = None) -> pd.DataFrame:
         """
-        Smoothed exponential moving average.
-        ---- 
-        Return an pd.DataFrame with the value of ema and 
-        the smoothed ema for each step.
-        Columns: 'ema','smoothed'.
+        Smoothed Exponential Moving Average (SEMA).
 
-        Parameters:
-        --
-        >>> length:int = any
-        >>> method:str = 'sma'
-        >>> smooth:int = 5
-        >>> only:bool = False
-        >>> source:str = 'Close'
-        >>> last:int = None
+        This function calculates the SEMA.
+
+        Args:
+            length (int): Length of the EMA.
+            method (str): Smoothing method. Choices include various smoothing 
+                          methods.
+            smooth (int): Length of the smoothing method.
+            only (bool): If True, returns only a Series with the values of the 
+                        'method'.
+            source (str): Data source for EMA calculation. Allowed values are 
+                          ('Close', 'Open', 'High', 'Low', 'Volume').
+            last (int, optional): Number of data points to return from the present 
+                                  backwards. If None, returns data for all times.
+
+        Returns:
+            pd.DataFrame: DataFrame containing the 'ema' and 'smoothed' values for 
+                          each step.
         
-        length:
-          - Ema length.
-
-        method:
-          - Smooth method.
-
-        smooth:
-          - 'method' length.
-
-        only:
-          - If left true, only one pd.Series will be returned with 
-           the values ​​of 'method'.
-
-        ma_type:
-          - Ma type.
-
-        source:
-          - Allowed parameters: ('Close','Open','High','Low','Volume').
-
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Columns:
+            - 'ema'
+            - 'smoothed'
         """
+
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
@@ -843,27 +732,34 @@ class StrategyClass(ABC):
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
 
-        # Smema calc.
-        return self.__idc_smema(length=length, method=method, smooth=smooth, 
+        # Sema calc.
+        return self.__idc_sema(length=length, method=method, smooth=smooth, 
                                 only=only, source=source, last=last)
     
-    def __idc_smema(self, data:pd.Series = None, length:int = 9, 
+    def __idc_sema(self, data:pd.Series = None, length:int = 9, 
                     method:str = 'sma', smooth:int = 5, only:bool = False, 
-                    source:str = 'Close', last:int = None):
+                    source:str = 'Close', last:int = None) -> pd.DataFrame:
         """
-        Smoothed exponential moving average.
-        ---- 
-        Return an pd.DataFrame with the value of ema and 
-        the smoothed ema for each step.
-        Columns: 'ema','smoothed'.
+        Smoothed Exponential Moving Average (SEMA).
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the SEMA.
 
-        Data parameter:
-        --
-        You can do the calculation of ema with your own data.\n
+        Note:
+            This function is hidden to prevent user modification and does not 
+            include exception handling.
+
+        Args:
+            data (pd.Series): Series of data to perform the SEMA calculation.
+
+        Returns:
+            pd.DataFrame: DataFrame containing 'ema' and 'smoothed' values for 
+                          each step.
+
+        Columns:
+            - 'ema'
+            - 'smoothed'
         """
+
         data = self.__data[source] if data is None else data
         ema = data.ewm(span=length, adjust=False).mean()
 
@@ -885,40 +781,33 @@ class StrategyClass(ABC):
                                  if last != None and 
                                  last < len(smema.index) else 0:], axis=0)
 
-    def idc_bb(self, length:int = 20, std_dev:float = 2, 
-               ma_type:str = 'sma', source:str = 'Close', last:int = None):
+    def idc_bb(self, length:int = 20, std_dev:float = 2, ma_type:str = 'sma', 
+               source:str = 'Close', last:int = None) -> pd.DataFrame:
         """
-        Bollinger bands.
-        ----
-        Return an pd.DataFrame with the value of the upper band, 
-        the base ma and the position of the lower band for each step.
-        Columns: 'Upper','{ma_type}','Lower'.
+        Bollinger Bands (BB).
 
-        Parameters:
-        --
-        >>> length:int = any
-        >>> std_dev:float = 2
-        >>> ma_type:str = 'sma'
-        >>> source:str = 'Close'
-        >>> last:int = None
-        
-        length:
-          - Window length.
+        This function calculates the BB.
 
-        std_dev:
-          - Standard deviation.
+        Args:
+            length (int): Window length for calculating Bollinger Bands.
+            std_dev (float): Number of standard deviations for the bands.
+            ma_type (str): Type of moving average. For example, 'sma' for simple 
+                          moving average.
+            source (str): Data source for calculation. Allowed values are 
+                          ('Close', 'Open', 'High', 'Low').
+            last (int, optional): Number of data points to return from the present 
+                                  backwards. If None, returns data for all times.
 
-        ma_type:
-          - Ma type.
-
-        source:
-          - Allowed parameters: ('Close','Open','High','Low').
-
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Returns:
+            pd.DataFrame: DataFrame containing 'Upper', '{ma_type}', and 'Lower' 
+                          values for each step.
+                 
+        Columns:
+            - 'Upper'
+            - '{ma_type}'
+            - 'Lower'
         """
+
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
@@ -952,21 +841,30 @@ class StrategyClass(ABC):
     
     def __idc_bb(self, data:pd.Series = None, length:int = 20, 
                  std_dev:float = 2, ma_type:str = 'sma', 
-                 source:str = 'Close', last:int = None):
+                 source:str = 'Close', last:int = None) -> pd.DataFrame:
         """
-        Bollinger bands.
-        ----
-        Return an pd.DataFrame with the value of the upper band, 
-        the base ma and the position of the lower band for each step.
-        Columns: 'Upper','Base','Lower'.
+        Bollinger Bands (BB).
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the BB.
 
-        Data parameter:
-        --
-        You can do the calculation of bb with your own data.
+        Note:
+            This function is hidden to prevent user modification and does not 
+            include exception handling.
+
+        Args:
+            data (pd.Series): Series of data to perform the Bollinger Bands 
+                              calculation.
+
+        Returns:
+            pd.DataFrame: DataFrame containing 'Upper', '{ma_type}', and 'Lower' 
+                          values for each step.
+              
+        Columns:
+            - 'Upper'
+            - '{ma_type}'
+            - 'Lower'
         """
+
         data = self.__data[source] if data is None else data
 
         match ma_type:
@@ -987,47 +885,37 @@ class StrategyClass(ABC):
 
     def idc_rsi(self, length_rsi:int = 14, length:int = 14, 
                 rsi_ma_type:str = 'smma', base_type:str = 'sma', 
-                bb_std_dev:float = 2, source:str = 'Close', last:int = None):
+                bb_std_dev:float = 2, source:str = 'Close', 
+                last:int = None) -> pd.DataFrame:
         """
-        Relative strength index.
-        ----
-        Return an pd.DataFrame with the value of rsi and 
-        'base_type' for each step.
-        Columns: 'rsi',('base_type').
+        Relative Strength Index (RSI).
 
-        Parameters:
-        --
-        >>> length_rsi:int 14
-        >>> length:int = 14
-        >>> rsi_ma_type:str = 'wma'
-        >>> base_type:str = 'sma'
-        >>> bb_std_dev:float = 2
-        >>> source:str = 'Close'
-        >>> last:int = None
-        
-        length_rsi:
-          - Window length of 'rsi_ma_type'.
+        This function calculates the RSI.
 
-        length:
-          - Window length of 'base_type'.
+        Args:
+            length_rsi (int): Window length for the RSI calculation using 
+                              `rsi_ma_type`. Default is 14.
+            length (int): Window length for the moving average applied to RSI. 
+                          Default is 14.
+            rsi_ma_type (str): Type of moving average used for calculating RSI. 
+                              For example, 'wma' for weighted moving average.
+            base_type (str): Type of moving average applied to RSI. For example, 
+                            'sma' for simple moving average.
+            bb_std_dev (float): Standard deviation for Bollinger Bands. Default is 2.
+            source (str): Data source for calculation. Allowed values are 
+                          ('Close', 'Open', 'High', 'Low').
+            last (int, optional): Number of data points to return from the present 
+                                  backwards. If None, returns data for all times.
 
-        rsi_ma_type:
-          - Type of ma used for calculating rsi.
+        Returns:
+            pd.DataFrame: DataFrame containing 'rsi' and '{base_type}' values for 
+                          each step.
 
-        base_type:
-          - Type of ma base used applied to rsi.
-
-        bb_std_dev:
-          - Standard deviation for bb.
-
-        source:
-          - Allowed parameters: ('Close','Open','High','Low').
-
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Columns:
+            - 'rsi'
+            - '{base_type}'
         """
+
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
@@ -1073,21 +961,28 @@ class StrategyClass(ABC):
     def __idc_rsi(self, data:pd.Series = None, length_rsi:int = 14, 
                   length:int = 14, rsi_ma_type:str = 'wma', 
                   base_type:str = 'sma', bb_std_dev:float = 2, 
-                  source:str = 'Close', last:int = None):
+                  source:str = 'Close', last:int = None)  -> pd.DataFrame:
         """
-        Relative strength index.
-        ----
-        Return an pd.DataFrame with the value of rsi and 
-        'base_type' for each step.
-        Columns: 'rsi',('base_type').
+        Relative Strength Index (RSI).
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the RSI.
 
-        Data parameter:
-        --
-        You can do the calculation of rsi with your own data.
+        Note:
+            This function is hidden to prevent user modification and does not 
+            include exception handling.
+
+        Args:
+            data (pd.Series): Series of data to perform the RSI calculation.
+
+        Returns:
+            pd.DataFrame: DataFrame containing 'rsi' and '{base_type}' values for 
+                          each step.
+
+        Columns:
+            - 'rsi'
+            - '{base_type}'
         """
+
         delta = self.__data[source].diff() if data is None else data.diff()
 
         match rsi_ma_type:
@@ -1119,44 +1014,34 @@ class StrategyClass(ABC):
                                  last < len(rsi.index) else 0:], axis=0)
 
     def idc_stochastic(self, length_k:int = 14, smooth_k:int = 1, 
-                       length_d:int = 3, d_type:int = 'sma', 
-                       source:str = 'Close', last:int = None):
+                       length_d:int = 3, d_type:str = 'sma', 
+                       source:str = 'Close', last:int = None) -> pd.DataFrame:
         """
-        Stochastic.
-        ----
-        Return an pd.DataFrame with the value of stochastic and 
-        'd_type' for each step.
-        Columns: 'stoch',('d_type').
+        Stochastic Oscillator.
 
-        Parameters:
-        --
-        >>> length_k:int 14
-        >>> smooth_k:int = 1
-        >>> length_d:int = 3
-        >>> d_type:int = 'sma'
-        >>> source:str = 'Close'
-        >>> last:int = None
+        This function calculates the stochastic oscillator.
+
+        Args:
+            length_k (int): Window length for calculating the stochastic values.
+            smooth_k (int): Smoothing window length for the stochastic values.
+            length_d (int): Window length for the moving average applied to 
+                            the stochastic values.
+            d_type (str): Type of moving average used for the stochastic oscillator. 
+                          For example, 'sma' for simple moving average.
+            source (str): Data source for calculation. Allowed values are 
+                          ('Close', 'Open', 'High', 'Low').
+            last (int, optional): Number of data points to return from the present 
+                                  backwards. If None, returns data for all times.
+
+        Returns:
+            pd.DataFrame: DataFrame containing 'stoch' and '{d_type}' values for each 
+                          step.
         
-        length_k:
-          - Window length to calculate 'stoch'.
-
-        smooth_k:
-          - Window length of 'stoch'.
-
-        length_d:
-          - Window length of 'd_type'.
-
-        d_type:
-          - Type of ma base used applied to stochastic.
-
-        source:
-          - Allowed parameters: ('Close','Open','High','Low').
-
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Columns:
+            - 'stoch'
+            - '{d_type}'
         """
+
         if length_k > 5000 or length_k <= 0: 
             raise ValueError(utils.text_fix("""
                              'length_k' it has to be greater than 0 and 
@@ -1195,21 +1080,28 @@ class StrategyClass(ABC):
 
     def __idc_stochastic(self, data:pd.Series = None, length_k:int = 14, 
                          smooth_k:int = 1, length_d:int = 3, d_type:int = 'sma', 
-                         source:str = 'Close', last:int = None):
+                         source:str = 'Close', last:int = None) -> pd.DataFrame:
         """
-        Stochastic.
-        ----
-        Return an pd.DataFrame with the value of stochastic and 
-        'd_type' for each step.
-        Columns: 'stoch',('d_type').
+        Stochastic Oscillator.
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the stochastic oscillator.
 
-        Data parameter:
-        --
-        You can do the calculation of stochastic with your own data.
+        Note:
+            This function is hidden to prevent user modification and does not 
+            include exception handling.
+
+        Args:
+            data (pd.Series): Series of data to perform the stochastic calculation.
+
+        Returns:
+            pd.DataFrame: DataFrame containing 'stoch' and '{d_type}' values for each 
+                          step.
+
+        Columns:
+            - 'stoch'
+            - '{d_type}'
         """
+
         data = self.__data if data is None else data
 
         low_data = self.__data['Low'].rolling(window=length_k).min()
@@ -1232,36 +1124,29 @@ class StrategyClass(ABC):
                                  last < len(result.index) else 0:], axis=0) 
 
     def idc_adx(self, smooth:int = 14, length_di:int = 14, 
-                only:bool = False, last:int = None):
+                only:bool = False, last:int = None) -> pd.DataFrame:
         """
-        Average directional index.
-        ----
-        Return an pd.Dataframe with the value of adx, +di and
-        -di for each step.
-        Columns: 'adx','+di','-di'.
+        Average Directional Index (ADX).
 
-        Parameters:
-        --
-        >>> smooth:int = 14
-        >>> length_di:int = 14
-        >>> only:bool = False
-        >>> last:int = None
-        
-        smooth:
-          - Smooth length.
+        This function calculates the ADX.
 
-        length_di:
-          - Window length for calculate 'di'.
+        Args:
+            smooth (int): Smoothing length. Default is 14.
+            length_di (int): Window length for calculating +DI and -DI. Default is 14.
+            only (bool): If True, returns only a Series with the ADX values.
+            last (int, optional): Number of data points to return from the present 
+                                  backwards. If None, returns data for all times.
 
-        only:
-          - If left true, only one pd.Series will be returned with 
-           the values ​​of adx.
+        Returns:
+            pd.DataFrame: DataFrame containing 'adx', '+di', and '-di' values for 
+                          each step.
 
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Columns:
+            - 'adx'
+            - '+di'
+            - '-di'
         """
+
         if smooth > 5000 or smooth <= 0: 
             raise ValueError(utils.text_fix("""
                              'smooth' it has to be greater than 0 and 
@@ -1284,21 +1169,30 @@ class StrategyClass(ABC):
                               only=only, last=last)
 
     def __idc_adx(self, data:pd.Series = None, smooth:int = 14, 
-                  length_di:int = 14, only:bool = False, last:int = None):
+                  length_di:int = 14, only:bool = False, 
+                  last:int = None) -> pd.DataFrame:
         """
-        Average directional index.
-        ----
-        Return an pd.Dataframe with the value of adx, +di and 
-        -di for each step.
-        Columns: 'adx','+di','-di'.
+        Average Directional Index (ADX).
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the ADX.
 
-        Data parameter:
-        --
-        You can do the calculation of stochastic with your own data.
+        Note:
+            This function is hidden to prevent user modification and does not 
+            include exception handling.
+
+        Args:
+            data (pd.Series): Series of data to perform the ADX calculation.
+
+        Returns:
+            pd.DataFrame: DataFrame containing 'adx', '+di', and '-di' values for 
+                          each step.
+
+        Columns:
+            - 'adx'
+            - '+di'
+            - '-di'
         """
+
         data = self.__data if data is None else data
 
         atr = self.__idc_atr(length=length_di, smooth='smma')
@@ -1326,55 +1220,34 @@ class StrategyClass(ABC):
 
     def idc_macd(self, short_len:int = 12, long_len:int = 26, 
                  signal_len:int = 9, macd_ma_type:str = 'ema', 
-                 signal_ma_typ:str = 'ema', histogram:bool = True, 
-                 source:str = 'Close', last:int = None):
+                 signal_ma_type:str = 'ema', histogram:bool = True, 
+                 source:str = 'Close', last:int = None) -> pd.DataFrame:
         """
-        Convergence/divergence of the moving average.
-        ----
-        Return an pd.Dataframe with the value of macd and 
-        signal for each step.
-        Columns: 'macd','signal',('histogram' if histogram is True).
+        Calculate the convergence/divergence of the moving average (MACD).
 
-        Parameters:
-        --
-        >>> short_len:int = 12
-        >>> long_len:int = 26
-        >>> signal_len:int = 9
-        >>> macd_ma_type:str = 'ema'
-        >>> signal_ma_typ:str = 'ema'
-        >>> histogram:bool = True
-        >>> source:str = 'Close'
-        >>> last:int = None
-        
-        short_len:
-          - Short ma length.
-          - The short ma is used to calculate macd.
+        This function calculates the MACD.
 
-        long_len:
-          - Long ma length.
-          - The long ma is used to calculate macd.
+        Args:
+            short_len (int): Length of the short moving average used to calculate MACD.
+            long_len (int): Length of the long moving average used to calculate MACD.
+            signal_len (int): Length of the moving average for the MACD signal line.
+            macd_ma_type (str): Type of moving average used to calculate MACD.
+            signal_ma_type (str): Type of moving average used to smooth the MACD.
+            histogram (bool): If True, includes an additional 'histogram' column.
+            source (str): Data source for calculations. Allowed values: 'Close', 
+                'Open', 'High', 'Low'.
+            last (int or None): Number of data points to return starting from the
+                present backward. If None, returns data for all available periods.
 
-        signal_len:
-          - Signal ma length.
-          - The signal ma is the smoothed macd.
+        Returns:
+            pd.DataFrame: A DataFrame with MACD values and the signal line for each step.
 
-        macd_ma_type:
-          - Type of ma to calculate macd.
-
-        signal_ma_typ:
-          - Type of ma to smooth macd.
-
-        histogram:
-          - An extra column will be returned with the histogram.
-
-        source:
-          - Allowed parameters: ('Close','Open','High','Low').
-
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Columns:
+            - 'macd'
+            - 'signal'
+            - 'histogram'      
         """
+
         if short_len > 5000 or short_len <= 0: 
             raise ValueError(utils.text_fix("""
                              'short_len' it has to be greater than 0 and 
@@ -1395,7 +1268,7 @@ class StrategyClass(ABC):
                              'macd_ma_type' only one of these values: 
                              ['ema','sma'].
                              """, newline_exclude=True))
-        elif not signal_ma_typ in ('ema','sma'): 
+        elif not signal_ma_type in ('ema','sma'): 
             raise ValueError(utils.text_fix("""
                              'signal_ma_typ' only one of these values: 
                              ['ema','sma'].
@@ -1415,28 +1288,35 @@ class StrategyClass(ABC):
         # Calc macd.
         return self.__idc_macd(short_len=short_len, long_len=long_len, 
                                signal_len=signal_len, macd_ma_type=macd_ma_type, 
-                               signal_ma_typ=signal_ma_typ, histogram=histogram, 
+                               signal_ma_typ=signal_ma_type, histogram=histogram, 
                                source=source, last=last)
 
     def __idc_macd(self, data:pd.Series = None, short_len:int = 12, 
                    long_len:int = 26, signal_len:int = 9, 
-                   macd_ma_type:str = 'ema', signal_ma_typ:str = 'ema', 
+                   macd_ma_type:str = 'ema', signal_ma_type:str = 'ema', 
                    histogram:bool = True, source:str = 'Close', 
-                   last:int = None):
+                   last:int = None) -> pd.DataFrame:
         """
-        Convergence/divergence of the moving average.
-        ----
-        Return an pd.Dataframe with the value of macd and 
-        signal for each step.
-        Columns: 'macd','signal',('histogram' if histogram is True).
+        Calculate the convergence/divergence of the moving average (MACD).
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the MACD.
 
-        Data parameter:
-        --
-        You can do the calculation of stochastic with your own data.
+        Note:
+            This is a hidden function intended to prevent user modification.
+            It does not include exception handling.
+
+        Args:
+            data (pd.DataFrame): The data used for calculation of MACD.
+
+        Returns:
+            pd.DataFrame: A DataFrame with MACD values and signal line for each step.
+
+        Columns:
+            - 'macd'
+            - 'signal'
+            - 'histogram'  
         """
+
         data = self.__data if data is None else data
 
         match macd_ma_type:
@@ -1445,7 +1325,7 @@ class StrategyClass(ABC):
             case 'sma':
                 macd_ma = self.__idc_sma
 
-        match signal_ma_typ:
+        match signal_ma_type:
             case 'ema':
                 signal_ma = self.__idc_ema
             case 'sma':
@@ -1470,73 +1350,41 @@ class StrategyClass(ABC):
     def idc_sqzmom(self, bb_len:int = 20, bb_mult:float = 1.5, 
                    kc_len:int = 20, kc_mult:float = 1.5, 
                    use_tr:bool = True, histogram_len:int = 50, 
-                   source:str = 'Close', last:int = None):
+                   source:str = 'Close', last:int = None) -> pd.DataFrame:
         """
-        Squeeze momentum.
-        ----
-        This function calculates the Squeeze Momentum, which is inspired by the 
-        Squeeze Momentum Indicator available on TradingView. 
-        While the concept is based on the original indicator,
-        please note that this implementation may not fully replicate the exact 
-        functionality of the original.
-        Credit for the concept of the Squeeze Momentum goes to 
-        its original developer.
-        This function is an adaptation and 
-        may differ from the original version.
-        Please note that this function is intended for use in backtesting 
-        scenarios, where it may utilize real market data or 
-        simulated random data.
-        It should be used for research and educational purposes only, 
-        and should not be considered as financial advice.
+        Calculate Squeeze Momentum (SQZMOM).
 
-        Return:
-        ----
-        Return an pd.Dataframe with the value of sqz and 
-        histogram for each step.
-        Columns: 'sqzmom','histogram'.
+        This function calculates the Squeeze Momentum, inspired by the Squeeze 
+        Momentum Indicator available on TradingView. While the concept is based 
+        on the original indicator, this implementation may not fully replicate its 
+        exact functionality. The concept credit goes to its original developer. 
+        This function is intended for use in backtesting scenarios with real or 
+        simulated data for research and educational purposes only, and should not 
+        be considered financial advice.
 
-        Parameters:
-        --
-        >>> bb_len:int = 20
-        >>> bb_mult:float = 1.5
-        >>> kc_len:int = 20
-        >>> kc_mult:float = 1.5
-        >>> use_tr:bool = True
-        >>> histogram_len:int = 50
-        >>> source:str = 'Close'
-        >>> last:int = None
-        
-        bb_len:
-          - Bollinger band length.
+        Args:
+            bb_len (int): Bollinger band length.
+            bb_mult (float): Bollinger band standard deviation.
+            kc_len (int): Keltner channel length.
+            kc_mult (float): Keltner channel standard deviation.
+            use_tr (bool): If False, ('High' - 'Low') is used instead of the true 
+                range.
+            histogram_len (int): Number of steps from the present backward to calculate
+                the histogram. If 0, the 'histogram' column will not be returned.
+            source (str): Data source for calculations. Allowed values: 'Close', 
+                'Open', 'High', 'Low'.
+            last (int or None): Number of data points to return starting from the
+                present backward. If None, returns data for all available periods.
 
-        bb_mult:
-          - Bollinger band standard deviation.
+        Returns:
+            pd.DataFrame: A DataFrame with Squeeze Momentum values and histogram for 
+                each step.
 
-        kc_len:
-          - Kc length.
-
-        kc_mult:
-          - Kc standard deviation.
-
-        use_tr:
-          - If left false, ('High'-'Low') will be used 
-           instead of the true range.
-
-        histogram_len:
-          - How many steps from the present backward 
-           do you want the histogram to be calculated.
-          - The higher the number, the less efficient.
-          - If you leave it at 0, the 'historiogram' column 
-           will not be returned.
-
-        source:
-          - Allowed parameters: ('Close','Open','High','Low').
-
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Columns:
+            - 'sqzmom'
+            - 'histogram'
         """
+
         if bb_len > 5000 or bb_len <= 0: 
             raise ValueError(utils.text_fix("""
                                             'bb_len' it has to be greater than 
@@ -1584,38 +1432,34 @@ class StrategyClass(ABC):
                      bb_len:int = 20, bb_mult:float = 1.5, 
                      kc_len:int = 20, kc_mult:float = 1.5, 
                      use_tr:bool = True, histogram_len:int = 50, 
-                     source:str = 'Close', last:int = None):
+                     source:str = 'Close', last:int = None) -> pd.DataFrame:
         """
-        Squeeze momentum.
-        ----
-        This function calculates the Squeeze Momentum, which is inspired by the 
-        Squeeze Momentum Indicator available on TradingView. 
-        While the concept is based on the original indicator,
-        please note that this implementation may not fully replicate the exact 
-        functionality of the original.
-        Credit for the concept of the Squeeze Momentum goes to 
-        its original developer.
-        This function is an adaptation and 
-        may differ from the original version.
-        Please note that this function is intended for use in backtesting 
-        scenarios, where it may utilize real market data or 
-        simulated random data.
-        It should be used for research and educational purposes only, 
-        and should not be considered as financial advice.
+        Calculate Squeeze Momentum (SQZMOM).
 
-        Return:
-        ----
-        Return an pd.Dataframe with the value of sqzmom and 
-        histogram for each step.
-        Columns: 'sqzmom','histogram'.
+        This function calculates the Squeeze Momentum, inspired by the Squeeze 
+        Momentum Indicator available on TradingView. While the concept is based 
+        on the original indicator, this implementation may not fully replicate its 
+        exact functionality. The concept credit goes to its original developer. 
+        This function is intended for use in backtesting scenarios with real or 
+        simulated data for research and educational purposes only, and should not 
+        be considered financial advice.
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        Note:
+            This is a hidden function intended to prevent user modification.
+            It does not include exception handling.
 
-        Data parameter:
-        --
-        You can do the calculation of stochastic with your own data.
+        Args:
+            data (pd.DataFrame): The data used for calculating the Squeeze Momentum.
+
+        Returns:
+            pd.DataFrame: A DataFrame with Squeeze Momentum values and histogram for 
+                each step.
+
+        Columns:
+            - 'sqzmom'
+            - 'histogram'
         """
+
         data = self.__data if data is None else data
 
         basis = np.flip(self.__idc_sma(length=bb_len))
@@ -1659,29 +1503,26 @@ class StrategyClass(ABC):
                                  last < len(result.index) else 0:], axis=0) 
 
     def __idc_rlinreg(self, data:pd.Series = None, 
-                      length:int = 5, offset:int = 1):
+                      length:int = 5, offset:int = 1) -> np.array:
         """
-        Rolling linear regression.
-        ----
-        This function is not very efficient. 
-        I recommend that the data does not exceed 50 in length.
-        Return an pd.Series with the value of each linear regression.
-        Calculated linear regression: m * (length - 1 - offset) + b
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        Calculate rolling linear regression values.
 
-        Parameters:
-        --
-        >>> data:pd.Series = None
-        >>> length:int = 5
-        >>> offset:int = 1
-        
-        data:
-          - You can do the calculation of stochastic with your own data.
+        This function calculates the rolling linear regression.
 
-        length:
-          - Length of each window.
+        Note:
+            This function is not very efficient. It is recommended that the length
+            of the data does not exceed 50. This is a hidden function intended to
+            prevent user modification and does not include exception handling.
+
+        Args:
+            data (pd.Series): The data used for linear regression calculations.
+            length (int): Length of each window for the rolling regression.
+            offset (int): Offset used in the regression calculation.
+
+        Returns:
+            np.array: Array with the linear regression values for each window.
         """
+
         data = self.__data if data is None else data
 
         x = np.arange(length)
@@ -1692,30 +1533,24 @@ class StrategyClass(ABC):
 
         return m * (length - 1 - offset) + b
 
-    def idc_mom(self, length:int = 10, source:str = 'Close', last:int = None):
+    def idc_mom(self, length:int = 10, source:str = 'Close', 
+                last:int = None) -> np.array:
         """
-        Momentum.
-        ----
-        Return an pd.Series with all the steps of momentum 
-        with the length you indicate.
+        Calculate momentum values (MOM).
 
-        Parameters:
-        --
-        >>> length:int = 10
-        >>> source:str = 'Close'
-        >>> last:int = None
-        
-        length:
-          - Length to calculate momentum.
+        This function calculates the MOM.
 
-        source:
-          - Allowed parameters: ('Close','Open','High','Low').
+        Args:
+            length (int): Length for calculating momentum.
+            source (str): Data source for momentum calculation. Allowed values:
+                'Close', 'Open', 'High', 'Low'.
+            last (int or None): Number of data points to return starting from the
+                present backward. If None, returns data for all available periods.
 
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Returns:
+            np.array: Array with the momentum values for each step.
         """
+
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 
@@ -1737,20 +1572,24 @@ class StrategyClass(ABC):
         return self.__idc_mom(length=length, source=source, last=last)
 
     def __idc_mom(self, data:pd.Series = None, length:int = 10, 
-                  source:str = 'Close', last:int = None):
+                  source:str = 'Close', last:int = None) -> np.array:
         """
-        Momentum.
-        ----
-        Return an pd.Series with all the steps of momentum 
-        with the length you indicate.
+        Calculate momentum values (MOM).
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the MOM.
 
-        Data parameter:
-        --
-        You can do the calculation of stochastic with your own data.
+        Note:
+            This is a hidden function intended to prevent user modification.
+            It does not include exception handling.
+
+        Args:
+            data (pd.DataFrame): The data used to calculate momentum.
+            length (int): The length of the momentum calculation.
+
+        Returns:
+            np.array: Array with the momentum values for each step.
         """
+
         data = self.__data if data is None else data
         mom = data[source] - data[source].shift(length)
 
@@ -1759,41 +1598,33 @@ class StrategyClass(ABC):
 
     def idc_ichimoku(self, tenkan_period:int = 9, kijun_period=26, 
                      senkou_span_b_period=52, ichimoku_lines:bool = True, 
-                     last:int = None):
+                     last:int = None) -> pd.DataFrame:
         """
-        Ichimoku cloud.
-        ----
-        Return an pd.Dataframe with the value of ichimoku cloud, 
-        tenkan_sen and kijun_sen for each step.
-        Columns: 'senkou_a','senkou_b'.
-        If ichimoku lines is true these columns are added to the dataframe.
-        Added: 'tenkan_sen','kijun_sen'.
+        Calculate Ichimoku cloud values.
 
-        Parameters:
-        --
-        >>> tenkan_period:int = 12
-        >>> kijun_period:int = 26
-        >>> senkou_span_b_period:int = 9
-        >>> ichimoku_lines:str = 'ema'
-        >>> last:int = None
-        
-        tenkan_period:
-          - Window length to calculate tenkan.
+        This function calculates the Ichimoku cloud.
 
-        kijun_period:
-          - Window length to calculate kijun.
+        Args:
+            tenkan_period (int): Window length to calculate the Tenkan-sen line.
+            kijun_period (int): Window length to calculate the Kijun-sen line.
+            senkou_span_b_period (int): Window length to calculate the Senkou Span B.
+            ichimoku_lines (str): If set, adds the columns 'tenkan_sen' and 
+                'kijun_sen' to the DataFrame. Possible values: 'ema', 'sma', etc.
+            last (int or None): Number of data points to return starting from the
+                present backwards. If None, returns data for all available periods.
 
-        senkou_span_b_period:
-          - Window length to calculate senkou span.
+        Returns:
+            pd.DataFrame: A DataFrame with Ichimoku cloud values and optionally
+                'tenkan_sen' and 'kijun_sen' columns if `ichimoku_lines` is True.
 
-        ichimoku_lines:
-          - If ichimoku lines is true these columns are added to the dataframe: 
-           'tenkan_sen','kijun_sen'.
-        last:
-          - How much data starting from the present backwards 
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Columns:
+            - 'senkou_a'
+            - 'senkou_b'
+            - 'tenkan_sen'
+            - 'kijun_sen'
+            - 'ichimoku_lines'
         """
+
         if tenkan_period > 5000 or tenkan_period <= 0: 
             raise ValueError(utils.text_fix("""
                                             'tenkan_period' it has to be 
@@ -1825,24 +1656,34 @@ class StrategyClass(ABC):
 
     def __idc_ichimoku(self, data:pd.Series = None, tenkan_period:int = 9, 
                        kijun_period=26, senkou_span_b_period=52, 
-                       ichimoku_lines:bool = True, last:int = None):
+                       ichimoku_lines:bool = True, 
+                       last:int = None) -> pd.DataFrame:
         """
-        Ichimoku cloud.
-        ----
-        Return an pd.Dataframe with the value of ichimoku cloud, 
-        tenkan_sen and kijun_sen for each step.
-        Columns: 'senkou_a','senkou_b'.
+        Calculate Ichimoku cloud values.
 
-        If ichimoku lines is true these columns are added to the dataframe.
-        Added: 'tenkan_sen','kijun_sen'.
+        This function calculates the Ichimoku cloud.
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        Note:
+            This is a hidden function intended to prevent user modification.
+            It does not include exception handling.
 
-        Data parameter:
-        --
-        You can do the calculation of stochastic with your own data.
+        Args:
+            data (pd.DataFrame): The data used to calculate the Ichimoku cloud values.
+            ichimoku_lines (bool): If True, adds the columns 'tenkan_sen' and
+                'kijun_sen' to the returned DataFrame.
+
+        Returns:
+            pd.DataFrame: A DataFrame with Ichimoku cloud values and optionally
+                'tenkan_sen' and 'kijun_sen' columns if `ichimoku_lines` is True.
+
+        Columns:
+            - 'senkou_a'
+            - 'senkou_b'
+            - 'tenkan_sen'
+            - 'kijun_sen'
+            - 'ichimoku_lines'
         """
+
         data = self.__data if data is None else data
 
         tenkan_sen_val = (data['High'].rolling(window=tenkan_period).max() + 
@@ -1868,44 +1709,36 @@ class StrategyClass(ABC):
                                  last < len(senkou_span.index) else 0:], axis=0)
 
     def idc_fibonacci(self, start:int = None, end:int = 30, 
-                      met:bool = False, source:str = 'Low/High'):
+                      met:bool = False, source:str = 'Low/High') -> pd.DataFrame:
         """
-        Fibonacci retracement.
-        ----
-        Return an pd.DataFrame with the fibonacci levels and values.
-        Columns: 'Level','Value'.
+        Calculate Fibonacci retracement levels.
 
-        Parameters:
-        --
-        >>> start:int = None
-        >>> end:int = 30
-        >>> met:bool = False
-        >>> source:str = 'Low/High'
-        
-        start:
-          - Where do you want level 0 to be.
-          - If 'met' is false 'start' is the number of candles back to 
-           open the fibonacci.
-          - None == 0.
+        This function calculates the Fibonacci retracement levels.
 
-        end:
-          - Where do you want level 1 to be.
-          - If 'met' is false 'end' is the number of candles back to 
-           close the fibonacci.
-          - None == 0.
+        Args:
+            start (int or None): The number of candles back to set level 0. If
+                `met` is False, `start` specifies the number of candles back to
+                open the Fibonacci levels. If None, level 0 is set at the most
+                recent data (equivalent to 0).
+            end (int): The number of candles back to set level 1. If `met` is False,
+                `end` specifies the number of candles back to close the Fibonacci levels.
+                If None, level 1 is set at the most recent data (equivalent to 0).
+            met (bool): If False, `start` and `end` are the number of candles backward
+                from the current position. If True, `start` and `end` are the values
+                from which the Fibonacci levels are calculated.
+            source (str): Data source for the Fibonacci levels. Format: 's/s' where 's'
+                is each source. Supported values: 'Close', 'Open', 'High', 'Low'. If
+                `met` is True, this parameter is ignored.
 
-        met:
-          - If left false, 'start' and 'end' are 
-           the number of candles backwards,
-           otherwise 'start' and 'end' are 
-           the value from which Fibonacci opens.
+        Returns:
+            pd.DataFrame: A DataFrame with Fibonacci levels and their corresponding
+                values.
 
-        source:
-          - Data that is extracted.
-          - Start and end data format: 's/s where 's' is each source.'
-          - Values supported in source: ('Close', 'Open', 'High', 'Low')
-          - If left 'met' in true 'source' does not work.
+        Columns:
+            - 'Level'
+            - 'Value'
         """
+
         if met: return self.__idc_fibonacci(start=start, end=end)
 
         source = source.split('/')
@@ -1929,46 +1762,48 @@ class StrategyClass(ABC):
             end=data_end.iloc[len(data_end)-end-1 
                               if end != None and end < len(data_end) else 0])
 
-    def __idc_fibonacci(self, start:int = 10, end:int = 1):
+    def __idc_fibonacci(self, start:int = 10, end:int = 1) -> pd.DataFrame:
         """
-        Fibonacci retracement.
-        ----
-        Return an pd.DataFrame with the fibonacci levels and values.
-        Columns: 'Level','Value'.
+        Calculate Fibonacci retracement levels.
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the Fibonacci retracement levels.
+
+        Note:
+            This is a hidden function intended to prevent user modification.
+            It does not include exception handling.
+
+        Returns:
+            pd.DataFrame: A DataFrame with Fibonacci levels and their corresponding
+                values.
+
+        Columns:
+            - 'Level'
+            - 'Value'
         """
+
         fibo_levels = np.array([0, 0.236, 0.382, 0.5, 0.618, 
                                 0.786, 1, 1.618, 2.618, 3.618, 4.236])
 
         return pd.DataFrame({'Level':fibo_levels,
                              'Value':(start + (end - start) * fibo_levels)})
 
-    def idc_atr(self, length:int = 14, smooth:str = 'wma', last:int = None):
+    def idc_atr(self, length:int = 14, smooth:str = 'wma', 
+                last:int = None) -> np.ndarray:
         """
-        Average true range.
-        ----
-        Return an pd.Series with the value of 
-        average true range for each step.
+        Calculate the average true range (ATR).
 
-        Parameters:
-        --
-        >>> length:int = 14
-        >>> smooth:str = 'wma'
-        >>> last:int = None
-        
-        length:
-          - Window length to smooth 'atr'.
+        This function calculates the ATR.
 
-        smooth:
-          - Ma used to smooth 'atr'.
+        Args:
+            length (int): Window length used to smooth the average true range (ATR).
+            smooth (str): Type of moving average used to smooth the ATR. 
+            last (int or None): Number of data points to return starting from the 
+                present backward. If None, returns data for all available periods.
 
-        last:
-          - How much data starting from the present backwards
-           do you want to be returned.
-          - If you leave it at None, the data for all times is returned.
+        Returns:
+            np.ndarray: Array with the average true range values for each step.
         """
+
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 
@@ -1988,20 +1823,24 @@ class StrategyClass(ABC):
         # Calc atr.
         return self.__idc_atr(length=length, smooth=smooth, last=last)
     
-    def __idc_atr(self, length:int = 14, smooth:str = 'wma', last:int = None):
+    def __idc_atr(self, length:int = 14, smooth:str = 'wma', 
+                  last:int = None) -> np.ndarray:
         """
-        Average true range.
-        ----
-        Return an pd.Series with the value of 
-        average true range for each step.
+        Calculate the average true range (ATR).
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the ATR.
 
-        Data parameter:
-        --
-        You can do the calculation of stochastic with your own data.
+        Note:
+            This is a hidden function intended to prevent user modification.
+            It does not include exception handling.
+
+        Args:
+            data (pd.DataFrame): The data used to perform the calculation of true range.
+
+        Returns:
+            np.ndarray: Array with the average true range values for each step.
         """
+
         tr = np.flip(self.__idc_trange())
 
         match smooth:
@@ -2015,19 +1854,23 @@ class StrategyClass(ABC):
                 atr = self.__idc_smma(data=tr, length=length, last=last)
         return atr
 
-    def __idc_trange(self, data:pd.Series = None, last:int = None):
+    def __idc_trange(self, data:pd.Series = None, last:int = None) -> np.ndarray:
         """
-        True range.
-        ----
-        Return an pd.Series with the value of true range for each step.
+        Calculate the true range.
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        This function calculates the true range.
 
-        Data parameter:
-        --
-        You can do the calculation of stochastic with your own data.
+        Note:
+            This is a hidden function intended to prevent user modification.
+            It does not include exception handling.
+
+        Args:
+            data (pd.DataFrame): The data used to perform the calculation.
+
+        Returns:
+            np.ndarray: Array with the true range values for each step.
         """
+
         data = self.__data if data is None else data
 
         close = data['Close'].shift(1)
@@ -2043,67 +1886,40 @@ class StrategyClass(ABC):
     def act_open(self, type:bool = 1, stop_loss:int = np.nan, 
                  take_profit:int = np.nan, amount:int = np.nan) -> None:
         """
-        Open action.
-        ----
-        Open an action.
+        Opens an action for trading.
+
+        This function opens a long or short position. 
 
         Warning:
-        --
-        If you leave the stop loss and take profit in np.nan your trade 
-        will be counted as closed and you can't modify it or close it.
+            If you leave your position without 'stop loss' and 'takeprofit', 
+            your trade will be counted as closed, and you can't modify or close it.
 
-        Parameters:
-        --
-        >>> type:bool = 1
-        >>> stop_loss:int = np.nan
-        >>> take_profit:int = np.nan
-        >>> amount:int = np.nan
-        
-        type:
-          - 0 is a sell position, 1 is a buy position.
-          - Other values that Python evaluates to booleans are supported.
-
-        stop_loss:
-          - The price where the stop loss will go, 
-           if it is left at np.nan or None the position is opened without stop loss.
-
-        take_profit:
-          - The price where the take profit will go, 
-           if it is left at np.nan or None the position is opened without take profit.
-
-        amount:
-          - The amount of imaginary points with which 
-           you would enter the position.
+        Args:
+            type (bool): 0 for sell, 1 for buy. Other values Python evaluates 
+                        as booleans are supported.
+            stop_loss (int): Price for stop loss. If np.nan or None, no stop loss 
+                            will be set.
+            take_profit (int): Price for take profit. If np.nan or None, no take 
+                              profit will be set.
+            amount (int): Amount of points for the trade.
 
         Info:
-        --
-        '__trade' columns, the same columns you can access with 'prev_trades'.
+            '__trade' columns, the same columns you can access with 'prev_trades'.
 
-        Date:
-          The step date where trade began.
-        Close:
-          The 'Close' of the step when the trade began.
-        Low:
-          The 'Low' of the step when the trade began.
-        High:
-          The 'High' of the step when the trade began.
-        StopLoss:
-          The stoploss position.
-        TakeProfit:
-          The takeprofit position.
-        PositionClose:
-          The 'Close' of the step in which the trade ends.
-        PositionDate:
-          The step date where trade ends.
-        Amount:
-          Chosen amount.
-        ProfitPer:
-          Trade profit in percentage.
-        Profit:
-          Trade profit based on amount.
-        Type:
-          Type of trade.
+            - Date: Step date where trade began.
+            - Close: Close price at the trade's start.
+            - Low: Lowest price at the trade's start.
+            - High: Highest price at the trade's start.
+            - StopLoss: Position of stop loss.
+            - TakeProfit: Position of take profit.
+            - PositionClose: Close price when trade ends.
+            - PositionDate: Date when trade ends.
+            - Amount: Chosen amount.
+            - ProfitPer: Profit percentage.
+            - Profit: Profit based on amount.
+            - Type: Trade type.
         """
+
         # Convert to boolean.
         type = int(bool(type))
 
@@ -2114,8 +1930,9 @@ class StrategyClass(ABC):
         # Check exceptions.
         if not type in {1,0}: 
             raise exception.ActionError("'type' only 1 or 0.")
-        elif amount <= 0: 
-            raise exception.ActionError("'amount' can only be greater than 0.")
+        elif amount < 0: 
+            raise exception.ActionError(
+                "'amount' can only be a positive number.")
         elif ((type and (self.__data["Close"].iloc[-1] <= stop_loss or 
                        self.__data["Close"].iloc[-1] >= take_profit)) or 
             (not type and (self.__data["Close"].iloc[-1] >= stop_loss or 
@@ -2142,17 +1959,12 @@ class StrategyClass(ABC):
 
     def act_close(self, index:int = 0) -> None:
         """
-        Close action.
-        ----
-        Close an action.
+        Close an active trade.
 
-        Parameters:
-        --
-        >>> index:int = 0
-        
-        index:
-          - The index of the active trade you want to close.
+        Args:
+            index (int): The index of the active trade you want to close.
         """
+
         # Check exceptions.
         if self.__trades_ac.empty: 
             raise exception.ActionError('There are no active trades.')
@@ -2163,13 +1975,13 @@ class StrategyClass(ABC):
 
     def __act_close(self, index:int = 0) -> None:
         """
-        Close action.
-        ----
-        Close an action.
+        Close an active trade.
 
-        Hidden function to prevent user modification.
-        Function without exception handling.
+        Note:
+            This is a hidden function intended to prevent user modification.
+            It does not include exception handling.
         """
+
         # Get trade to close.
         trade = self.__trades_ac.iloc[lambda x: x.index==index].copy()
         self.__trades_ac = self.__trades_ac.drop(trade.index)
@@ -2201,34 +2013,20 @@ class StrategyClass(ABC):
     def act_mod(self, index:int = 0, new_stop:int = None, 
                 new_take:int = None) -> None:
         """
-        Modify action.
-        ----
-        Modify an action.
+        Modify an active trade.
 
-        Alert:
-        --
-        If an invalid stop loss or invalid takeprofit is submitted,
-        the program will return None and will not execute any changes.
+        Alerts:
+            If an invalid stop loss or take profit is provided, the program will
+            return None and will not execute any changes.
 
-        Parameters:
-        --
-        >>> index:int = 0
-        >>> new_stop:int = None
-        >>> new_take:int = None
-        
-        index:
-          - The index of the active trade you want to modify.
-
-        new_stop:
-          - The price where the new stop loss will be,
-           if it is left at None the stop loss will not be modified and 
-           if it is left at np.nan the stop loss will be removed.
-
-        new_take:
-          - The price where the new take profit will be,
-           if it is left at None the take profit will not be modified and 
-           if it is left at np.nan the take profit will be removed.
+        Args:
+            index (int): The index of the active trade to modify.
+            new_stop (int or None): New stop loss price. If None, stop loss will
+                not be modified. If np.nan, stop loss will be removed.
+            new_take (int or None): New take profit price. If None, take profit 
+                will not be modified. If np.nan, take profit will be removed.
         """
+        
         # Check exceptions.
         if self.__trades_ac.empty: 
             raise exception.ActionError('There are no active trades.')

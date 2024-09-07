@@ -1,35 +1,31 @@
 """
-Main.
-----
-Here are all the main functions of BackPy where:
-the graphs are displayed, the strategies are processed and the data is loaded.
+Main Module.
+
+This module contains the main functions of BackPy, including data loading, 
+strategy processing, and graph display.
 
 Functions:
----
->>> load_yfinance_data
->>> load_data
->>> run
->>> plot
->>> plot_strategy
->>> icon_stats
->>> trades_stats
+    load_yfinance_data: Loads data using the yfinance module.
+    load_data: Loads user-provided data.
+    run: Executes the backtesting process.
+    plot: Plots your data, highlighting the trades made.
+    plot_strategy: Plots statistics for your strategy.
+    stats_icon: Shows statistics related to the financial icon.
+    stats_trades: Statistics of the trades.
 
-Hidden functions:
----
->>> _data_info
+Hidden Functions:
+    _data_info: Gathers information about the dataset (hidden function).
 
 Variables:
---
->>> alert = True # Show alerts in the console.
+    alert (bool): If True, shows alerts in the console.
 
-Hidden variables:
---
->>> _init_funds # Initial funds.
->>> __data_interval # Data interval.
->>> __data_width # Data index width.
->>> __data_icon # Data icon.
->>> __data # Saved data.
->>> __trades # Saved trades.
+Hidden Variables:
+    _init_funds: Initial capital for the backtesting (hidden variable).
+    __data_interval: Interval of the loaded data (hidden variable).
+    __data_width: Width of the dataset (hidden variable).
+    __data_icon: Data icon (hidden variable).
+    __data: Loaded dataset (hidden variable).
+    __trades: List of trades executed during backtesting (hidden variable).
 """
 
 import matplotlib.pyplot
@@ -56,64 +52,40 @@ _init_funds = 0
 
 def _data_info() -> tuple:
     """
-    Data info.
-    ----
-    Returns all 'data' variables except '__data'.
+    Data Info.
 
-    Order:
-    --
-    >>> (__data_interval, __data_width, __data_icon)
+    Returns all 'data' variables except `__data`.
+
+    Returns:
+        tuple: A tuple containing the following variables in order:
+            - __data_interval (str): Data interval.
+            - __data_width (int): Data index width.
+            - __data_icon (str): Data icon.
     """
+
     return __data_interval, __data_width, __data_icon
 
 def load_yfinance_data(tickers:str = any, 
                        start:str = None, end:str = None, interval:str = '1d', 
                        statistics:bool = True, progress:bool = True) -> None:
     """
-    Load yfinance data.
-    ----
-    Load all data using the yfinance module.
+    Load yfinance Data.
 
-    Parameters:
-    --
-    >>> tickers:str = any
-    >>> start:str = None
-    >>> end:str = None
-    >>> interval:str = '1d'
-    >>> statistics:bool = True
-    >>> progress:bool = True
-    
-    tickers:
-      - String of ticker to download.
+    Loads data using the yfinance module.
 
-    start:
-      - Download start date string (YYYY-MM-DD).
-      - Default is 99 years ago.
-
-    end:
-      - Download end date string (YYYY-MM-DD).
-      - Default is now.
-
-    interval:
-      - Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo.
-      - Intraday data cannot extend last 60 days.
-
-    statistics:
-      - Print statistics of the downloaded data.
-
-    progress:
-      - Progress bar and timer.
-
-    Example:
-    --
-    >>> load_yfinance_data(
-    >>> tickers="BTC-USD", 
-    >>> start="2023-02-01", 
-    >>> end="2024-02-01", 
-    >>> interval="1d", 
-    >>> statistics=False, 
-    >>> progress=True)
+    Args:
+        tickers (str): String of ticker symbols to download.
+        start (str, optional): Start date for download in YYYY-MM-DD format. 
+                              Default is 99 years ago.
+        end (str, optional): End date for download in YYYY-MM-DD format. 
+                            Default is the current date.
+        interval (str): Data interval. Valid values are '1m', '2m', '5m', '15m', 
+                        '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo', 
+                        '3mo'. Intraday data cannot extend past the last 60 days.
+        statistics (bool): If True, prints statistics of the downloaded data.
+        progress (bool): If True, shows a progress bar and timer.
     """
+
     global __data_interval, __data_width, __data_icon, __data
 
     try:
@@ -147,31 +119,19 @@ def load_yfinance_data(tickers:str = any,
 def load_data(data:pd.DataFrame = any, icon:str = None, 
               interval:str = None, statistics:bool = True) -> None: 
     """
-    Load any data.
-    ----
-    Load data.
+    Load Any Data.
 
-    Parameters:
-    --
-    >>> data:str = any
-    >>> icon:str = None
-    >>> interval:str = None
-    >>> statistics:bool = True
-    
-    data:
-      - pd.Dataframe with all the data.
-      - You need to have these columns:
-       ['Open', 'High', 'Low', 'Close', 'Volume']
+    Loads data into the system.
 
-    icon:
-      - String of the data icon.
-
-    interval:
-      - String of the data interval.
-
-    statistics:
-      - Print statistics of the loaded data.
+    Args:
+        data (pd.DataFrame): DataFrame containing the data to load. Must have the 
+                            following columns: ['Open', 'High', 'Low', 'Close', 
+                            'Volume'].
+        icon (str, optional): String representing the data icon.
+        interval (str, optional): String representing the data interval.
+        statistics (bool): If True, prints statistics of the loaded data.
     """
+
     global __data_interval, __data_width, __data_icon, __data
     # Exceptions.
     if not all(
@@ -194,63 +154,33 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
 
     if statistics: stats_icon(prnt=True)
 
-def run(cls:'strategy.StrategyClass' = any, 
-        initial_funds:int = 10000, commission:float = 0, 
+def run(cls:type = any, initial_funds:int = 10000, commission:float = 0, 
         prnt:bool = True, progress:bool = True, fast_mode:bool = False) -> str:
     """
-    Run your strategy.
-    ----
-    Run your strategy.
+    Run Your Strategy.
 
-    Parameters:
-    --
-    >>> cls:'strategy.StrategyClass' = any
-    >>> initial_funds:int = 10000
-    >>> commission:int = 0
-    >>> prnt:bool = True
-    >>> progress:bool = True
-    >>> fast_mode:bool = False
-    
-    cls:
-      - A class that is inherited from StrategyClass
-       where you create your strategy in the next function.
+    Executes your trading strategy.
 
-    initial_funds:
-      - It is the initial amount you start with.
-      - It is used for some statistics.
+    Args:
+        cls (type): A class inherited from `StrategyClass` where the strategy is 
+                    implemented.
+        initial_funds (int): Initial amount of funds to start with. Used for 
+                            statistics. Default is 10,000.
+        commission (float): Commission percentage for each trade. Used for 
+                            statistics. Default is 0.
+        prnt (bool): If True, prints trade statistics. If False, returns a string 
+                    with the statistics. Default is True.
+        progress (bool): If True, shows a progress bar and timer. Default is True.
+        fast_mode (bool): If True, calculates each trade loop differently, which 
+                          may be faster than normal mode. This mode does not include 
+                          a loading bar. Note: This mode is not yet finished. Default 
+                          is False.
 
-    commission:
-      - It is the commission in percentage for each trade.
-      - It is used for some statistics.
-
-    prnt:
-      - If it is true, trades_stats will be printed.
-      - If it is false, an string will be returned.
-
-    progress:
-      - Progress bar and timer.
-
-    fast_mode:
-      - Each sail's loop is calculated differently and 
-       may be faster than normal mode.
-      - This mode does not contain a loading bar.
-      - Function not yet finished.
-
-    Alert:
-    --
-    If strategy_class.next() prints something to the 
-     console the loading bar will not work as expected.
-
-    Example:
-    --
-    >>> run(
-    >>> strategy_class=FristStrategy,
-    >>> prnt=True,
-    >>> progress=True)
-
-    FristStrategy:
-    >>> class FristStrategy(backpy.StrategyClass)
+    Note:
+        If your function prints to the console, the loading bar may not 
+        function as expected.
     """
+
     global __trades, _init_funds, __data_width
     # Exceptions.
     if __data is None: 
@@ -312,39 +242,29 @@ def run(cls:'strategy.StrategyClass' = any,
 def plot(log:bool = False, progress:bool = True, 
          position:str = 'complex', block:bool = True) -> None:
     """
-    Plot graph with trades.
-    ----
-    Plot your data showing the trades made.
+    Plot Graph with Trades.
 
-    Color guide:
-    - gold: 'x' = Position close.
-    - green, '^' = Buy position.
-    - red, 'v' = Sell position.
+    Plots your data, highlighting the trades made.
 
-    Parameters:
-    --
-    >>> log:bool = Flase
-    >>> progress:bool = True
-    >>> position:str = 'complex'
-    >>> block:bool = True
-    
-    log:
-      - Plot your data using logarithmic scale.
+    Color Guide:
+        - Gold: 'x' = Position close.
+        - Green, '^' = Buy position.
+        - Red, 'v' = Sell position.
 
-    progress:
-      - Progress bar and timer.
-
-    position:
-      - The way the positions were drawn.
-      - Available options: ('complex', 'simple').
-      - If left at None or 'none', positions will not be drawn.
-      - The "complex" option takes a long time to process.
-
-    block:
-      - If 'True', the script execution is paused until
-       all figure windows are closed. 
-      - If 'False', the script continues running after displaying the figures.
+    Args:
+        log (bool, optional): If True, plots data using a logarithmic scale. 
+            Default is False.
+        progress (bool, optional): If True, shows a progress bar and timer. 
+            Default is True.
+        position (str, optional): Specifies how positions are drawn. Options 
+            are 'complex' or 'simple'. If None or 'none', positions will not 
+            be drawn. Default is 'complex'. The "complex" option may take longer 
+            to process.
+        block (bool, optional): If True, pauses script execution until all 
+            figure windows are closed. If False, the script continues running 
+            after displaying the figures. Default is True.
     """
+
     # Exceptions.
     if __data is None or not type(__data) is pd.DataFrame or __data.empty: 
         raise exception.PlotError('Data not loaded.')
@@ -418,33 +338,26 @@ def plot(log:bool = False, progress:bool = True,
 def plot_strategy(log:bool = False, view:str = 'p/w/r/n', 
                   block:bool = True) -> None:
     """
-    Plot strategy statistics.
-    ----
-    Plot your strategy statistics.
+    Plot Strategy Statistics.
 
-    View available graphics:
-    - 'p' = Profit graph.
-    - 'r' = Return graph.
-    - 'w' = Winnings graph.
+    Plots statistics for your strategy.
 
-    Parameters:
-    --
-    >>> log:bool = Flase
-    >>> view:str = 'p/w/r/n'
-    >>> block:bool = True
-    
-    log:
-      - Plot your data using logarithmic scale.
+    Available Graphics:
+        - 'p' = Profit graph.
+        - 'r' = Return graph.
+        - 'w' = Winnings graph.
 
-    view:
-      - Plot your data the way you prefer.
-      - There are 4 shapes available and they all take up the entire window.
-
-    block:
-      - If True, the script execution is paused until
-       all figure windows are closed. 
-      - If False, the script continues running after displaying the figures.
+    Args:
+        log (bool, optional): If True, plots data using a logarithmic scale. 
+            Default is False.
+        view (str, optional): Specifies which graphics to display. Options are 
+            'p', 'r', 'w', or 'n'. Each option occupies the entire window. 
+            Default is 'p/w/r/n'.
+        block (bool, optional): If True, pauses script execution until all figure 
+            windows are closed. If False, the script continues running after 
+            displaying the figures. Default is True.
     """
+
     view = view.lower().strip().split('/')
     view = [i for i in view if i in ('p','w','r')]
 
@@ -507,18 +420,15 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/n',
 
 def stats_icon(prnt:bool = True) -> str:
     """
-    Icon statistics.
-    ----
-    Statistics of the uploaded data.
+    Icon Statistics.
 
-    Parameters:
-    --
-    >>> prnt:bool = True
-    
-    prnt:
-      - If it is true, statistics will be printed.
-      - If it is false, an string will be returned.
+    Displays statistics of the uploaded data.
+
+    Args:
+        prnt (bool, optional): If True, prints the statistics. If False, returns
+            the statistics as a string. Default is True.
     """
+
     # Exceptions.
     if __data is None: raise exception.StatsError('Data not loaded.')
 
@@ -554,39 +464,28 @@ def stats_icon(prnt:bool = True) -> str:
 
 def stats_trades(data:bool = False, prnt:bool = True) -> str:
     """
-    Trades statistics.
-    ----
+    Trades Statistics.
+
     Statistics of the results.
 
-    Parameters:
-    --
-    >>> prnt:bool = True
-    
-    prnt: 
-      - If it is true, statistics will be printed.
-      - If it is false, an string will be returned.
+    Args:
+        data (bool, optional): If True, `stats_icon` is also returned.
+        prnt (bool, optional): If True, prints the statistics. If False, returns 
+            the statistics as a string. Default is True.
 
     Info:
-    --
-    Trades: 
-      The number of operations performed.
-    Return:
-      The total percentage earned.
-    Average return:
-      The average percentage earned.
-    Average ratio:
-      The average ratio.
-    Profit:
-      The total amount earned.
-    Profit fact:
-      The profit factor is calculated by dividing total profits by total losses.
-    Max drawdown:
-      The biggest drawdown the 'profit' has ever had.
-    Long exposure:
-      What percentage of traders are long.
-    Winnings:
-      Percentage of operations won.
+        - Trades: The number of operations performed.
+        - Return: The total percentage earned.
+        - Average return: The average percentage earned.
+        - Average ratio: The average ratio.
+        - Profit: The total amount earned.
+        - Profit fact: The profit factor is calculated by dividing total profits by total 
+                losses.
+        - Max drawdown: The biggest drawdown the 'profit' has ever had.
+        - Long exposure: What percentage of traders are long.
+        - Winnings: Percentage of operations won.
     """
+
     # Exceptions.
     if __trades.empty: 
         raise exception.StatsError('Trades not loaded.')
