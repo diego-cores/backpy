@@ -323,7 +323,7 @@ def var_historical(data:list, confidence_level:int = 95) -> float:
     """
     return np.sort(data)[int((100 - confidence_level) / 100 * len(data))]
 
-def var_parametric(data:list, z_alpha:float = 1.645) -> float:
+def var_parametric(data:list, z_alpha:float = -1.645) -> float:
     """
     Var parametric.
 
