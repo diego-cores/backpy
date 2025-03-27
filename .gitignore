@@ -2,4 +2,4 @@ backpyf/__pycache__/
 .vscode/
 .vtest/
 yfinance_cache
-test.py
+test

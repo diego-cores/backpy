@@ -6,6 +6,9 @@ own strategy.
 
 Classes:
     StrategyClass: This is the class you have to inherit to create your strategy.
+
+Hidden Functions:
+    _data_info: Gathers information about the dataset (hidden function).
 """
 
 import pandas as pd
@@ -13,9 +16,24 @@ import numpy as np
 
 from abc import ABC, abstractmethod
 
+from . import _commons as _cm
+from . import flexdata as flx
 from . import exception
 from . import utils
-from . import main
+
+def _data_info() -> tuple:
+    """
+    Data Info.
+
+    Returns all 'data' variables except `__data`.
+
+    Returns:
+        tuple: A tuple containing the following variables in order:
+            - __data_interval (str): Data interval.
+            - __data_icon (str): Data icon.
+            - __data_width (int): Data index width.
+    """
+    return _cm.__data_interval, _cm.__data_icon, _cm.__data_width
 
 class StrategyClass(ABC):
     """
@@ -39,6 +57,7 @@ class StrategyClass(ABC):
 
     Private Attributes:
         __init_funds: Initial funds for the strategy.
+        __spread_pct: Closing and opening spread.
         __commission: Commission per trade.
         __trade: DataFrame for new trades.
         __trades_ac: DataFrame for open trades.
@@ -94,18 +113,20 @@ class StrategyClass(ABC):
     def __init__(self, data:pd.DataFrame = pd.DataFrame(), 
                  trades_cl:pd.DataFrame = pd.DataFrame(), 
                  trades_ac:pd.DataFrame = pd.DataFrame(),
-                 commission:float = 0, init_funds:int = 0) -> None: 
+                 spread_pct :float = 0, commission:float = 0, 
+                 init_funds:int = 0) -> None: 
         """
         __init__
 
         Builder for initializing the class.
 
         Args:
-            data (pd.DataFrame): All data from the step and previous ones.
-            trades_cl (pd.DataFrame): Closed trades.
-            trades_ac (pd.DataFrame): Open trades.
-            commission (float): Commission per trade.
-            init_founds (int): Initial funds for the strategy.
+            data (pd.DataFrame, optional): All data from the step and previous ones.
+            trades_cl (pd.DataFrame, optional): Closed trades.
+            trades_ac (pd.DataFrame, optional): Open trades.
+            spread_pct (float, optional): Spread per trade.
+            commission (float, optional): Commission per trade.
+            init_founds (int, optional): Initial funds for the strategy.
         """
 
         if not type(data) is pd.DataFrame: 
@@ -122,9 +143,10 @@ class StrategyClass(ABC):
 
         if not data.empty:
             self.__data_updater(data=data)
+        
+        self.interval, self.icon, self.width = _data_info()
 
-        self.interval, self.width, self.icon = main._data_info()
-
+        self.__spread_pct  = spread_pct
         self.__commission = commission
         self.__init_funds = init_funds
 
@@ -190,8 +212,6 @@ class StrategyClass(ABC):
 
         if not data.empty:
             self.__data_updater(data=data)
-        
-        self.next()
 
         # Check if a trade needs to be closed.
         self.__trades_ac.apply(lambda row: self.__act_close(index=row.name) 
@@ -201,12 +221,17 @@ class StrategyClass(ABC):
                             or (row['Type'] and 
                             (self.__data["High"].iloc[-1] >= row['TakeProfit'] 
                             or self.__data["Low"].iloc[-1] <= row['StopLoss'])) 
-                            else None, axis=1) 
+                            else None, axis=1)
+        
+        self.next()
 
         # Concat new trade.
-        if (not self.__trade.empty and 
+        if (
+            _cm.extract_without and
+            not self.__trade.empty and 
             np.isnan(self.__trade['StopLoss'].iloc[0]) and 
-            np.isnan(self.__trade['TakeProfit'].iloc[0])):
+            np.isnan(self.__trade['TakeProfit'].iloc[0])
+            ):
 
             self.__trades_cl = pd.concat([self.__trades_cl, self.__trade], 
                                          ignore_index=True)
@@ -219,7 +244,7 @@ class StrategyClass(ABC):
 
         return self.__trades_ac, self.__trades_cl
 
-    def prev(self, label:str = None, last:int = None) -> pd.DataFrame:
+    def prev(self, label:str = None, last:int = None) -> flx.DataWrapper:
         """
         Prev.
 
@@ -243,12 +268,12 @@ class StrategyClass(ABC):
             - index: The 'Index' of the step.
 
         Returns:
-            pd.Dataframe: Dataframe containing the data of previous steps.
+            DataWrapper: DataWrapper containing the data of previous steps.
         """
 
         __data = self.__data
         if label == 'index': 
-            return __data.index
+            return flx.DataWrapper(__data.index)
         elif label != None:
             __data = __data[label]
 
@@ -259,10 +284,11 @@ class StrategyClass(ABC):
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
         
-        return __data.iloc[len(__data)-last 
-                           if last != None and last < len(__data) else 0:]
+        return flx.DataWrapper(
+            __data.iloc[len(__data)-last 
+                        if last != None and last < len(__data) else 0:])
     
-    def prev_trades_cl(self, label:str = None, last:int = None) -> pd.DataFrame:
+    def prev_trades_cl(self, label:str = None, last:int = None) -> flx.DataWrapper:
         """
         Prev of trades closed.
 
@@ -280,12 +306,15 @@ class StrategyClass(ABC):
             `prev_trades_ac`.
 
             - Date: The step date when the trade began.
-            - Close: The 'Close' price at the trade's start.
+            - Close: The close price at the trade's start.
+            - Open: The open price at the trade's start.
             - Low: The lowest price at the trade's start.
             - High: The highest price at the trade's start.
             - StopLoss: The stop loss position.
             - TakeProfit: The take profit position.
-            - PositionClose: The 'Close' price when the trade ends.
+            - PositionOpen: The 'Close' price at the trade's start.
+            - PositionClose: Price at which the position was closed
+            - PositionCloseNoSpread: Price at which the position was closed without spread
             - PositionDate: The step date when the trade ends.
             - Amount: Chosen amount.
             - ProfitPer: Trade profit in percentage.
@@ -293,12 +322,12 @@ class StrategyClass(ABC):
             - Type: Type of trade.
 
         Returns:
-            pd.Dataframe: Dataframe containing the data from closed trades.
+            DataWrapper: DataWrapper containing the data from closed trades.
         """
 
         __trades_cl = self.__trades_cl
-        if label == 'index': return __trades_cl.index
-        elif __trades_cl.empty: return pd.DataFrame()
+        if label == 'index': return flx.DataWrapper(__trades_cl.index)
+        elif __trades_cl.empty: return flx.DataWrapper()
         elif label != None: __trades_cl = __trades_cl[label]
 
         if (last != None and 
@@ -308,11 +337,11 @@ class StrategyClass(ABC):
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
 
-        return __trades_cl.iloc[len(__trades_cl)-last 
-                                if last != None and 
-                                last < len(__trades_cl) else 0:] 
+        return flx.DataWrapper(
+            __trades_cl.iloc[len(__trades_cl)-last 
+                                if last != None and last < len(__trades_cl) else 0:])
     
-    def prev_trades_ac(self, label:str = None, last:int = None) -> pd.DataFrame:
+    def prev_trades_ac(self, label:str = None, last:int = None) -> flx.DataWrapper:
         """
         Prev of trades active.
 
@@ -330,21 +359,23 @@ class StrategyClass(ABC):
             `prev_trades_cl`.
 
             - Date: The step date when the trade began.
-            - Close: The 'Close' price at the trade's start.
+            - Close: The close price at the trade's start.
+            - Open: The open price at the trade's start.
             - Low: The lowest price at the trade's start.
             - High: The highest price at the trade's start.
+            - PositionOpen: The 'Close' price at the trade's start.
             - StopLoss: The stop loss position.
             - TakeProfit: The take profit position.
             - Amount: Chosen amount.
             - Type: Type of trade.
         
         Returns:
-            pd.Dataframe: Dataframe containing the data from active trades.
+            DataWrapper: DataWrapper containing the data from active trades.
         """
 
         __trades_ac = self.__trades_ac
-        if label == 'index': return __trades_ac.index
-        elif __trades_ac.empty: return pd.DataFrame()
+        if label == 'index': return flx.DataWrapper(__trades_ac.index)
+        elif __trades_ac.empty: return flx.DataWrapper()
         elif label != None: __trades_ac = __trades_ac[label]
 
         if (last != None and 
@@ -354,12 +385,12 @@ class StrategyClass(ABC):
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
 
-        return __trades_ac.iloc[len(__trades_ac)-last 
-                                if last != None and 
-                                last < len(__trades_ac) else 0:]
+        return flx.DataWrapper(
+             __trades_ac.iloc[len(__trades_ac)-last 
+                                if last != None and last < len(__trades_ac) else 0:])
     
     def idc_hvolume(self, start:int = 0, end:int = None, 
-                    bar:int = 10) -> pd.DataFrame:
+                    bar:int = 10) -> flx.DataWrapper:
         """
         Indicator horizontal volume.
 
@@ -378,7 +409,7 @@ class StrategyClass(ABC):
                 precision.
 
         Returns:
-            pd.Dataframe: DataFrame with the position of each bar and the volume.
+            DataWrapper: DataWrapper with the position of each bar and the volume.
 
         Columns:
             - 'Pos'
@@ -405,7 +436,7 @@ class StrategyClass(ABC):
             return pd.DataFrame({"H_Volume":data_range["Volume"].sum()}, 
                                 index=[1])
 
-        bar_list = np.array([0]*bar, dtype=np.int64)
+        bar_list = np.array([0]*bar, dtype=np.int64) 
         result = pd.DataFrame({"Pos":(data_range["High"].max() - 
                                       data_range["Low"].min())/(bar-1) * 
                                       range(bar) + data_range["Low"].min(),
@@ -417,12 +448,14 @@ class StrategyClass(ABC):
                 np.argmin(
                     np.abs(np.subtract(result["Pos"].values, row["High"])))+1
                 ] += int(row["Volume"])
-        data_range.apply(vol_calc, axis=1); result["H_Volume"] += bar_list
 
-        return result
+        data_range.apply(vol_calc, axis=1)
+        result["H_Volume"] += bar_list
+
+        return flx.DataWrapper(result)
         
     def idc_ema(self, length:int = any, 
-                source:str = 'Close', last:int = None) -> np.ndarray:
+                source:str = 'Close', last:int = None) -> flx.DataWrapper:
         """
         Exponential moving average (EMA).
 
@@ -436,7 +469,7 @@ class StrategyClass(ABC):
                 present backwards. If None, returns data for all time.
 
         Returns:
-            np.ndarray: Array containing the EMA values for each step.
+            DataWrapper: DataWrapper containing the EMA values for each step.
         """
 
         if length > 5000 or length <= 0: 
@@ -457,7 +490,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Ema calc.
-        return self.__idc_ema(length=length, source=source, last=last)
+        return flx.DataWrapper(self.__idc_ema(length=length, source=source, last=last))
 
     def __idc_ema(self, data:pd.Series = None, length:int = any, 
                   source:str = 'Close', last:int = None) -> np.ndarray:
@@ -479,12 +512,12 @@ class StrategyClass(ABC):
 
         data = self.__data[source] if data is None else data
         ema = data.ewm(span=length, adjust=False).mean()
-    
-        return np.flip(ema.iloc[len(ema)-last 
-                           if last != None and last < len(ema) else 0:])
+
+        return ema.iloc[len(ema)-last 
+                        if last != None and last < len(ema) else 0:]
     
     def idc_sma(self, length:int = any, 
-                source:str = 'Close', last:int = None) -> np.ndarray:
+                source:str = 'Close', last:int = None) -> flx.DataWrapper:
         """
         Simple Moving Average (SMA).
 
@@ -498,7 +531,7 @@ class StrategyClass(ABC):
                                   backwards. If None, returns data for all times.
         
         Returns:
-            np.ndarray: Array containing the SMA values for each step.
+            DataWrapper: DataWrapper containing the SMA values for each step.
         """
 
         if length > 5000 or length <= 0: 
@@ -519,7 +552,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Sma calc.
-        return self.__idc_sma(length=length, source=source, last=last)
+        return flx.DataWrapper(self.__idc_sma(length=length, source=source, last=last))
     
     def __idc_sma(self, data:pd.Series = None, length:int = any, 
                   source:str = 'Close', last:int = None) -> np.ndarray:
@@ -542,11 +575,11 @@ class StrategyClass(ABC):
         data = self.__data[source] if data is None else data
         sma = data.rolling(window=length).mean()
 
-        return np.flip(sma.iloc[len(sma)-last 
-                           if last != None and last < len(sma) else 0:])
+        return sma.iloc[len(sma)-last 
+                        if last != None and last < len(sma) else 0:]
     
     def idc_wma(self, length:int = any, source:str = 'Close', 
-                invt_weight:bool = False, last:int = None) -> np.ndarray:
+                invt_weight:bool = False, last:int = None) -> flx.DataWrapper:
         """
         Weighted Moving Average (WMA).
 
@@ -561,7 +594,7 @@ class StrategyClass(ABC):
                                   backwards. If None, returns data for all times.
 
         Returns:
-            np.ndarray: Array containing the WMA values for each step.
+            DataWrapper: DataWrapper containing the WMA values for each step.
         """
 
         if length > 5000 or length <= 0: 
@@ -582,8 +615,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Wma calc.
-        return self.__idc_wma(length=length, source=source, 
-                              invt_weight=invt_weight, last=last)
+        return flx.DataWrapper(self.__idc_wma(length=length, source=source, 
+                              invt_weight=invt_weight, last=last))
     
     def __idc_wma(self, data:pd.Series = None, 
                   length:int = any, source:str = 'Close', 
@@ -611,11 +644,11 @@ class StrategyClass(ABC):
         wma = data.rolling(window=length).apply(
             lambda x: (x*weight).sum() / weight.sum(), raw=True)
 
-        return np.flip(wma.iloc[len(wma)-last 
-                           if last != None and last < len(wma) else 0:])
+        return wma.iloc[len(wma)-last 
+                        if last != None and last < len(wma) else 0:]
     
     def idc_smma(self, length:int = any, 
-                 source:str = 'Close', last:int = None) -> np.ndarray:
+                 source:str = 'Close', last:int = None) -> flx.DataWrapper:
         """
         Smoothed Moving Average (SMMA).
 
@@ -629,7 +662,7 @@ class StrategyClass(ABC):
                                   backwards. If None, returns data for all times.
 
         Returns:
-            np.ndarray: Array containing the SMMA values for each step.
+            DataWrapper: DataWrapper containing the SMMA values for each step.
         """
 
         if length > 5000 or length <= 0: 
@@ -650,7 +683,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Smma calc.
-        return self.__idc_smma(length=length, source=source, last=last)
+        return flx.DataWrapper(self.__idc_smma(length=length, source=source, last=last))
     
     def __idc_smma(self, data:pd.Series = None, length:int = any, 
                    source:str = 'Close', last:int = None) -> np.ndarray:
@@ -671,14 +704,16 @@ class StrategyClass(ABC):
         """
 
         data = self.__data[source] if data is None else data
-        smma = data.ewm(alpha=1/length, adjust=False).mean()
 
-        return np.flip(smma.iloc[len(smma)-last 
-                            if last != None and last < len(smma) else 0:])
+        smma = data.ewm(alpha=1/length, adjust=False).mean()
+        smma.shift(1)
+
+        return smma.iloc[len(smma)-last 
+                        if last != None and last < len(smma) else 0:]
     
     def idc_sema(self, length:int = 9, method:str = 'sma', 
                   smooth:int = 5, only:bool = False, 
-                  source:str = 'Close', last:int = None) -> pd.DataFrame:
+                  source:str = 'Close', last:int = None) -> flx.DataWrapper:
         """
         Smoothed Exponential Moving Average (SEMA).
 
@@ -697,8 +732,8 @@ class StrategyClass(ABC):
                                   backwards. If None, returns data for all times.
 
         Returns:
-            pd.DataFrame: DataFrame containing the 'ema' and 'smoothed' values for 
-                          each step.
+            flx.DataWrapper: DataWrapper containing the 'ema' and 'smoothed' values for 
+                              each step.
         
         Columns:
             - 'ema'
@@ -733,8 +768,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Sema calc.
-        return self.__idc_sema(length=length, method=method, smooth=smooth, 
-                                only=only, source=source, last=last)
+        return flx.DataWrapper(self.__idc_sema(length=length, method=method, smooth=smooth, 
+                                only=only, source=source, last=last))
     
     def __idc_sema(self, data:pd.Series = None, length:int = 9, 
                     method:str = 'sma', smooth:int = 5, only:bool = False, 
@@ -782,7 +817,7 @@ class StrategyClass(ABC):
                                  last < len(smema.index) else 0:], axis=0)
 
     def idc_bb(self, length:int = 20, std_dev:float = 2, ma_type:str = 'sma', 
-               source:str = 'Close', last:int = None) -> pd.DataFrame:
+               source:str = 'Close', last:int = None) -> flx.DataWrapper:
         """
         Bollinger Bands (BB).
 
@@ -799,7 +834,7 @@ class StrategyClass(ABC):
                                   backwards. If None, returns data for all times.
 
         Returns:
-            pd.DataFrame: DataFrame containing 'Upper', '{ma_type}', and 'Lower' 
+            DataWrapper: DataWrapper containing 'Upper', '{ma_type}', and 'Lower' 
                           values for each step.
                  
         Columns:
@@ -836,8 +871,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Bb calc.
-        return self.__idc_bb(length=length, std_dev=std_dev, 
-                             ma_type=ma_type, source=source, last=last)
+        return flx.DataWrapper(self.__idc_bb(length=length, std_dev=std_dev, 
+                                ma_type=ma_type, source=source, last=last))
     
     def __idc_bb(self, data:pd.Series = None, length:int = 20, 
                  std_dev:float = 2, ma_type:str = 'sma', 
@@ -872,7 +907,6 @@ class StrategyClass(ABC):
             case 'ema': ma = self.__idc_ema(data=data, length=length)
             case 'wma': ma = self.__idc_wma(data=data, length=length)
             case 'smma': ma = self.__idc_smma(data=data, length=length)
-        ma = np.flip(ma)
         std_ = (std_dev * data.rolling(window=length).std())
         bb = pd.DataFrame({'Upper':ma + std_,
                            ma_type:ma,
@@ -886,7 +920,7 @@ class StrategyClass(ABC):
     def idc_rsi(self, length_rsi:int = 14, length:int = 14, 
                 rsi_ma_type:str = 'smma', base_type:str = 'sma', 
                 bb_std_dev:float = 2, source:str = 'Close', 
-                last:int = None) -> pd.DataFrame:
+                last:int = None) -> flx.DataWrapper:
         """
         Relative Strength Index (RSI).
 
@@ -908,7 +942,7 @@ class StrategyClass(ABC):
                                   backwards. If None, returns data for all times.
 
         Returns:
-            pd.DataFrame: DataFrame containing 'rsi' and '{base_type}' values for 
+            DataWrapper: DataWrapper containing 'rsi' and '{base_type}' values for 
                           each step.
 
         Columns:
@@ -954,9 +988,9 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Rsi calc.
-        return self.__idc_rsi(length_rsi=length_rsi, length=length, 
+        return flx.DataWrapper(self.__idc_rsi(length_rsi=length_rsi, length=length, 
                               rsi_ma_type=rsi_ma_type, base_type=base_type, 
-                              bb_std_dev=bb_std_dev, source=source, last=last)
+                              bb_std_dev=bb_std_dev, source=source, last=last))
 
     def __idc_rsi(self, data:pd.Series = None, length_rsi:int = 14, 
                   length:int = 14, rsi_ma_type:str = 'wma', 
@@ -995,7 +1029,7 @@ class StrategyClass(ABC):
                      length=length_rsi, source=source)
         ma_loss = ma(data = -delta.where(delta < 0, 0), 
                      length=length_rsi, source=source)
-        rsi = np.flip(100 - (100 / (1+ma_gain/ma_loss)))
+        rsi = 100 - (100 / (1+ma_gain/ma_loss))
 
         match base_type:
             case 'sma': mv = self.__idc_sma(data=rsi, length=length)
@@ -1015,7 +1049,7 @@ class StrategyClass(ABC):
 
     def idc_stochastic(self, length_k:int = 14, smooth_k:int = 1, 
                        length_d:int = 3, d_type:str = 'sma', 
-                       source:str = 'Close', last:int = None) -> pd.DataFrame:
+                       source:str = 'Close', last:int = None) -> flx.DataWrapper:
         """
         Stochastic Oscillator.
 
@@ -1034,7 +1068,7 @@ class StrategyClass(ABC):
                                   backwards. If None, returns data for all times.
 
         Returns:
-            pd.DataFrame: DataFrame containing 'stoch' and '{d_type}' values for each 
+            DataWrapper: DataWrapper containing 'stoch' and '{d_type}' values for each 
                           step.
         
         Columns:
@@ -1074,9 +1108,10 @@ class StrategyClass(ABC):
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
         # Calc stoch.
-        return self.__idc_stochastic(length_k=length_k, smooth_k=smooth_k, 
-                                     length_d=length_d, d_type=d_type, 
-                                     source=source, last=last)
+        return flx.DataWrapper(
+            self.__idc_stochastic(length_k=length_k, smooth_k=smooth_k, 
+                                length_d=length_d, d_type=d_type, 
+                                source=source, last=last))
 
     def __idc_stochastic(self, data:pd.Series = None, length_k:int = 14, 
                          smooth_k:int = 1, length_d:int = 3, d_type:int = 'sma', 
@@ -1124,7 +1159,7 @@ class StrategyClass(ABC):
                                  last < len(result.index) else 0:], axis=0) 
 
     def idc_adx(self, smooth:int = 14, length_di:int = 14, 
-                only:bool = False, last:int = None) -> pd.DataFrame:
+                only:bool = False, last:int = None) -> flx.DataWrapper:
         """
         Average Directional Index (ADX).
 
@@ -1138,7 +1173,7 @@ class StrategyClass(ABC):
                                   backwards. If None, returns data for all times.
 
         Returns:
-            pd.DataFrame: DataFrame containing 'adx', '+di', and '-di' values for 
+            DataWrapper: DataWrapper containing 'adx', '+di', and '-di' values for 
                           each step.
 
         Columns:
@@ -1165,8 +1200,9 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc adx.
-        return self.__idc_adx(smooth=smooth, length_di=length_di, 
-                              only=only, last=last)
+        return flx.DataWrapper(
+            self.__idc_adx(smooth=smooth, length_di=length_di, 
+                            only=only, last=last))
 
     def __idc_adx(self, data:pd.Series = None, smooth:int = 14, 
                   length_di:int = 14, only:bool = False, 
@@ -1197,20 +1233,26 @@ class StrategyClass(ABC):
 
         atr = self.__idc_atr(length=length_di, smooth='smma')
 
-        dm_p = data['High'].diff()
-        dm_n = -data['Low'].diff()
+        dm_p_raw = data['High'].diff()
+        dm_n_raw = -data['Low'].diff()
+        
+        dm_p = pd.Series(
+            np.where((dm_p_raw > dm_n_raw) & (dm_p_raw > 0), dm_p_raw, 0), 
+            index=data.index)
+        dm_n = pd.Series(
+            np.where((dm_n_raw > dm_p_raw) & (dm_n_raw > 0), dm_n_raw, 0), 
+            index=data.index)
 
-        di_p = 100 * np.flip(self.__idc_smma(data=dm_p.where(dm_p >= 0, 0), 
-                                             length=length_di)/atr)
-        di_n = 100 * np.flip(self.__idc_smma(data=dm_n.where(dm_n >= 0, 0), 
-                                             length=length_di)/atr)
-        adx = self.__idc_smma(data=100 * np.abs((di_p - di_n) / (di_p + di_n)), 
-                              length=smooth)
+        di_p = 100 * self.__idc_smma(dm_p, length=length_di) / atr
+        di_n = 100 * self.__idc_smma(dm_n, length=length_di) / atr
+
+        adx = self.__idc_smma(
+            data=100 * np.abs((di_p - di_n) / (di_p + di_n).replace(0, 1)), 
+            length=smooth)
 
         if only: 
-            adx = np.flip(adx) 
-            return np.flip(adx.iloc[len(adx)-last 
-                               if last != None and last < len(adx) else 0:])
+            return adx.iloc[len(adx)-last 
+                            if last != None and last < len(adx) else 0:]
         adx = pd.DataFrame({'adx':adx, '+di':di_p, '-di':di_n})
 
         return adx.apply(
@@ -1221,7 +1263,7 @@ class StrategyClass(ABC):
     def idc_macd(self, short_len:int = 12, long_len:int = 26, 
                  signal_len:int = 9, macd_ma_type:str = 'ema', 
                  signal_ma_type:str = 'ema', histogram:bool = True, 
-                 source:str = 'Close', last:int = None) -> pd.DataFrame:
+                 source:str = 'Close', last:int = None) -> flx.DataWrapper:
         """
         Calculate the convergence/divergence of the moving average (MACD).
 
@@ -1240,7 +1282,7 @@ class StrategyClass(ABC):
                 present backward. If None, returns data for all available periods.
 
         Returns:
-            pd.DataFrame: A DataFrame with MACD values and the signal line for each step.
+            DataWrapper: A DataWrapper with MACD values and the signal line for each step.
 
         Columns:
             - 'macd'
@@ -1286,10 +1328,11 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc macd.
-        return self.__idc_macd(short_len=short_len, long_len=long_len, 
-                               signal_len=signal_len, macd_ma_type=macd_ma_type, 
-                               signal_ma_typ=signal_ma_type, histogram=histogram, 
-                               source=source, last=last)
+        return flx.DataWrapper(
+            self.__idc_macd(short_len=short_len, long_len=long_len, 
+                            signal_len=signal_len, macd_ma_type=macd_ma_type, 
+                            signal_ma_type=signal_ma_type, histogram=histogram, 
+                            source=source, last=last))
 
     def __idc_macd(self, data:pd.Series = None, short_len:int = 12, 
                    long_len:int = 26, signal_len:int = 9, 
@@ -1331,11 +1374,11 @@ class StrategyClass(ABC):
             case 'sma':
                 signal_ma = self.__idc_sma
         
-        short_ema = np.flip(macd_ma(data=data[source], length=short_len))
-        long_ema = np.flip(macd_ma(data=data[source], length=long_len))
+        short_ema = macd_ma(data=data[source], length=short_len)
+        long_ema = macd_ma(data=data[source], length=long_len)
         macd = short_ema - long_ema
 
-        signal_line = np.flip(signal_ma(data=macd, length=signal_len))
+        signal_line = signal_ma(data=macd, length=signal_len)
 
         result = pd.DataFrame({'macd':macd, 'signal':signal_line, 
                                'histogram':macd-signal_line} 
@@ -1350,7 +1393,7 @@ class StrategyClass(ABC):
     def idc_sqzmom(self, bb_len:int = 20, bb_mult:float = 1.5, 
                    kc_len:int = 20, kc_mult:float = 1.5, 
                    use_tr:bool = True, histogram_len:int = 50, 
-                   source:str = 'Close', last:int = None) -> pd.DataFrame:
+                   source:str = 'Close', last:int = None) -> flx.DataWrapper:
         """
         Calculate Squeeze Momentum (SQZMOM).
 
@@ -1377,7 +1420,7 @@ class StrategyClass(ABC):
                 present backward. If None, returns data for all available periods.
 
         Returns:
-            pd.DataFrame: A DataFrame with Squeeze Momentum values and histogram for 
+            DataWrapper: A DataWrapper with Squeeze Momentum values and histogram for 
                 each step.
 
         Columns:
@@ -1423,10 +1466,11 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc sqzmom.
-        return self.__idc_sqzmom(bb_len=bb_len, bb_mult=bb_mult, 
-                                 kc_len=kc_len, kc_mult=kc_mult, 
-                                 use_tr=use_tr, histogram_len=histogram_len, 
-                                 source=source, last=last)
+        return flx.DataWrapper(
+            self.__idc_sqzmom(bb_len=bb_len, bb_mult=bb_mult, 
+                            kc_len=kc_len, kc_mult=kc_mult, 
+                            use_tr=use_tr, histogram_len=histogram_len, 
+                            source=source, last=last))
 
     def __idc_sqzmom(self, data:pd.Series = None, 
                      bb_len:int = 20, bb_mult:float = 1.5, 
@@ -1462,16 +1506,16 @@ class StrategyClass(ABC):
 
         data = self.__data if data is None else data
 
-        basis = np.flip(self.__idc_sma(length=bb_len))
+        basis = self.__idc_sma(length=bb_len)
         dev = bb_mult * data[source].rolling(window=bb_len).std(ddof=0)
 
         upper_bb = basis + dev
         lower_bb = basis - dev
 
-        ma = np.flip(self.__idc_sma(length=kc_len))
-        range_ = np.flip(self.__idc_sma(data=np.flip(self.__idc_trange()) 
-                                        if use_tr else data['High']-data['Low'], 
-                                        length=kc_len))
+        ma = self.__idc_sma(length=kc_len)
+        range_ = self.__idc_sma(data=self.__idc_trange()
+                                if use_tr else data['High']-data['Low'], 
+                                length=kc_len)
         
         upper_kc = ma + range_ * kc_mult
         lower_kc = ma - range_ * kc_mult
@@ -1489,8 +1533,9 @@ class StrategyClass(ABC):
         histogram_len += kc_len
         d = data[source] - ((data['Low'].rolling(window=kc_len).min() + 
                              data['High'].rolling(window=kc_len).max()) / 2 + 
-                             np.flip(self.__idc_sma(length=kc_len))) / 2
-        histogram = self.__idc_rlinreg(data=d.loc[len(d.index)-histogram_len 
+                             self.__idc_sma(length=kc_len)) / 2
+
+        histogram = self.__idc_rlinreg(data=d.iloc[len(d.index)-histogram_len 
                                               if len(d.index) > histogram_len 
                                               else 0:], length=kc_len, offset=0)
 
@@ -1503,7 +1548,7 @@ class StrategyClass(ABC):
                                  last < len(result.index) else 0:], axis=0) 
 
     def __idc_rlinreg(self, data:pd.Series = None, 
-                      length:int = 5, offset:int = 1) -> np.array:
+                      length:int = 5, offset:int = 1) -> np.ndarray:
         """
         Calculate rolling linear regression values.
 
@@ -1520,9 +1565,8 @@ class StrategyClass(ABC):
             offset (int): Offset used in the regression calculation.
 
         Returns:
-            np.array: Array with the linear regression values for each window.
+            np.ndarray: Array with the linear regression values for each window.
         """
-
         data = self.__data if data is None else data
 
         x = np.arange(length)
@@ -1534,7 +1578,7 @@ class StrategyClass(ABC):
         return m * (length - 1 - offset) + b
 
     def idc_mom(self, length:int = 10, source:str = 'Close', 
-                last:int = None) -> np.array:
+                last:int = None) -> flx.DataWrapper:
         """
         Calculate momentum values (MOM).
 
@@ -1548,7 +1592,7 @@ class StrategyClass(ABC):
                 present backward. If None, returns data for all available periods.
 
         Returns:
-            np.array: Array with the momentum values for each step.
+            DataWrapper: DataWrapper with the momentum values for each step.
         """
 
         if length > 5000 or length <= 0: 
@@ -1569,7 +1613,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc momentum.
-        return self.__idc_mom(length=length, source=source, last=last)
+        return flx.DataWrapper(self.__idc_mom(length=length, source=source, last=last))
 
     def __idc_mom(self, data:pd.Series = None, length:int = 10, 
                   source:str = 'Close', last:int = None) -> np.array:
@@ -1593,12 +1637,12 @@ class StrategyClass(ABC):
         data = self.__data if data is None else data
         mom = data[source] - data[source].shift(length)
 
-        return np.flip(mom.iloc[len(mom)-last 
-                           if last != None and last < len(mom) else 0:])
+        return mom.iloc[len(mom)-last 
+                        if last != None and last < len(mom) else 0:]
 
     def idc_ichimoku(self, tenkan_period:int = 9, kijun_period=26, 
                      senkou_span_b_period=52, ichimoku_lines:bool = True, 
-                     last:int = None) -> pd.DataFrame:
+                     last:int = None) -> flx.DataWrapper:
         """
         Calculate Ichimoku cloud values.
 
@@ -1614,7 +1658,7 @@ class StrategyClass(ABC):
                 present backwards. If None, returns data for all available periods.
 
         Returns:
-            pd.DataFrame: A DataFrame with Ichimoku cloud values and optionally
+            DataWrapper: A DataWrapper with Ichimoku cloud values and optionally
                 'tenkan_sen' and 'kijun_sen' columns if `ichimoku_lines` is True.
 
         Columns:
@@ -1648,11 +1692,12 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
         
         # Calc ichimoku.
-        return self.__idc_ichimoku(tenkan_period=tenkan_period, 
-                                   kijun_period=kijun_period, 
-                                   senkou_span_b_period=senkou_span_b_period, 
-                                   ichimoku_lines=ichimoku_lines, 
-                                   last=last)
+        return flx.DataWrapper(
+             self.__idc_ichimoku(tenkan_period=tenkan_period, 
+                                kijun_period=kijun_period, 
+                                senkou_span_b_period=senkou_span_b_period, 
+                                ichimoku_lines=ichimoku_lines, 
+                                last=last))
 
     def __idc_ichimoku(self, data:pd.Series = None, tenkan_period:int = 9, 
                        kijun_period=26, senkou_span_b_period=52, 
@@ -1709,7 +1754,7 @@ class StrategyClass(ABC):
                                  last < len(senkou_span.index) else 0:], axis=0)
 
     def idc_fibonacci(self, start:int = None, end:int = 30, 
-                      met:bool = False, source:str = 'Low/High') -> pd.DataFrame:
+                      met:bool = False, source:str = 'Low/High') -> flx.DataWrapper:
         """
         Calculate Fibonacci retracement levels.
 
@@ -1731,7 +1776,7 @@ class StrategyClass(ABC):
                 `met` is True, this parameter is ignored.
 
         Returns:
-            pd.DataFrame: A DataFrame with Fibonacci levels and their corresponding
+            DataWrapper: A DataWrapper with Fibonacci levels and their corresponding
                 values.
 
         Columns:
@@ -1755,12 +1800,13 @@ class StrategyClass(ABC):
         data_start = self.__data[source[1]]; data_end = self.__data[source[0]]
 
         # Fibonacci calc.
-        return self.__idc_fibonacci(
+        return flx.DataWrapper(
+            self.__idc_fibonacci(
             start=data_start.iloc[len(data_start)-start-1 
                                   if start != None and 
                                   start < len(data_start) else 0], 
             end=data_end.iloc[len(data_end)-end-1 
-                              if end != None and end < len(data_end) else 0])
+                              if end != None and end < len(data_end) else 0]))
 
     def __idc_fibonacci(self, start:int = 10, end:int = 1) -> pd.DataFrame:
         """
@@ -1787,8 +1833,8 @@ class StrategyClass(ABC):
         return pd.DataFrame({'Level':fibo_levels,
                              'Value':(start + (end - start) * fibo_levels)})
 
-    def idc_atr(self, length:int = 14, smooth:str = 'wma', 
-                last:int = None) -> np.ndarray:
+    def idc_atr(self, length:int = 14, smooth:str = 'smma', 
+                last:int = None) -> flx.DataWrapper:
         """
         Calculate the average true range (ATR).
 
@@ -1801,7 +1847,7 @@ class StrategyClass(ABC):
                 present backward. If None, returns data for all available periods.
 
         Returns:
-            np.ndarray: Array with the average true range values for each step.
+            DataWrapper: DataWrapper with the average true range values for each step.
         """
 
         if length > 5000 or length <= 0: 
@@ -1821,9 +1867,9 @@ class StrategyClass(ABC):
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
         # Calc atr.
-        return self.__idc_atr(length=length, smooth=smooth, last=last)
+        return flx.DataWrapper(self.__idc_atr(length=length, smooth=smooth, last=last))
     
-    def __idc_atr(self, length:int = 14, smooth:str = 'wma', 
+    def __idc_atr(self, length:int = 14, smooth:str = 'smma', 
                   last:int = None) -> np.ndarray:
         """
         Calculate the average true range (ATR).
@@ -1841,7 +1887,7 @@ class StrategyClass(ABC):
             np.ndarray: Array with the average true range values for each step.
         """
 
-        tr = np.flip(self.__idc_trange())
+        tr = self.__idc_trange()
 
         match smooth:
             case 'wma':
@@ -1854,7 +1900,8 @@ class StrategyClass(ABC):
                 atr = self.__idc_smma(data=tr, length=length, last=last)
         return atr
 
-    def __idc_trange(self, data:pd.Series = None, last:int = None) -> np.ndarray:
+    def __idc_trange(self, data:pd.Series = None, 
+                     handle_na: bool = True, last:int = None) -> np.ndarray:
         """
         Calculate the true range.
 
@@ -1866,6 +1913,7 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.DataFrame): The data used to perform the calculation.
+            handle_na (bool): Whether to handle NaN values in 'Close' as per TradingView's rules.
 
         Returns:
             np.ndarray: Array with the true range values for each step.
@@ -1874,16 +1922,22 @@ class StrategyClass(ABC):
         data = self.__data if data is None else data
 
         close = data['Close'].shift(1)
-        close.fillna(data['Low'], inplace=True)
 
+        if handle_na:
+                close.fillna(data['Low'], inplace=True)
+                     
         hl = data['High'] - data['Low']
         hyc = abs(data['High'] - close)
         lyc = abs(data['Low'] - close)
         tr = pd.concat([hl, hyc, lyc], axis=1).max(axis=1)
-        return np.flip(tr.iloc[len(tr)-last 
-                          if last != None and last < len(tr) else 0:])
 
-    def act_open(self, type:bool = 1, stop_loss:int = np.nan, 
+        if not handle_na:
+            tr[close.isna()] = np.nan
+
+        return tr.iloc[len(tr)-last 
+                       if last != None and last < len(tr) else 0:]
+
+    def act_open(self, type_:bool = 1, stop_loss:int = np.nan, 
                  take_profit:int = np.nan, amount:int = np.nan) -> None:
         """
         Opens an action for trading.
@@ -1895,67 +1949,59 @@ class StrategyClass(ABC):
             your trade will be counted as closed, and you can't modify or close it.
 
         Args:
-            type (bool): 0 for sell, 1 for buy. Other values Python evaluates 
+            type_ (bool): 0 for sell, 1 for buy. Other values Python evaluates 
                         as booleans are supported.
             stop_loss (int): Price for stop loss. If np.nan or None, no stop loss 
                             will be set.
             take_profit (int): Price for take profit. If np.nan or None, no take 
                               profit will be set.
             amount (int): Amount of points for the trade.
-
-        Info:
-            '__trade' columns, the same columns you can access with 'prev_trades'.
-
-            - Date: Step date where trade began.
-            - Close: Close price at the trade's start.
-            - Low: Lowest price at the trade's start.
-            - High: Highest price at the trade's start.
-            - StopLoss: Position of stop loss.
-            - TakeProfit: Position of take profit.
-            - PositionClose: Close price when trade ends.
-            - PositionDate: Date when trade ends.
-            - Amount: Chosen amount.
-            - ProfitPer: Profit percentage.
-            - Profit: Profit based on amount.
-            - Type: Trade type.
         """
 
         # Convert to boolean.
-        type = int(bool(type))
+        type_ = int(bool(type_))
 
         # Check if 'stop_loss' or 'take_profit' is None.
         stop_loss = stop_loss or np.nan
         take_profit = take_profit or np.nan
 
         # Check exceptions.
-        if not type in {1,0}: 
-            raise exception.ActionError("'type' only 1 or 0.")
+        if not type_ in {1,0}: 
+            raise exception.ActionError("'type_' only 1 or 0.")
         elif amount < 0: 
             raise exception.ActionError(
                 "'amount' can only be a positive number.")
-        elif ((type and (self.__data["Close"].iloc[-1] <= stop_loss or 
+        elif ((type_ and (self.__data["Close"].iloc[-1] <= stop_loss or 
                        self.__data["Close"].iloc[-1] >= take_profit)) or 
-            (not type and (self.__data["Close"].iloc[-1] >= stop_loss or 
+            (not type_ and (self.__data["Close"].iloc[-1] >= stop_loss or 
                            self.__data["Close"].iloc[-1] <= take_profit))): 
 
             raise exception.ActionError(
                 utils.text_fix("""
                                'stop_loss' or 'take_profit' 
-                               incorrectly configured for the position type.
+                               incorrectly configured for the position type_.
                                """, newline_exclude=True))
+        
+        # Spread calc.
+        spread = self.__data["Close"].iloc[-1]*(self.__spread_pct/100)
+        position_open = self.__data["Close"].iloc[-1]+spread if type_ else self.__data["Close"].iloc[-1]-spread
+
         # Create new trade.
         self.__trade = pd.DataFrame({'Date':self.__data.index[-1],
                                      'Close':self.__data["Close"].iloc[-1],
+                                     'Open':self.__data["Open"].iloc[-1],
                                      'Low':self.__data["Low"].iloc[-1],
                                      'High':self.__data["High"].iloc[-1],
+                                     'PositionOpen':position_open,
+                                     'PositionClose':np.nan,
+                                     'PositionCloseNoSpread':np.nan,
+                                     'PositionDate':np.nan,
                                      'StopLoss':stop_loss,
                                      'TakeProfit':take_profit,
-                                     'PositionClose':np.nan,
-                                     'PositionDate':np.nan,
                                      'Amount':amount,
                                      'ProfitPer':np.nan,
                                      'Profit':np.nan,
-                                     'Type':type},index=[1])
+                                     'Type':type_},index=[1])
 
     def act_close(self, index:int = 0) -> None:
         """
@@ -1986,7 +2032,9 @@ class StrategyClass(ABC):
         trade = self.__trades_ac.iloc[lambda x: x.index==index].copy()
         self.__trades_ac = self.__trades_ac.drop(trade.index)
         # Get PositionClose
-        take = trade['TakeProfit'].iloc[0];stop = trade['StopLoss'].iloc[0]
+        take = trade['TakeProfit'].iloc[0]
+        stop = trade['StopLoss'].iloc[0]
+
         position_close = ((stop if self.__data["Low"].iloc[-1] <= stop else take
                            if self.__data["High"].iloc[-1] >= take 
                            else self.__data["Close"].iloc[-1]) 
@@ -1995,13 +2043,19 @@ class StrategyClass(ABC):
                                  else take 
                                  if self.__data["Low"].iloc[-1] <= take 
                                  else self.__data["Close"].iloc[-1]))
+
+        # Spread calc.
+        spread = self.__data["Close"].iloc[-1]*(self.__spread_pct/100)
+        position_close_spread = position_close+spread if trade['Type'].iloc[0] else position_close-spread
+
         # Fill data.
-        trade['PositionClose'] = position_close
+        trade['PositionCloseNoSpread'] = position_close
+        trade['PositionClose'] = position_close_spread
         trade['PositionDate'] = self.__data.index[-1]
-        open = trade['Close'].iloc[0]
-        trade['ProfitPer'] = ((position_close-open)/open*100 
+        open = trade['PositionOpen'].iloc[0]
+        trade['ProfitPer'] = ((position_close_spread-open)/open*100 
                               if trade['Type'].iloc[0] 
-                              else (open-position_close)/open*100)
+                              else (open-position_close_spread)/open*100)
         trade['Profit'] = (trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]
                            /100-trade['Amount']*(self.__commission/100) 
                            if not np.isnan(trade['Amount'].iloc[0]) else np.nan)
