@@ -8,6 +8,7 @@ Variables:
     extract_without (bool): If it is true, the trades that are opened without 
         takeprofit or stoploss will closed.
     dots (bool): If false, the '.' will be replaced by commas "," in prints.
+    run_timer (bool): If false the execution timer will never appear in the console.
 
 Hidden Variables:
     _init_funds: Initial capital for the backtesting (hidden variable).
@@ -24,7 +25,8 @@ import pandas as pd
 
 alert = True
 extract_without = False
-dots = False
+dots = True
+run_timer = True
 
 __data_interval = None
 __data_width = None

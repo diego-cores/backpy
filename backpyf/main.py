@@ -286,27 +286,30 @@ def run(cls:type, initial_funds:int = 10000,
     t = time()
     
     step_t = time()
-    step_history = []
+    step_history = np.array([])
 
     for f in range(1, _cm.__data.shape[0]+2):
         if progress and _cm.__data.shape[0] >= f:
             utils.load_bar(size=_cm.__data.shape[0], step=f) 
-            step_history.append(time()-step_t)
+            step_history = np.append(step_history, time()-step_t)
+
+            run_timer_text = (
+                f"| RunTimer: {utils.num_align(time()-t)} \n"
+                f"| TimerPredict: " + utils.num_align(
+                    step_history.sum() + 
+                    (step_history.mean()+step_history.std()) * 
+                    (_cm.__data.shape[0]-step_history.size)) + " \n"
+            ) if _cm.run_timer else ""
 
             print(utils.text_fix(f"""
-                | Step time: {utils.num_align(step_history[-1])} 
-                | RunTimer: {utils.num_align(time()-t)} 
-                | TimerPredict: {
-                    utils.num_align(
-                        np.sum(step_history)+np.mean(step_history)*
-                            (_cm.__data.shape[0]-len(step_history)))
-                    }
+                | StepTime: {utils.num_align(step_history[-1])} 
+                {run_timer_text}
                 """), 
                 end='')
             step_t = time()
-        elif progress: print()
-
+        
         instance._StrategyClass__before(data=_cm.__data.iloc[:f])
+    print(f'RunTimer: {utils.num_align(time()-t)}' if _cm.run_timer and not progress else '')
     
     act_trades = instance._StrategyClass__trades_ac
     _cm.__trades = instance._StrategyClass__trades_cl
@@ -617,7 +620,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         'Trades':[len(_cm.__trades.index),
                   _cm.__COLORS['BOLD']+_cm.__COLORS['CYAN']],
 
-        'Return':[(_return:=utils.round_r(_cm.__trades['ProfitPer'].sum(),2))+'%',
+        'Return':[str(_return:=utils.round_r(_cm.__trades['ProfitPer'].sum(),2))+'%',
                   _cm.__COLORS['GREEN'] if float(_return) > 0 else _cm.__COLORS['RED'],],
 
         'Average return':[utils.round_r(_cm.__trades['ProfitPer'].mean(),2)+'%',
