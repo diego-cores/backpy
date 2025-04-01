@@ -24,9 +24,10 @@ Hidden Variables:
 import pandas as pd
 
 alert = True
-extract_without = False
 dots = True
 run_timer = True
+
+extract_without = False
 
 __data_interval = None
 __data_width = None

@@ -282,7 +282,8 @@ def run(cls:type, initial_funds:int = 10000,
     _cm.__data_width = utils.calc_width(_cm.__data.index, True)
 
     _cm._init_funds = initial_funds
-    instance = cls(spread_pct=spread , commission=commission, init_funds=initial_funds)
+    instance = cls(spread_pct=spread , commission=commission, 
+                   init_funds=initial_funds)
     t = time()
     
     step_t = time()
@@ -309,7 +310,10 @@ def run(cls:type, initial_funds:int = 10000,
             step_t = time()
         
         instance._StrategyClass__before(data=_cm.__data.iloc[:f])
-    print(f'RunTimer: {utils.num_align(time()-t)}' if _cm.run_timer and not progress else '')
+    if progress or _cm.run_timer:
+        print(
+            f'RunTimer: {utils.num_align(time()-t)}' 
+                if _cm.run_timer and not progress else '') 
     
     act_trades = instance._StrategyClass__trades_ac
     _cm.__trades = instance._StrategyClass__trades_cl
@@ -318,9 +322,9 @@ def run(cls:type, initial_funds:int = 10000,
         _cm.__trades, act_trades.dropna(axis=1, how='all')
         ], ignore_index=True)
 
-    try: 
-        return stats_trades(prnt=prnt)
-    except: pass
+    #try: 
+    return stats_trades(prnt=prnt)
+    #except: pass
     
 def plot(log:bool = False, progress:bool = True, 
          position:str = 'complex', block:bool = True) -> None:
@@ -560,7 +564,8 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame = None,
         'Maximum volume':[utils.round_r(data['Volume'].max(), 2),
                           _cm.__COLORS['CYAN']],
         'Sample size':[len(data.index)],
-        'Standard deviation':[utils.round_r(data['Close'].std(),2)],
+        'Standard deviation':[utils.round_r(
+            np.std(data['Close'].dropna(), ddof=1),2)],
         'Average price':[utils.round_r(data['Close'].mean(),2),
                          _cm.__COLORS['YELLOW']],
         'Average volume':[utils.round_r(data['Volume'].mean(),2),
@@ -593,6 +598,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         - Profit fact: The profit factor is calculated by dividing total profits by total 
                 losses.
         - Profit std: The standard deviation of profits, indicating the variability in performance.
+        - Return std: The standard deviation of return, indicating the variability in performance.
         - Math hope: The mathematical expectation (or expected value) of returns, 
                 calculated as (Win rate × Average win) - (Loss rate × Average loss).
         - Historical var: The Value at Risk (VaR) estimated using historical data, 
@@ -601,6 +607,8 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
                 defined as the mean profit minus z-alpha times the standard deviation.
         - Sharpe ratio: The risk-adjusted return, calculated as the average 
                 profit divided by the standard deviation of profits.
+        - Sharpe ratio%: The risk-adjusted return, calculated as the average 
+                profit divided by the standard deviation of return.
         - Max drawdown: The biggest drawdown the 'profit' has ever had.
         - Average drawdown: The average of all drawdowns, 
                 indicating the typical loss experienced before recovery.
@@ -646,8 +654,11 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
                 (_cm.__trades['Profit']<=0).sum() > 0 else 0),
                 _cm.__COLORS['GREEN'] if float(_profit_fact) > 1 else _cm.__COLORS['RED'],],
 
-        'Profit std':[utils.round_r(np.std(_cm.__trades['Profit'],ddof=1), 2),
-                      _cm.__COLORS['YELLOW'],],
+        'Profit std':[(_profit_std:=utils.round_r(np.std(_cm.__trades['Profit'],ddof=1), 2)),
+                      _cm.__COLORS['YELLOW'] if float(_profit_std) > 1 else _cm.__COLORS['GREEN'],],
+
+        'Return std':[(_return_std:=utils.round_r(np.std(_cm.__trades['ProfitPer'],ddof=1), 2)),
+                    _cm.__COLORS['YELLOW'] if float(_return_std) > 1 else _cm.__COLORS['GREEN'],],
 
         'Math hope':[_math_hope:=utils.round_r((
                 (_cm.__trades['Profit'] > 0).sum()/len(_cm.__trades.index)*
@@ -663,7 +674,12 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
                             utils.var_parametric(_cm.__trades['Profit']), 2)],
 
         'Sharpe ratio':[utils.round_r(np.average(
-                _cm.__trades['Profit'])/np.std(_cm.__trades['Profit'],ddof=1), 2)],
+                _cm.__trades['Profit'].dropna())
+                    /np.std(_cm.__trades['Profit'].dropna(),ddof=1), 2)],
+
+        'Sharpe ratio%':[utils.round_r(np.average(
+                _cm.__trades['ProfitPer'].dropna())
+                    /np.std(_cm.__trades['ProfitPer'].dropna(),ddof=1), 2)],
 
         'Max drawdown':[str(round(
             utils.max_drawdown(_cm.__trades['Profit'].dropna().cumsum()+
