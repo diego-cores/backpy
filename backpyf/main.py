@@ -11,6 +11,8 @@ Functions:
     run: Executes the backtesting process.
     plot: Plots your data, highlighting the trades made.
     plot_strategy: Plots statistics for your strategy.
+    plot_strategy_decorator: Decorator function for the 'plot_strategy_add' function.
+    plot_strategy_add: Add functions and then see them graphed with 'plot_strategy'.
     stats_icon: Shows statistics related to the financial icon.
     stats_trades: Statistics of the trades.
 """
@@ -48,6 +50,10 @@ def load_binance_data(symbol:str = 'BTCUSDT', interval:str = '1d',
         progress (bool, optional): If True, shows a progress bar and timer.
         data_extract (bool, optional): If True, the data will be returned and 
                         the module variables will not be assigned with them.
+
+    Returns:
+        tuple: If 'data_extract' is true, 
+            a tuple containing the data will be returned (data, data_width).
     """
     # Exceptions.
     if start_time is None or end_time is None:
@@ -123,6 +129,8 @@ def load_binance_data(symbol:str = 'BTCUSDT', interval:str = '1d',
         _cm.__data_width = data_width
         _cm.__data_icon = symbol.strip()
         _cm.__data_interval = interval.strip()
+        _cm.__data_width_day = utils.calc_day(interval, data_width)
+        _cm.__data_year_days = 365
 
     except ModuleNotFoundError: 
         raise exception.BinanceError('Binance connector is not installed.')
@@ -131,8 +139,8 @@ def load_binance_data(symbol:str = 'BTCUSDT', interval:str = '1d',
 
 def load_yfinance_data(tickers:str = any, 
                        start:str = None, end:str = None, interval:str = '1d', 
-                       statistics:bool = True, progress:bool = True,
-                       data_extract:bool = False) -> tuple:
+                       days_op:int = 365, statistics:bool = True, 
+                       progress:bool = True, data_extract:bool = False) -> tuple:
     """
     Load yfinance Data.
 
@@ -147,11 +155,21 @@ def load_yfinance_data(tickers:str = any,
         interval (str, optional): Data interval. Valid values are '1m', '2m', '5m', '15m', 
                         '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo', 
                         '3mo'. Intraday data cannot extend past the last 60 days.
+        days_op (int, optional): Number of operable days in 1 year. This will be 
+                        stored to calculate some statistics. Normal values: 365, 252.
         statistics (bool, optional): If True, prints statistics of the downloaded data.
         progress (bool, optional): If True, shows a progress bar and timer.
         data_extract (bool, optional): If True, the data will be returned and 
                         the module variables will not be assigned with them.
+
+    Returns:
+        tuple: If 'data_extract' is true, 
+            a tuple containing the data will be returned (data, data_width).
     """
+    days_op = int(days_op)
+    if days_op > 365 or days_op < 1:
+        raise exception.YfinanceError(f"'days_op' cant be: '{days_op}'.")
+
     try:
         import yfinance as yf
 
@@ -184,6 +202,8 @@ def load_yfinance_data(tickers:str = any,
         _cm.__data_width = data_width
         _cm.__data_icon = tickers.strip()
         _cm.__data_interval = interval.strip()
+        _cm.__data_width_day = days_op
+        _cm.__data_width_day = utils.calc_day(interval, data_width)
 
     except ModuleNotFoundError: 
         raise exception.YfinanceError('Yfinance is not installed.')
@@ -191,8 +211,8 @@ def load_yfinance_data(tickers:str = any,
         raise exception.YfinanceError('Yfinance parameters error.')
 
 def load_data(data:pd.DataFrame = any, icon:str = None, 
-              interval:str = None, statistics:bool = True, 
-              progress:bool = True) -> None: 
+              interval:str = None, days_op:int = 365, 
+              statistics:bool = True, progress:bool = True) -> None: 
     """
     Load Any Data.
 
@@ -204,6 +224,8 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
                             'Volume'].
         icon (str, optional): String representing the data icon.
         interval (str, optional): String representing the data interval.
+        days_op (int, optional): Number of operable days in 1 year. This will be 
+                stored to calculate some statistics. Normal values: 365, 252.
         statistics (bool): If True, prints statistics of the loaded data.
         progress (bool, optional): If True, shows a progress bar and timer.
     """
@@ -217,7 +239,11 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
             Some columns are missing columns: 
             ['Open', 'High', 'Low', 'Close']
             """, newline_exclude=True))
-    
+
+    days_op = int(days_op)
+    if days_op > 365 or days_op < 1:
+        raise exception.DataError(f"'days_op' cant be: '{days_op}'.")
+
     if progress:
         utils.load_bar(size=1, step=0)
         t = time()
@@ -236,6 +262,8 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
 
     _cm.__data_icon = icon.strip()
     _cm.__data_interval = interval.strip()
+    _cm.__data_width_day = days_op
+    _cm.__data_width_day = utils.calc_day(interval, _cm.__data_width)
 
     if statistics: stats_icon(prnt=True)
 
@@ -263,6 +291,9 @@ def run(cls:type, initial_funds:int = 10000,
     Note:
         If your function prints to the console, the loading bar may not 
         function as expected.
+
+    Returns:
+        str: statistics.
     """
     # Exceptions.
     if _cm.__data is None: 
@@ -322,9 +353,9 @@ def run(cls:type, initial_funds:int = 10000,
         _cm.__trades, act_trades.dropna(axis=1, how='all')
         ], ignore_index=True)
 
-    #try: 
-    return stats_trades(prnt=prnt)
-    #except: pass
+    try: 
+        return stats_trades(prnt=prnt)
+    except: pass
     
 def plot(log:bool = False, progress:bool = True, 
          position:str = 'complex', block:bool = True) -> None:
@@ -426,14 +457,15 @@ def plot(log:bool = False, progress:bool = True,
 
     mpl.pyplot.show(block=block)
 
-def plot_strategy(log:bool = False, view:str = 'p/w/r/n', 
-                  block:bool = True) -> None:
+def plot_strategy(log:bool = False, view:str = 'p/w/r/e', 
+                  custom_graph:dict = {}, block:bool = True) -> None:
     """
     Plot Strategy Statistics.
 
     Plots statistics for your strategy.
 
     Available Graphics:
+        - 'e' = Equity graph.
         - 'p' = Profit graph.
         - 'r' = Return graph.
         - 'w' = Winnings graph.
@@ -441,16 +473,21 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/n',
     Args:
         log (bool, optional): If True, plots data using a logarithmic scale. 
             Default is False.
-        view (str, optional): Specifies which graphics to display. Options are 
-            'p', 'r', 'w', or 'n'. Each option occupies the entire window. 
-            Default is 'p/w/r/n'.
+        view (str, optional): Specifies which graphics to display. 
+            Each option occupies the entire window. Default is 'p/w/r/e'.
+        custom_graph (dict, optional): Custom graph, a dictionary with 
+            'name':'function' where the function will 
+            be passed: 'ax', '_cm.__trades', '_cm.__data', 'log'.
+            To avoid visual problems, I suggest using 
+            'trades.index' as the x-axis or normalizing the axis.
         block (bool, optional): If True, pauses script execution until all figure 
             windows are closed. If False, the script continues running after 
             displaying the figures. Default is True.
     """
+    for i in custom_graph: plot_strategy_add(custom_graph[i], i)
 
     view = view.lower().strip().split('/')
-    view = [i for i in view if i in ('p','w','r')]
+    view = [i for i in view if i in ('p','w','r','e') | _cm.__custom_plot.keys()]
 
     # Exceptions.
     if _cm.__trades.empty: 
@@ -458,9 +495,12 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/n',
     elif not 'Profit' in _cm.__trades.columns:  
         return 'There is no data to see.'
     elif len(view) > 4 or len(view) < 1: 
-        raise exception.StatsError(utils.text_fix("""
+        raise exception.StatsError(utils.text_fix(f"""
             'view' allowed format: 's/s/s/s' where s is the name of the graph.
-            Available graphics: 'p','w','r'.
+            Available graphics: 'p','w','r','e'{
+                (","+",".join(
+                    [f"'{i}'" for i in _cm.__custom_plot.keys()])) 
+                    if _cm.__custom_plot.keys() else ''}.
             """, newline_exclude=True))
 
     mpl.pyplot.style.use('ggplot')
@@ -476,7 +516,7 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/n',
             case 2: 
                 ax = mpl.pyplot.subplot2grid((6,2), loc[i], 
                                              rowspan=3, colspan=2, 
-                                             sharex=ax, sharey=ax)
+                                             sharex=ax)
             case 3: 
                 ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, 
                                              colspan=2 if i==0 else 1, 
@@ -484,7 +524,7 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/n',
             case 4: 
                 ax = mpl.pyplot.subplot2grid((6,2), loc[i], 
                                              rowspan=3, colspan=1, 
-                                             sharex=ax, sharey=ax) 
+                                             sharex=ax)
 
         match v:
             case 'p':
@@ -497,17 +537,68 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/n',
                         (_cm.__trades['ProfitPer'].apply(
                             lambda row: 1 if row>0 else -1)).cumsum(), 
                         c='black', label='Winnings.')
+            case 'e':
+                ax.plot(_cm.__trades.index, 
+                        np.cumprod(1 + _cm.__trades['ProfitPer'] / 100), 
+                        c='black', label='Equity.')
+
+                if log: ax.set_yscale('symlog')
             case 'r':
                 ax.plot(_cm.__trades.index,_cm.__trades['ProfitPer'].cumsum(), 
                         c='black', label='Return.')
 
                 if log: ax.set_yscale('symlog')
+            case key if key in _cm.__custom_plot.keys():
+                _cm.__custom_plot[v](ax, _cm.__trades, 
+                                    _cm.__data, log)
             case _: pass
+
         ax.legend(loc='upper left')
 
     mpl.pyplot.xticks([])
-    mpl.pyplot.gcf().canvas.manager.set_window_title(f'Strategy statistics.')
+    mpl.pyplot.gcf().canvas.manager.set_window_title(f'Strategy statistics')
     mpl.pyplot.show(block=block)
+
+def plot_strategy_decorator(name:str) -> callable:
+    """
+    Add statistics for plot decorator.
+
+    Use a decorator to add the function to 
+    'custom_plot' so you can run it in 'plot_strategy'.
+
+    To avoid visual problems, I suggest using 
+        'trades.index' as the x-axis or normalizing the axis.
+
+    Args:
+        name (str, optional): Name with which it will be called.
+
+    Returns:
+        callable: 'plot_strategy_add'.
+    """
+
+    return lambda x: plot_strategy_add(x, name)
+
+def plot_strategy_add(func, name:str) -> callable:
+    """
+    Add statistics for plot.
+
+    Add functions and then see them graphed with 'plot_strategy'.
+
+    Args:
+        func: Function, to which this will be passed in order: 
+            'ax', '_cm.__trades', '_cm.__data', 'log'.
+            To avoid visual problems, I suggest using 
+            'trades.index' as the x-axis or normalizing the axis.
+        name (str, optional): Name with which it will be called.
+
+    Returns:
+        callable: 'func' param.
+    """
+
+    if not name or name in _cm.__custom_plot.keys() or not callable(func):
+        raise exception.StatsError("Error assigning value to '__custom_plot'.")
+    _cm.__custom_plot[name.strip()] = func
+    return func
 
 def stats_icon(prnt:bool = True, data:pd.DataFrame = None, 
                data_icon:str = None, data_interval:str = None) -> str:
@@ -527,6 +618,9 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame = None,
             if you leave it at None the loaded data will be the one used.
         data_interval (str, optional): Interval shown in the statistics, 
             if you leave it at None the loaded data will be the one used.
+
+    Returns:
+        str: statistics.
     """
 
     data_interval = __data_interval if data_interval is None else data_interval
@@ -572,7 +666,7 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame = None,
                           _cm.__COLORS['YELLOW']],
         f"'{data_icon}'":[f'{r_date} ~ {data_interval}',
                           _cm.__COLORS['CYAN']],
-    }, f"Statistics of '{data_icon}'")
+    }, f"---Statistics of '{data_icon}'---")
 
     text = text if _cm.dots else text.replace('.', ',')
     if prnt:print(text) 
@@ -591,29 +685,40 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
 
     Info:
         - Trades: The number of operations performed.
-        - Return: The total percentage earned.
-        - Average return: The average percentage earned.
-        - Average ratio: The average ratio.
+        - Op years: Years operated from the first to the last.
+        - Return: The total equity earned.
         - Profit: The total amount earned.
+        - Return ann: The annualized return.
+        - Profit ann: The annualized profit.
+        - Average ratio: The average ratio.
+        - Average return: The average percentage earned.
         - Profit fact: The profit factor is calculated by dividing total profits by total 
                 losses.
         - Profit std: The standard deviation of profits, indicating the variability in performance.
         - Return std: The standard deviation of return, indicating the variability in performance.
         - Math hope: The mathematical expectation (or expected value) of returns, 
                 calculated as (Win rate × Average win) - (Loss rate × Average loss).
+        - Math hope r: The relative mathematical expectation, 
+                calculated as (Win rate × Average ratio) - (Loss rate × 1).
         - Historical var: The Value at Risk (VaR) estimated using historical data, 
                 calculated as the profit at the (100 - confidence level) percentile.
         - Parametric var: The Value at Risk (VaR) calculated assuming a normal distribution, 
                 defined as the mean profit minus z-alpha times the standard deviation.
-        - Sharpe ratio: The risk-adjusted return, calculated as the average 
+        - Sharpe ratio: The risk-adjusted return, calculated as the annualized 
                 profit divided by the standard deviation of profits.
-        - Sharpe ratio%: The risk-adjusted return, calculated as the average 
-                profit divided by the standard deviation of return.
-        - Max drawdown: The biggest drawdown the 'profit' has ever had.
+        - Sharpe ratio%: The risk-adjusted return, calculated as the 
+                annualized return divided by the standard deviation of return.
+        - Max drawdown: The biggest drawdown the profit has ever had.
         - Average drawdown: The average of all drawdowns, 
+                indicating the typical loss experienced before recovery.
+        - Max drawdown%:  The biggest drawdown the equity has ever had.
+        - Average drawdown%: The average of all drawdowns of equity curve, 
                 indicating the typical loss experienced before recovery.
         - Long exposure: What percentage of traders are long.
         - Winnings: Percentage of operations won.
+
+    Returns:
+        str: statistics.
     """
 
     # Exceptions.
@@ -624,17 +729,40 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
     elif np.isnan(_cm.__trades['ProfitPer'].mean()): 
         raise exception.StatsError('There is no data to see.') 
 
+    # Number of years operated.
+    op_years = abs(
+        (_cm.__trades['Date'].iloc[-1] - _cm.__trades['Date'].iloc[0])/
+        (_cm.__data_width_day*_cm.__data_year_days))
+
+    # Annualized return calc.
+    trades_calc = _cm.__trades.copy()
+    trades_calc['Year'] = ((trades_calc['Date'] - trades_calc['Date'].iloc[0]) / 
+                  (trades_calc['Date'].iloc[-1] - trades_calc['Date'].iloc[0]) * 
+                  op_years).astype(int)
+
+    trades_calc['Multiplier'] = 1 + trades_calc['ProfitPer'] / 100
+    ann_return = trades_calc.groupby('Year')['Multiplier'].prod()
+    ann_profit = trades_calc.groupby('Year')['Profit'].sum()
+
     text = utils.statistics_format({
         'Trades':[len(_cm.__trades.index),
                   _cm.__COLORS['BOLD']+_cm.__COLORS['CYAN']],
 
-        'Return':[str(_return:=utils.round_r(_cm.__trades['ProfitPer'].sum(),2))+'%',
+        'Op years':[utils.round_r(op_years, 2), _cm.__COLORS['CYAN']],
+
+        'Return':[str(_return:=utils.round_r((trades_calc['Multiplier'].prod()-1)*100,2))+'%',
                   _cm.__COLORS['GREEN'] if float(_return) > 0 else _cm.__COLORS['RED'],],
 
-        'Average return':[utils.round_r(_cm.__trades['ProfitPer'].mean(),2)+'%',
-                          _cm.__COLORS['YELLOW'],],
+        'Profit':[(_profit:=utils.round_r(_cm.__trades['Profit'].sum(),2)),
+                _cm.__COLORS['GREEN'] if float(_profit) > 0 else _cm.__COLORS['RED'],],
 
-        'Average ratio':[utils.round_r(
+        'Return ann':[str(_return_ann:=utils.round_r((ann_return.prod()**(1/op_years)-1)*100,2))+'%',
+                  _cm.__COLORS['GREEN'] if float(_return_ann) > 0 else _cm.__COLORS['RED'],],
+
+        'Profit ann':[str(_profit_ann:=utils.round_r(ann_profit.mean(),2)),
+                  _cm.__COLORS['GREEN'] if float(_profit_ann) > 0 else _cm.__COLORS['RED'],],
+
+        'Average ratio':[_avg_ratio:=utils.round_r(
             (abs(_cm.__trades['Close']-_cm.__trades['TakeProfit']) / 
                 abs(_cm.__trades['Close']-_cm.__trades['StopLoss'])).mean() 
             if not _cm.__trades['TakeProfit'].apply(
@@ -643,8 +771,8 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
                     lambda x: x is None or x <= 0).all() else 0, 2),
                 _cm.__COLORS['YELLOW'],],
 
-        'Profit':[(_profit:=utils.round_r(_cm.__trades['Profit'].sum(),2)),
-                  _cm.__COLORS['GREEN'] if float(_profit) > 0 else _cm.__COLORS['RED'],],
+        'Average return':[utils.round_r(trades_calc['Multiplier'].mean(),2)+'%',
+                          _cm.__COLORS['YELLOW'],],
 
         'Profit fact':[_profit_fact:=(utils.round_r(
             _cm.__trades[_cm.__trades['Profit']>0]['Profit'].sum()/
@@ -667,19 +795,29 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
                     -_cm.__trades['Profit'][_cm.__trades['Profit'] < 0].mean()), 2),
             _cm.__COLORS['GREEN'] if float(_math_hope) > 0 else _cm.__COLORS['RED'],],
 
+        'Math hope r':[_math_hope_r:=utils.round_r((
+            (_wrate:=((_cm.__trades['ProfitPer']>0).sum()/
+            _cm.__trades['ProfitPer'].count()) 
+                if not ((_cm.__trades['ProfitPer']>0).sum() == 0 or 
+                    _cm.__trades['ProfitPer'].count() == 0) 
+                else 0)*float(_avg_ratio))-(1-_wrate), 2),
+            _cm.__COLORS['GREEN'] if float(_math_hope_r) > 0 else _cm.__COLORS['RED'],],
+
         'Historical var':[utils.round_r(
                             utils.var_historical(_cm.__trades['Profit']), 2)],
 
         'Parametric var':[utils.round_r(
                             utils.var_parametric(_cm.__trades['Profit']), 2)],
 
-        'Sharpe ratio':[utils.round_r(np.average(
-                _cm.__trades['Profit'].dropna())
-                    /np.std(_cm.__trades['Profit'].dropna(),ddof=1), 2)],
+        'Sharpe ratio':[utils.round_r(np.average(ann_profit)
+                                       /np.sqrt(_cm.__data_year_days)
+                                       /np.std(_cm.__trades['Profit'].dropna(),ddof=1)
+                                       , 2)],
 
-        'Sharpe ratio%':[utils.round_r(np.average(
-                _cm.__trades['ProfitPer'].dropna())
-                    /np.std(_cm.__trades['ProfitPer'].dropna(),ddof=1), 2)],
+        'Sharpe ratio%':[utils.round_r((ann_return.prod()**(1/op_years)-1)*100
+                                      /np.sqrt(_cm.__data_year_days)
+                                      /np.std(_cm.__trades['ProfitPer'].dropna(),ddof=1)
+                                      , 2)],
 
         'Max drawdown':[str(round(
             utils.max_drawdown(_cm.__trades['Profit'].dropna().cumsum()+
@@ -688,6 +826,14 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         'Average drawdown':[str(-round(np.mean(
             utils.get_drawdowns(_cm.__trades['Profit'].dropna().cumsum()+
                                 _cm._init_funds))*100, 1)) + '%'],
+
+        'Max drawdown%':[str(round(
+            utils.max_drawdown(np.cumprod(
+                trades_calc['Multiplier'].dropna()))*100,1)) + '%'],
+
+        'Average drawdown%':[str(-round(np.mean(
+            utils.get_drawdowns(np.cumprod(
+                trades_calc['Multiplier'].dropna())))*100, 1)) + '%'],
 
         'Long exposure':[str(round((
                 _cm.__trades['Type']==1).sum()/
@@ -700,7 +846,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
             if not ((_cm.__trades['ProfitPer']>0).sum() == 0 or 
                 _cm.__trades['ProfitPer'].count() == 0) else 0) + '%'],
 
-    }, "Statistics of strategy.")
+    }, "---Statistics of strategy---")
 
     text = text if _cm.dots else text.replace('.', ',')
     if data: text += stats_icon(False)

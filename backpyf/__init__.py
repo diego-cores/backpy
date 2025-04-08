@@ -4,7 +4,7 @@ Back Test Py.
 BackPy is a library used to test strategies in the market.
 
 Version:
-    0.9.60b2
+    0.9.61b3
 
 Repository:
     https://github.com/Diego-Cores/BackPy
@@ -12,7 +12,7 @@ Repository:
 License:
     MIT License
 
-    Copyright (c) 2024 Diego
+    Copyright (c) 2025 Diego
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -42,8 +42,10 @@ from ._commons import (
     dots,
 )
 from .main import (
+    plot_strategy_decorator,
     load_yfinance_data, 
     load_binance_data,
+    plot_strategy_add,
     plot_strategy,
     stats_trades,
     stats_icon, 
@@ -53,6 +55,10 @@ from .main import (
     )
 
 from .utils import utils
+from .utils import (
+    get_drawdowns,
+    max_drawdown,
+)
 
 __doc__ = """
 BackPy documentation.
@@ -86,15 +92,20 @@ What can I do with BackPy?
 """
 
 __all__ = [
+    'plot_strategy_decorator',
     'load_yfinance_data',
     'load_binance_data',
     '__binance_timeout',
+    'plot_strategy_add',
     'extract_without',
     'StrategyClass',
     'plot_strategy',
+    'get_drawdowns',
+    'max_drawdown',
     'stats_trades',
     'stats_icon',
     'load_data',
+    'run_timer',
     'utils',
     'alert',
     'plot',

@@ -12,13 +12,16 @@ Variables:
 
 Hidden Variables:
     _init_funds: Initial capital for the backtesting (hidden variable).
+    __data_year_days: Number of operable days in 1 year (hidden variable).
+    __data_width_day: Width of the day (hidden variable).
     __data_interval: Interval of the loaded data (hidden variable).
     __data_width: Width of the dataset (hidden variable).
     __data_icon: Data icon (hidden variable).
     __data: Loaded dataset (hidden variable).
     __trades: List of trades executed during backtesting (hidden variable).
+    __custom_plot: Dict of custom graphical statistics (hidden variable).
     __binance_timeout: Time out between each request to the binance api (hidden variable).
-    __COLORS: Dictionary with printable colors.
+    __COLORS: Dictionary with printable colors (hidden variable).
 """
 
 import pandas as pd
@@ -29,6 +32,8 @@ run_timer = True
 
 extract_without = False
 
+__data_year_days = 365
+__data_width_day = None
 __data_interval = None
 __data_width = None
 __data_icon = None
@@ -36,6 +41,8 @@ __data = None
 
 __trades = pd.DataFrame()
 _init_funds = 0
+
+__custom_plot = {}
 
 __binance_timeout = 0.2
 

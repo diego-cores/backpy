@@ -1,13 +1,13 @@
-![BackPy logo](images/logo.png)
+![BackPy logo](images/logo.png)  
+![Version](https://img.shields.io/badge/version-0.9.61b3-blue)
+![Status](https://img.shields.io/badge/status-beta-orange)
+
 # BackPy
-BackPy is a library made in python for back testing in financial markets.
 
-  #### Version: 0.9.60b2
+**BackPy** is a Python library for backtesting strategies in financial markets.  
+You can provide your own historical data or use the built-in integration with the `yfinance` or `binance-connector` modules.
 
-BackPy is a library that is used to test strategies in the market, 
-it is made so that you can provide your own data or use Yfinance module.
-
-## Important motices:
+## ⚠️ Important Notices
 
 Please make sure to read the following before using this software:
 
@@ -16,19 +16,10 @@ Please make sure to read the following before using this software:
 
 By using this software, you acknowledge that you have read and agree to the terms outlined in these documents.
 
-## What can I do with BackPy?
-
-- With BackPy you will be able to know the position of different indicators for each point.
-- You can create your own indicators based on price, date and volume.
-- For each point you can consult previous data such as previous closings and active actions.
-- You can display the data with logarithmic scale or not.
-- You can print statistics of the uploaded data.
-
-## How to install backpy with pip:
+## 📦 How to install backpy with pip
 
 1. Download the latest version from GitHub
 - Go to this project GitHub page.
-- Look for the "Releases" or "Latest release" section.
 - Download the ZIP file of the latest version of the project.
 2. Unzip the ZIP file
 - Unzip the ZIP file you downloaded.
@@ -44,5 +35,32 @@ By using this software, you acknowledge that you have read and agree to the term
 6. Clean downloaded files
 - After you have verified that the module is working correctly, you can delete the downloaded ZIP file and unzipped folder if you wish.
 
-### Code example:
-![code image](images/img1.png)
+## 🚀 Code example
+![simple code image](images/code1.png)
+
+With Backpy, you can design your strategies quickly, easily, and in just a few lines.
+
+![strategy code image](images/code2.png)
+
+Don't forget to graph!
+Draw any chart and see your strategy inputs and outputs with a single function.
+
+![BTC graph image](images/graph1.png)
+
+Graph your results, profit equity chart or whatever you want.
+
+![statistics graph image](images/graph2.png)
+
+Create your custom chart in just a few lines and plot it with a single function.
+
+![graph code image](images/code3.png)
+
+By the way, don't forget to check the stats in the console.
+
+![console statistics image](images/stats.png)
+
+### Disclaimer
+Some images have been edited to highlight specific parts of the code or output, and may not represent the actual output exactly.
+Examples shown are for demonstration purposes only. Any strategy used is simplified and should not be considered financial or investment advice.
+Also, note that any aspect of the examples may change in future versions.
+Always perform your own research and analysis before trading.

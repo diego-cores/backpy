@@ -15,6 +15,7 @@ Functions:
     correct_index: Function to correct index by converting it to float.
     calc_width: Function to calulate the width of 'index' 
         if it has not been calculated already.
+    calc_day: Function to calculate the width of the index that each day has.
     max_drawdown: Function to return the maximum drawdown from the given data.
     get_drawdowns: Calculate the drawdowns from the given.
     text_fix: Function to fix or adjust text.
@@ -242,6 +243,36 @@ def calc_width(index:pd.Index, alert:bool = False) -> float:
           """)) if _cm.alert and alert else None
     
     return np.median(np.diff(index))
+
+def calc_day(interval:str = '1d', width:float = 1) -> float:
+    """
+    Calc day width.
+
+    Function to calculate the width of the index that each day has.
+
+    Args:
+        interval (str, optional): The width interval.
+        width (float, optional): The width of each candle.
+
+    Returns:
+        float: The width of the day.
+    """
+
+    match ''.join(filter(str.isalpha, interval)):
+        case 'm' | 'min':
+            unit_large = 1440
+        case 'h':
+            unit_large = 24
+        case 'd' | 'day':
+            unit_large = 1
+        case 's' | 'wk' | 'w':
+            unit_large = 1/7
+        case 'mo' | 'M':
+            unit_large = 1/(365/12)
+        case _:
+            unit_large = 1
+
+    return unit_large/int(''.join(filter(str.isdigit, interval)))*width
 
 def max_drawdown(values:pd.Series) -> float:
     """
