@@ -1,4 +1,5 @@
 pandas>=1.3.0
 numpy>=1.16.5
 matplotlib>=3.7.5
-yfinance>=0.2.36
+yfinance==0.2.50
+binance-connector==3.10.0
