@@ -20,6 +20,10 @@ By using this software, you acknowledge that you have read and agree to the term
 
 1. Download the latest version from GitHub
 - Go to this project GitHub page.
+<<<<<<< HEAD
+=======
+- Look for the "Releases" or "Latest release" section, i recommend versions later than 0.9.2.018.
+>>>>>>> b0252196406ccea135889ee43608565c9936bdf9
 - Download the ZIP file of the latest version of the project.
 2. Unzip the ZIP file
 - Unzip the ZIP file you downloaded.
