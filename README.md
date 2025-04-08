@@ -1,5 +1,5 @@
 ![BackPy logo](images/logo.png)  
-![Version](https://img.shields.io/badge/version-0.9.61b3-blue)
+![Version](https://img.shields.io/badge/version-0.9.62b3-blue)
 ![Status](https://img.shields.io/badge/status-beta-orange)
 
 # BackPy

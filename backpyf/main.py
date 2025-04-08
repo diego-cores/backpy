@@ -804,10 +804,10 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
             _cm.__COLORS['GREEN'] if float(_math_hope_r) > 0 else _cm.__COLORS['RED'],],
 
         'Historical var':[utils.round_r(
-                            utils.var_historical(_cm.__trades['Profit']), 2)],
+                            utils.var_historical(_cm.__trades['Profit'].dropna()), 2)],
 
         'Parametric var':[utils.round_r(
-                            utils.var_parametric(_cm.__trades['Profit']), 2)],
+                            utils.var_parametric(_cm.__trades['Profit'].dropna()), 2)],
 
         'Sharpe ratio':[utils.round_r(np.average(ann_profit)
                                        /np.sqrt(_cm.__data_year_days)
