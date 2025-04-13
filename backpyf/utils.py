@@ -16,11 +16,7 @@ Functions:
     calc_width: Function to calulate the width of 'index' 
         if it has not been calculated already.
     calc_day: Function to calculate the width of the index that each day has.
-    max_drawdown: Function to return the maximum drawdown from the given data.
-    get_drawdowns: Calculate the drawdowns from the given.
     text_fix: Function to fix or adjust text.
-    var_historical: Calculate the historical var.
-    var_parametric: Calculate the parametric var.
     plot_candles: Function to plot candles on a given `Axes`.
     plot_position: Function to plot a trading position.
 
@@ -274,54 +270,6 @@ def calc_day(interval:str = '1d', width:float = 1) -> float:
 
     return unit_large/int(''.join(filter(str.isdigit, interval)))*width
 
-def max_drawdown(values:pd.Series) -> float:
-    """
-    Maximum drawdown.
-
-    Calculate the maximum drawdown of `values`.
-
-    Args:
-        values (pd.Series): The ordered data to calculate the maximum drawdown.
-
-    Returns:
-        float: The maximum drawdown from the given data.
-    """
-
-    if values.empty: return 0
-    max_drdwn, max_val = 0, values[values.index[0]]
-
-    def calc(x):
-        nonlocal max_drdwn, max_val
-
-        if x > max_val: max_val = x
-        else: 
-            drdwn = (max_val - x) / max_val
-            if drdwn > max_drdwn:
-                max_drdwn = drdwn
-    values.apply(calc)
-
-    return max_drdwn
-
-def get_drawdowns(values:list) -> list:
-    """
-    Get drawdowns.
-
-    Calculate the drawdowns of `values`.
-
-    Args:
-        values (pd.Series): The ordered data to calculate the drawdowns.
-
-    Returns:
-        list: The drawdowns from the given data.
-    """
-    if len(values) == 0:
-        return 0
-
-    max_values = np.maximum.accumulate(values)
-    drawdowns = (values - max_values) / max_values
-    
-    return drawdowns
-
 def text_fix(text:str, newline_exclude:bool = True) -> str:
     """
     Text fix.
@@ -338,37 +286,6 @@ def text_fix(text:str, newline_exclude:bool = True) -> str:
 
     return ''.join(line.lstrip() + ('\n' if not newline_exclude else '')  
                         for line in text.split('\n'))
-
-def var_historical(data:list, confidence_level:int = 95) -> float:
-    """
-    Var historical.
-
-    Calculate the historical var.
-
-    Args:
-        data (list): List of data which will calculate the var.
-        confidence_level (int, optional): Percentile.
-    
-    Returns:
-        float: The historical var.
-    """
-    return np.sort(data)[int((100 - confidence_level) / 100 * len(data))]
-
-def var_parametric(data:list, z_alpha:float = -1.645) -> float:
-    """
-    Var parametric.
-
-    Calculate the parametric var.
-
-    Args:
-        data (list): List of data which will calculate the var.
-        z_alpha (float, optional): Critical value of the standard normal 
-            distribution corresponding to the confidence level.
-
-    Returns:
-        float: The parametric var.
-    """
-    return np.average(data)-z_alpha*np.std(data, ddof=1)
 
 def plot_candles(ax:Axes, data:pd.DataFrame, 
                  width:float = 1, color_up:str = 'g', 

@@ -31,6 +31,7 @@ from . import _commons as _cm
 from . import exception
 from . import strategy
 from . import utils
+from . import stats
 
 def load_binance_data(symbol:str = 'BTCUSDT', interval:str = '1d', 
                       start_time:str = None, end_time:str = None,
@@ -328,8 +329,8 @@ def run(cls:type, initial_funds:int = 10000,
             run_timer_text = (
                 f"| RunTimer: {utils.num_align(time()-t)} \n"
                 f"| TimerPredict: " + utils.num_align(
-                    step_history.sum() + 
-                    (step_history.mean()+step_history.std()) * 
+                    time()-t + (np.median(step_history)+step_history.std()*1
+                    + (time()-t - step_history.sum())/step_history.size) * 
                     (_cm.__data.shape[0]-step_history.size)) + " \n"
             ) if _cm.run_timer else ""
 
@@ -688,14 +689,22 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         - Op years: Years operated from the first to the last.
         - Return: The total equity earned.
         - Profit: The total amount earned.
+        - Max return: The historical maximum of returns.
+        - Return from max: Returns from the all-time high.
+        - Days from max: Days from the all-time return high.
         - Return ann: The annualized return.
         - Profit ann: The annualized profit.
+        - Return ann vol: The annualized daily standard deviation of return.
+        - Profit ann vol: The annualized daily standard deviation of profit.
         - Average ratio: The average ratio.
         - Average return: The average percentage earned.
-        - Profit fact: The profit factor is calculated by dividing total profits by total 
-                losses.
-        - Profit std: The standard deviation of profits, indicating the variability in performance.
-        - Return std: The standard deviation of return, indicating the variability in performance.
+        - Average profit: The average profit earned.
+        - Profit fact: The profit factor is calculated by dividing 
+                total profits by total losses.
+        - Return diary std: The standard deviation of daily return, 
+                which indicates the variability in performance.
+        - Profit diary std: The standard deviation of daily profit, 
+                which indicates the variability in performance.
         - Math hope: The mathematical expectation (or expected value) of returns, 
                 calculated as (Win rate × Average win) - (Loss rate × Average loss).
         - Math hope r: The relative mathematical expectation, 
@@ -704,15 +713,44 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
                 calculated as the profit at the (100 - confidence level) percentile.
         - Parametric var: The Value at Risk (VaR) calculated assuming a normal distribution, 
                 defined as the mean profit minus z-alpha times the standard deviation.
-        - Sharpe ratio: The risk-adjusted return, calculated as the annualized 
-                profit divided by the standard deviation of profits.
-        - Sharpe ratio%: The risk-adjusted return, calculated as the 
+        - Sharpe ratio: The risk-adjusted return, calculated as the 
                 annualized return divided by the standard deviation of return.
-        - Max drawdown: The biggest drawdown the profit has ever had.
-        - Average drawdown: The average of all drawdowns, 
+        - Sharpe ratio$: The risk-adjusted return, calculated as the annualized 
+                profit divided by the standard deviation of profits.
+        - Sortino ratio: The risk-adjusted return, calculated as the annualized 
+                return divided by the standard deviation of negative return.
+        - Sortino ratio$: The risk-adjusted return, calculated as the annualized 
+                profit divided by the standard deviation of negative profits.
+        - Duration ratio: It measures the average duration of trades relative 
+                to the total time traded, indicating whether the trades are 
+                short- or long-term. A low value suggests quick trades, 
+                while a high value indicates longer positions.
+        - Payoff ratio: Ratio between the average profit of winning trades and 
+                the average loss of losing trades (in absolute value).
+        - Expectation: Expected value per trade, calculated as 
+                (Win rate × Average win) - (Loss rate × Average loss).
+        - Skewness: It measures the asymmetry of the return distribution. 
+                A positive skewness indicates tails to the right (potentially large gains), 
+                while a negative skewness indicates tails to the left (potentially large losses).
+        - Kurtosis: It measures the "tailedness" or extremity of the return distribution. 
+                A high kurtosis indicates heavy tails (more frequent extreme returns, both gains and losses), 
+                while a low kurtosis suggests light tails (returns are more consistently close to the mean).
+        - Average winning op: Average winning trade is calculated as 
+                the average of only the winning trades.
+        - Average losing op: Average losing trade is calculated as 
+                the average of only the losing trades.
+        - Average duration winn: Calculate the average duration 
+                of each winner trade. 1 = 1 day.
+        - Average duration loss: Calculate the average duration 
+                of each losing trade. 1 = 1 day.
+        - Daily frequency op: It is calculated by dividing the number of t
+                ransactions by the number of trading days, where high 
+                values ​​mean high frequency and low values ​​mean the opposite.
+        - Max drawdown:  The biggest drawdown the equity has ever had.
+        - Average drawdown: The average of all drawdowns of equity curve, 
                 indicating the typical loss experienced before recovery.
-        - Max drawdown%:  The biggest drawdown the equity has ever had.
-        - Average drawdown%: The average of all drawdowns of equity curve, 
+        - Max drawdown$: The biggest drawdown the profit has ever had.
+        - Average drawdown$: The average of all drawdowns, 
                 indicating the typical loss experienced before recovery.
         - Long exposure: What percentage of traders are long.
         - Winnings: Percentage of operations won.
@@ -734,16 +772,26 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         (_cm.__trades['Date'].iloc[-1] - _cm.__trades['Date'].iloc[0])/
         (_cm.__data_width_day*_cm.__data_year_days))
 
-    # Annualized return calc.
+    # Annualized trades calc.
     trades_calc = _cm.__trades.copy()
     trades_calc['Year'] = ((trades_calc['Date'] - trades_calc['Date'].iloc[0]) / 
                   (trades_calc['Date'].iloc[-1] - trades_calc['Date'].iloc[0]) * 
                   op_years).astype(int)
 
+    trades_calc['Diary'] = ((trades_calc['Date'] - trades_calc['Date'].iloc[0]) / 
+                (trades_calc['Date'].iloc[-1] - trades_calc['Date'].iloc[0]) * 
+                op_years*_cm.__data_year_days).astype(int)
+
+    trades_calc['Duration'] = (trades_calc['PositionDate']-trades_calc['Date'])/_cm.__data_width_day
     trades_calc['Multiplier'] = 1 + trades_calc['ProfitPer'] / 100
+
     ann_return = trades_calc.groupby('Year')['Multiplier'].prod()
     ann_profit = trades_calc.groupby('Year')['Profit'].sum()
 
+    diary_return = trades_calc.groupby('Diary')['Multiplier'].prod()
+    diary_profit = trades_calc.groupby('Diary')['Profit'].sum()
+
+    print(diary_return, np.std(_cm.__trades['ProfitPer'],ddof=1))
     text = utils.statistics_format({
         'Trades':[len(_cm.__trades.index),
                   _cm.__COLORS['BOLD']+_cm.__COLORS['CYAN']],
@@ -756,95 +804,137 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         'Profit':[(_profit:=utils.round_r(_cm.__trades['Profit'].sum(),2)),
                 _cm.__COLORS['GREEN'] if float(_profit) > 0 else _cm.__COLORS['RED'],],
 
+        'Max return':[str(utils.round_r((
+            np.cumprod(trades_calc['Multiplier'].dropna()).max()-1)*100,2))+'%'],
+
+        'Return from max':[str(utils.round_r(
+            -((np.cumprod(trades_calc['Multiplier'].dropna()).max()-1)
+            - (trades_calc['Multiplier'].prod()-1))*100,2))+'%'],
+
+        'Days from max':[str(utils.round_r(
+            (trades_calc['Date'].dropna().iloc[-1]
+                - trades_calc['Date'].dropna().loc[
+                np.argmax(np.cumprod(trades_calc['Multiplier'].dropna()))])
+            / _cm.__data_width_day, 2)),
+            _cm.__COLORS['CYAN']],
+
         'Return ann':[str(_return_ann:=utils.round_r((ann_return.prod()**(1/op_years)-1)*100,2))+'%',
                   _cm.__COLORS['GREEN'] if float(_return_ann) > 0 else _cm.__COLORS['RED'],],
 
         'Profit ann':[str(_profit_ann:=utils.round_r(ann_profit.mean(),2)),
                   _cm.__COLORS['GREEN'] if float(_profit_ann) > 0 else _cm.__COLORS['RED'],],
 
-        'Average ratio':[_avg_ratio:=utils.round_r(
-            (abs(_cm.__trades['Close']-_cm.__trades['TakeProfit']) / 
-                abs(_cm.__trades['Close']-_cm.__trades['StopLoss'])).mean() 
-            if not _cm.__trades['TakeProfit'].apply(
-                    lambda x: x is None or x <= 0).all() and 
-                not _cm.__trades['StopLoss'].apply(
-                    lambda x: x is None or x <= 0).all() else 0, 2),
-                _cm.__COLORS['YELLOW'],],
+        'Return ann vol':[utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1)
+                                        *np.sqrt(_cm.__data_year_days), 2),
+                          _cm.__COLORS['YELLOW']],
 
-        'Average return':[utils.round_r(trades_calc['Multiplier'].mean(),2)+'%',
-                          _cm.__COLORS['YELLOW'],],
+        'Profit ann vol':[utils.round_r(np.std(diary_profit.dropna(),ddof=1)
+                                    *np.sqrt(_cm.__data_year_days), 2),
+                        _cm.__COLORS['YELLOW']],
 
-        'Profit fact':[_profit_fact:=(utils.round_r(
-            _cm.__trades[_cm.__trades['Profit']>0]['Profit'].sum()/
-            abs(_cm.__trades[_cm.__trades['Profit']<=0]['Profit'].sum()),2) 
-            if not pd.isna(_cm.__trades['Profit']).all() and
-                (_cm.__trades['Profit']>0).sum() > 0 and
-                (_cm.__trades['Profit']<=0).sum() > 0 else 0),
+        'Average ratio':[utils.round_r(stats.average_ratio(_cm.__trades), 2),
+                        _cm.__COLORS['YELLOW'],],
+
+        'Average return':[utils.round_r((
+                trades_calc['Multiplier'].dropna().mean()-1)*100,2)+'%',
+            _cm.__COLORS['YELLOW'],],
+
+        'Average profit':[utils.round_r(_cm.__trades['Profit'].mean(),2)+'%',
+                    _cm.__COLORS['YELLOW'],],
+
+        'Profit fact':[_profit_fact:=utils.round_r(stats.profit_fact(_cm.__trades['Profit']), 2),
                 _cm.__COLORS['GREEN'] if float(_profit_fact) > 1 else _cm.__COLORS['RED'],],
 
-        'Profit std':[(_profit_std:=utils.round_r(np.std(_cm.__trades['Profit'],ddof=1), 2)),
-                      _cm.__COLORS['YELLOW'] if float(_profit_std) > 1 else _cm.__COLORS['GREEN'],],
-
-        'Return std':[(_return_std:=utils.round_r(np.std(_cm.__trades['ProfitPer'],ddof=1), 2)),
+        'Return diary std':[(_return_std:=utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1), 2)),
                     _cm.__COLORS['YELLOW'] if float(_return_std) > 1 else _cm.__COLORS['GREEN'],],
 
-        'Math hope':[_math_hope:=utils.round_r((
-                (_cm.__trades['Profit'] > 0).sum()/len(_cm.__trades.index)*
-                    _cm.__trades['Profit'][_cm.__trades['Profit'] > 0].mean())-
-                ((_cm.__trades['Profit'] < 0).sum()/len(_cm.__trades.index)*
-                    -_cm.__trades['Profit'][_cm.__trades['Profit'] < 0].mean()), 2),
+        'Profit diary std':[(_profit_std:=utils.round_r(np.std(diary_profit.dropna(),ddof=1), 2)),
+                      _cm.__COLORS['YELLOW'] if float(_profit_std) > 1 else _cm.__COLORS['GREEN'],],
+
+        'Math hope':[_math_hope:=utils.round_r(stats.math_hope(_cm.__trades['Profit']), 2),
             _cm.__COLORS['GREEN'] if float(_math_hope) > 0 else _cm.__COLORS['RED'],],
 
-        'Math hope r':[_math_hope_r:=utils.round_r((
-            (_wrate:=((_cm.__trades['ProfitPer']>0).sum()/
-            _cm.__trades['ProfitPer'].count()) 
-                if not ((_cm.__trades['ProfitPer']>0).sum() == 0 or 
-                    _cm.__trades['ProfitPer'].count() == 0) 
-                else 0)*float(_avg_ratio))-(1-_wrate), 2),
+        'Math hope r':[_math_hope_r:=utils.round_r(
+                stats.math_hope_relative(_cm.__trades, _cm.__trades['ProfitPer']), 2),
             _cm.__COLORS['GREEN'] if float(_math_hope_r) > 0 else _cm.__COLORS['RED'],],
 
-        'Historical var':[utils.round_r(
-                            utils.var_historical(_cm.__trades['Profit'].dropna()), 2)],
+        'Historical var':[0 if _cm.__trades['Profit'].dropna().empty else utils.round_r(
+                            stats.var_historical(_cm.__trades['Profit'].dropna()), 2)],
 
-        'Parametric var':[utils.round_r(
-                            utils.var_parametric(_cm.__trades['Profit'].dropna()), 2)],
+        'Parametric var':[0 if _cm.__trades['Profit'].dropna().empty else utils.round_r(
+                            stats.var_parametric(_cm.__trades['Profit'].dropna()), 2)],
 
-        'Sharpe ratio':[utils.round_r(np.average(ann_profit)
-                                       /np.sqrt(_cm.__data_year_days)
-                                       /np.std(_cm.__trades['Profit'].dropna(),ddof=1)
-                                       , 2)],
+        'Sharpe ratio':[utils.round_r(stats.sharpe_ratio(
+            (ann_return.prod()**(1/op_years)-1)*100,
+            _cm.__data_year_days,
+            (diary_return.dropna()-1)*100), 2)],
 
-        'Sharpe ratio%':[utils.round_r((ann_return.prod()**(1/op_years)-1)*100
-                                      /np.sqrt(_cm.__data_year_days)
-                                      /np.std(_cm.__trades['ProfitPer'].dropna(),ddof=1)
-                                      , 2)],
+        'Sharpe ratio$':[utils.round_r(stats.sharpe_ratio(
+            np.average(ann_profit),
+            _cm.__data_year_days,
+            diary_profit), 2)],
+
+        'Sortino ratio':[utils.round_r(stats.sortino_ratio(
+            (ann_return.prod()**(1/op_years)-1)*100,
+            _cm.__data_year_days,
+            (diary_return.dropna()-1)*100), 2)],
+
+        'Sortino ratio$':[utils.round_r(stats.sortino_ratio(
+            np.average(ann_profit),
+            _cm.__data_year_days,
+            diary_profit), 2)],
+
+        'Duration ratio':[utils.round_r(
+            trades_calc['Duration'].sum()/len(_cm.__trades.index), 2),
+            _cm.__COLORS['CYAN']],
+
+        'Payoff ratio':[utils.round_r(stats.payoff_ratio(_cm.__trades['ProfitPer']))],
+
+        'Expectation':[utils.round_r(stats.expectation(_cm.__trades['ProfitPer']))],
+
+        'Skewness':[utils.round_r((diary_return.dropna()-1).skew(), 2)],
+
+        'Kurtosis':[utils.round_r((diary_return.dropna()-1).kurt(), 2)],
+
+        'Average winning op':[str(utils.round_r(_cm.__trades['ProfitPer'][
+                _cm.__trades['ProfitPer'] > 0].dropna().mean(), 2))+'%',
+            _cm.__COLORS['GREEN']],
+
+        'Average losing op':[str(utils.round_r(_cm.__trades['ProfitPer'][
+                _cm.__trades['ProfitPer'] < 0].dropna().mean(), 2))+'%',
+            _cm.__COLORS['RED']],
+
+        'Average duration winn':[str(utils.round_r(trades_calc['Duration'][
+                trades_calc['ProfitPer'] > 0].dropna().mean()))+'d'],
+
+        'Average duration loss':[str(utils.round_r(trades_calc['Duration'][
+                trades_calc['ProfitPer'] < 0].dropna().mean()))+'d'],
+
+        'Daily frequency op':[utils.round_r(
+            len(_cm.__trades.index) / (op_years*_cm.__data_year_days), 2),
+            _cm.__COLORS['CYAN']],
 
         'Max drawdown':[str(round(
-            utils.max_drawdown(_cm.__trades['Profit'].dropna().cumsum()+
-                               _cm._init_funds)*100,1)) + '%'],
-
-        'Average drawdown':[str(-round(np.mean(
-            utils.get_drawdowns(_cm.__trades['Profit'].dropna().cumsum()+
-                                _cm._init_funds))*100, 1)) + '%'],
-
-        'Max drawdown%':[str(round(
-            utils.max_drawdown(np.cumprod(
+            stats.max_drawdown(np.cumprod(
                 trades_calc['Multiplier'].dropna()))*100,1)) + '%'],
 
-        'Average drawdown%':[str(-round(np.mean(
-            utils.get_drawdowns(np.cumprod(
+        'Average drawdown':[str(-round(np.mean(
+            stats.get_drawdowns(np.cumprod(
                 trades_calc['Multiplier'].dropna())))*100, 1)) + '%'],
 
-        'Long exposure':[str(round((
-                _cm.__trades['Type']==1).sum()/
-                    _cm.__trades['Type'].count()*100,1)) + '%',
-            _cm.__COLORS['CYAN'],],
+        'Max drawdown$':[str(round(
+            stats.max_drawdown(_cm.__trades['Profit'].dropna().cumsum()+
+                               _cm._init_funds)*100,1)) + '%'],
 
-        'Winnings':[str(round(
-            (_cm.__trades['ProfitPer']>0).sum()/
-                _cm.__trades['ProfitPer'].count()*100,1) 
-            if not ((_cm.__trades['ProfitPer']>0).sum() == 0 or 
-                _cm.__trades['ProfitPer'].count() == 0) else 0) + '%'],
+        'Average drawdown$':[str(-round(np.mean(
+            stats.get_drawdowns(_cm.__trades['Profit'].dropna().cumsum()+
+                                _cm._init_funds))*100, 1)) + '%'],
+
+        'Long exposure':[str(round(
+            stats.long_exposure(_cm.__trades['Type'])*100)) + '%',
+            _cm.__COLORS['GREEN']],
+
+        'Winnings':[str(round(stats.winnings(_cm.__trades['ProfitPer'])*100)) + '%'],
 
     }, "---Statistics of strategy---")
 

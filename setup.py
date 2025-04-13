@@ -6,7 +6,7 @@ with open("README.md", encoding="utf-8") as file:
 
 setup(
     name='backpyf',
-    version='0.9.62b3',
+    version='0.9.63b3',
     packages=find_packages(),
     description='''BackPy is a library made in python for back testing in 
     financial markets. Read Risk_notice.txt and LICENSE.''',
