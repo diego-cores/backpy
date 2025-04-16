@@ -9,6 +9,8 @@ Variables:
         takeprofit or stoploss will closed.
     dots (bool): If false, the '.' will be replaced by commas "," in prints.
     run_timer (bool): If false the execution timer will never appear in the console.
+    max_bar_updates (int): Number of times the 'run' loading bar is updated, 
+        a very high number will greatly increase the execution time. 
 
 Hidden Variables:
     _init_funds: Initial capital for the backtesting (hidden variable).
@@ -30,6 +32,7 @@ alert = True
 dots = True
 run_timer = True
 
+max_bar_updates = 1000
 extract_without = False
 
 __data_year_days = 365

@@ -140,9 +140,7 @@ class StrategyClass(ABC):
         self.date = None
 
         self.__data = pd.DataFrame()
-
-        if not data.empty:
-            self.__data_updater(data=data)
+        self.__data_updater(data=data)
         
         self.interval, self.icon, self.width = _data_info()
 
@@ -188,17 +186,18 @@ class StrategyClass(ABC):
         """
 
         if data.empty:
-            raise exception.StyClassError('Data is empty.')
+            return 'Data is empty.'
 
-        self.open = data["Open"].iloc[-1]
-        self.high = data["High"].iloc[-1]
-        self.low = data["Low"].iloc[-1]
-        self.close = data["Close"].iloc[-1]
-        self.volume = data["Volume"].iloc[-1]
+        data_ = data.values[-1]
+        self.open = data_[0]
+        self.high = data_[1]
+        self.low = data_[2]
+        self.close = data_[3]
+        self.volume = data_[4]
         self.date = data.index[-1]
 
         self.__data = data
-        self.__trade = pd.DataFrame()
+        self.__trade = self.__trade.iloc[0:0]
 
     def __before(self, data=pd.DataFrame()):
         """
@@ -210,18 +209,18 @@ class StrategyClass(ABC):
             data (pd.DataFrame): Data from the current and previous steps.
         """
 
-        if not data.empty:
-            self.__data_updater(data=data)
+        self.__data_updater(data=data)
 
         # Check if a trade needs to be closed.
-        self.__trades_ac.apply(lambda row: self.__act_close(index=row.name) 
-                            if (not row['Type'] and 
-                            (self.__data["Low"].iloc[-1] <= row['TakeProfit'] 
-                            or self.__data["High"].iloc[-1] >= row['StopLoss']))
-                            or (row['Type'] and 
-                            (self.__data["High"].iloc[-1] >= row['TakeProfit'] 
-                            or self.__data["Low"].iloc[-1] <= row['StopLoss'])) 
-                            else None, axis=1)
+        if not self.__trades_ac.empty:
+            self.__trades_ac.apply(lambda row: self.__act_close(index=row.name) 
+                                if (not row['Type'] and 
+                                (self.__data["Low"].iloc[-1] <= row['TakeProfit'] 
+                                or self.__data["High"].iloc[-1] >= row['StopLoss']))
+                                or (row['Type'] and 
+                                (self.__data["High"].iloc[-1] >= row['TakeProfit'] 
+                                or self.__data["Low"].iloc[-1] <= row['StopLoss'])) 
+                                else None, axis=1)
         
         self.next()
 

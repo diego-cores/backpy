@@ -77,10 +77,10 @@ def load_binance_data(symbol:str = 'BTCUSDT', interval:str = '1d',
             if progress:
                 nonlocal step
 
-                utils.load_bar(size=step+1, step=step, count=False)
-                print(
-                    '0 of 1 completed | DataTimer:',utils.num_align(time()-t), end='')
                 step += 1
+
+                text = f'0 of 1 completed | DataTimer: {utils.num_align(time()-t)} '
+                utils.load_bar(size=step, step=step-1, count=False, text=text)
 
             return dt
             
@@ -319,34 +319,38 @@ def run(cls:type, initial_funds:int = 10000,
     t = time()
     
     step_t = time()
-    step_history = np.array([])
+    step_history = np.zeros(10)
+
+    skip = max(1, _cm.__data.shape[0] // _cm.max_bar_updates)
 
     for f in range(1, _cm.__data.shape[0]+2):
-        if progress and _cm.__data.shape[0] >= f:
-            utils.load_bar(size=_cm.__data.shape[0], step=f) 
-            step_history = np.append(step_history, time()-step_t)
+        if (progress and (f % skip == 0 or f >= _cm.__data.shape[0]) 
+            and _cm.__data.shape[0] >= f):
+
+            step_history[f % 10] = time()-step_t
 
             run_timer_text = (
                 f"| RunTimer: {utils.num_align(time()-t)} \n"
                 f"| TimerPredict: " + utils.num_align(
-                    time()-t + (np.median(step_history)+step_history.std()*1
-                    + (time()-t - step_history.sum())/step_history.size) * 
-                    (_cm.__data.shape[0]-step_history.size)) + " \n"
+                    time()-t + (np.median(step_history)
+                    + (time()-t - step_history.sum())/(f+1)) * 
+                    (_cm.__data.shape[0]-(f+1))) + " \n"
             ) if _cm.run_timer else ""
 
-            print(utils.text_fix(f"""
+            text = utils.text_fix(f"""
                 | StepTime: {utils.num_align(step_history[-1])} 
                 {run_timer_text}
-                """), 
-                end='')
+                """)
+
+            utils.load_bar(size=_cm.__data.shape[0], step=f, text=text) 
             step_t = time()
-        
+
         instance._StrategyClass__before(data=_cm.__data.iloc[:f])
     if progress or _cm.run_timer:
         print(
-            f'RunTimer: {utils.num_align(time()-t)}' 
-                if _cm.run_timer and not progress else '') 
-    
+            f'RunTimer: {utils.num_align(time()-t)}'
+            if _cm.run_timer and not progress else '') 
+
     act_trades = instance._StrategyClass__trades_ac
     _cm.__trades = instance._StrategyClass__trades_cl
     
@@ -396,8 +400,8 @@ def plot(log:bool = False, progress:bool = True,
     
     if progress: 
         t = time()
-        utils.load_bar(size=4, step=0)
-        print('| PlotTimer:',utils.num_align(time()-t), end='')
+        text = f'| PlotTimer: {utils.num_align(0)} '
+        utils.load_bar(size=4, step=0, text=text)
 
     mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
@@ -412,14 +416,14 @@ def plot(log:bool = False, progress:bool = True,
     fig.tight_layout(); fig.subplots_adjust(hspace=0)
 
     if progress: 
-        utils.load_bar(size=4, step=1)
-        print('| PlotTimer:',utils.num_align(time()-t), end='')
+        text = f'| PlotTimer: {utils.num_align(time()-t)} '
+        utils.load_bar(size=4, step=1, text=text)
 
     utils.plot_candles(ax1, _cm.__data, _cm.__data_width*0.9)
 
     if progress: 
-        utils.load_bar(size=4, step=2)
-        print('| PlotTimer:',utils.num_align(time()-t), end='')
+        text = f'| PlotTimer: {utils.num_align(time()-t)} '
+        utils.load_bar(size=4, step=2, text=text)
 
     if _cm.__data['Volume'].max() > 0:
       ax2.fill_between(_cm.__data.index, _cm.__data['Volume'], step='mid')
@@ -432,8 +436,8 @@ def plot(log:bool = False, progress:bool = True,
                           width_exit=lambda x: _cm.__data.index[-1]-x['Date'])
 
     if progress: 
-        utils.load_bar(size=4, step=3)
-        print('| PlotTimer:',utils.num_align(time()-t), end='')
+        text = f'| PlotTimer: {utils.num_align(time()-t)} '
+        utils.load_bar(size=4, step=3, text=text)
 
     date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
     ax1.xaxis.set_major_formatter(date_format)
@@ -453,8 +457,8 @@ def plot(log:bool = False, progress:bool = True,
         f"Back testing: '{_cm.__data_icon}' {s_date}~{e_date}")
 
     if progress: 
-        utils.load_bar(size=4, step=4)
-        print('| PlotTimer:',utils.num_align(time()-t))
+        text = f'| PlotTimer: {utils.num_align(time()-t)} '
+        utils.load_bar(size=4, step=4, text=text)
 
     mpl.pyplot.show(block=block)
 
@@ -791,7 +795,6 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
     diary_return = trades_calc.groupby('Diary')['Multiplier'].prod()
     diary_profit = trades_calc.groupby('Diary')['Profit'].sum()
 
-    print(diary_return, np.std(_cm.__trades['ProfitPer'],ddof=1))
     text = utils.statistics_format({
         'Trades':[len(_cm.__trades.index),
                   _cm.__COLORS['BOLD']+_cm.__COLORS['CYAN']],

@@ -35,7 +35,7 @@ import numpy as np
 from . import _commons as _cm
 from . import utils
 
-def load_bar(size:int, step:int, count:bool = True) -> None:
+def load_bar(size:int, step:int, count:bool = True, text:str = '') -> None:
     """
     Loading bar.
 
@@ -44,8 +44,12 @@ def load_bar(size:int, step:int, count:bool = True) -> None:
     Args:
         size (int): Number of steps in the loading bar.
         step (int): Current step in the loading process.
-        count (bool): If you want the number of 
+        count (bool, optional): If you want the number of 
             steps and the current step to be displayed.
+        text (text, optional): If you want to optimize your 
+            code by sending only one print to the console 
+            at a time, you can enter the text you want to 
+            appear to the right of the loading bar.
     """
 
     per = str(int(step/size*100))
@@ -55,7 +59,9 @@ def load_bar(size:int, step:int, count:bool = True) -> None:
     sec = load[46//2+int(len(per)-round(len(per)/2,0)):]
 
     print(
-        f'\r[{first}{per}%%{sec}] ' + (f' {step} of {size} completed ' if count else ''), 
+        f'\r[{first}{per}%%{sec}] ' 
+        + (f' {step} of {size} completed ' if count else '')
+        + (text if text.split() != '' else ''), 
         end='')
 
 def statistics_format(data:dict, title:str = None, 
