@@ -8,7 +8,8 @@ Classes:
 """
 
 from typing import TypeVar, Generic, List, Union, Dict
-from collections import UserList
+from collections.abc import ItemsView as dict_items
+from collections.abc import MutableSequence
 import numpy as np
 import pandas as pd
 
@@ -16,29 +17,30 @@ from . import exception
 
 T = TypeVar('T')
 
-class DataWrapper(UserList, Generic[T]):
+class DataWrapper(MutableSequence, Generic[T]):
     """
     DataWrapper.
 
     Datawrapper unifies pd.dataframe, pd.series, np.ndarray, lists, and dictionaries.
 
     Attributes:
-        value: The stored data in list type.
+        data: The stored data in np.ndarray type.
 
     Private Attributes:
         _index: Pandas index
-        __init_type: Saves the data type before converting to DataWrapper.
 
     Methods:
+        insert: Inserts a value into the data list.
         to_dataframe: Returns what is stored in Pandas Dataframe.
         to_series: Returns what is stored in Pandas Series.
-        to_ndarray: Returns what is stored in Numpy Array.
+        to_dict: Return the value in Python dict format.
+        to_list: Return the value in Python list format.
+        unwrap: Returns self.data in its np.ndarray format.
 
     Private Methods:
         __init__: Constructor method.
         __set_convertible: Return the data to list.
         __set_index: Return the data index if it has.
-        __set_initialtype: Return the value type list or dict.
         __valid_index: Return the index if it is correct.
     """
 
@@ -50,15 +52,15 @@ class DataWrapper(UserList, Generic[T]):
             data (Union[List[T], Dict[str, List[T]]]): Value to store.
         """
 
+        self.data = self.__set_convertible(data)
         self._index = self.__set_index(data)
-        value = self.__set_convertible(data)
-        self.__init_type = self.__set_initialtype(value)
 
-        try: super().__init__(value)
+        try: 
+            super().__init__()
         except TypeError as e:
-            raise exception.DataFlexError(f"Error converting data to list. {e}")
+            raise exception.DataFlexError(f"Error converting data to Numpy array. {e}")
 
-    def __set_convertible(self, data) -> list:
+    def __set_convertible(self, data) -> np.ndarray:
         """
         Set convertible.
 
@@ -67,21 +69,26 @@ class DataWrapper(UserList, Generic[T]):
         Returns:
             list: 'data' in list type.
         """
-
-        if isinstance(data, DataWrapper):
+        if type(data) is DataWrapper or type(data) is np.ndarray:
             return data
-        elif isinstance(data, pd.DataFrame):
-            return data.to_dict(orient='list').items()
-        elif isinstance(data, pd.Series):
-            return data.tolist()
-        elif isinstance(data, np.ndarray):
-            return data.tolist()
-        elif isinstance(data, dict):
-            return data.items()
-        
-        return data
-    
-    def __set_index(self, data) -> list:
+        elif type(data) is list:
+            return np.array(data)
+        elif type(data) is dict:
+            return np.array(list(data.values())).T
+
+        match type(data):
+            case pd.DataFrame:
+                return data.values
+            case pd.Series:
+                return data.to_numpy()
+            case pd.Index:
+                return data.to_numpy()
+            case np.ndarray:
+                return data
+
+        raise exception.DataFlexError("Unsupported data format.")
+
+    def __set_index(self, data) -> np.ndarray:
         """
         Set index.
 
@@ -91,55 +98,54 @@ class DataWrapper(UserList, Generic[T]):
             list: Index in list type.
         """
 
-        if isinstance(data, DataWrapper):
+        if type(data) is DataWrapper:
             return data._index
-        elif isinstance(data, (pd.DataFrame, pd.Series)):
-            return list(data.index)
-        
+        elif type(data) is pd.DataFrame or type(data) is pd.Series:
+            return data.index.to_numpy()
+
         return None
 
-    def __set_initialtype(self, value) -> type:
-        """
-        Set initialtype.
-
-        Returns the main type of 'value': list or dictionary.
-
-        Returns:
-            type: Main type.
-        """
-
-        if isinstance(value, DataWrapper):
-            return value._DataWrapper__init_type
-        elif isinstance(value, type({1: 1}.items())):
-            return dict
-        
-        return type(value)
-
-    def __valid_index(self, lst:bool = False) -> list:
+    def __valid_index(self, flatten:bool = False) -> list:
         """
         Valid index.
 
         Returns the index if it is suitable.
 
         Args:
-            lst (bool, optional)
+            flatten (bool, optional): The length of self.data.fallten 
+                is calculated instead of self.data.
 
         Returns:
             list: Index in list type.
         """
 
-        if lst: 
-            return self._index if self._index and len(self._index) == len(self.data) else None
+        return self._index.tolist() if isinstance(self._index, np.ndarray) and len(self._index) == (len(self.data.flatten()) if flatten else len(self.data)) else None
 
-        if (self.__init_type == dict 
-              and all(len(v) == 2 for v in self.data) 
-              and self._index 
-              and max(len(value[1]) 
-                      if isinstance(value[1], list) 
-                      else 1 for value in self.data) == len(self._index)):
-                return self._index
+    def insert(self, idx:int, value:any) -> None:
+        """
+        Insert
+
+        This is like: np.insert.
+        Inserts a value into the data list.
+
+        Args:
+            idx (bool): Index where it will be inserted.
+            value (any): Value to insert.
+        """
+
+        self.data = np.insert(self.data, idx, value)
+
+    def unwrap(self) -> np.ndarray:
+        """
+        Unwrap
+
+        Returns self.data in its np.ndarray format.
         
-        return None
+        Returns:
+            np.ndarray: self.data.
+        """
+
+        return self.data
 
     def to_dataframe(self) -> pd.DataFrame:
         """
@@ -151,14 +157,10 @@ class DataWrapper(UserList, Generic[T]):
             pd.DataFrame: Data.
         """
 
-        if self.__init_type == dict and all(len(v) == 2 for v in self.data):
-
-            return pd.DataFrame({key: value for key, value in self.data},
-                                index=self.__valid_index())
-        else:
-            try: return pd.DataFrame(self.data, index=self.__valid_index(True))
-            except ValueError as e: 
-                raise exception.ConvFlexError(f"Dataframe conversion error.")
+        try: 
+            return pd.DataFrame(self.data, index=self.__valid_index())
+        except ValueError as e: 
+            raise exception.ConvFlexError(f"Dataframe conversion error.")
 
     def to_series(self) -> pd.Series:
         """
@@ -169,19 +171,62 @@ class DataWrapper(UserList, Generic[T]):
         Returns:
             pd.Series: Data.
         """
-        try: return pd.Series(self.data, index=self.__valid_index(True))
+
+        try: 
+            return pd.Series(self.data.flatten(), index=self.__valid_index(True))
         except ValueError as e: 
             raise exception.ConvFlexError(f"Series conversion error.")
-    
-    def to_ndarray(self) -> np.ndarray:
-        """
-        To ndarray
 
-        Return the value in np.ndarray format.
+    def to_dict(self) -> dict:
+        """
+        To Python dict
+
+        Return the value in Python dict format.
 
         Returns:
-            np.ndarray: Data.
+            dict: Data.
         """
-        try: return np.array(self.data, dtype=object)
+
+        try:
+            if self.data.ndim == 2:
+                return {i: list(col) for i, col in enumerate(self.data.T)}
+            else:
+                return {i: [val] for i, val in enumerate(self.data)}
         except ValueError as e:
-            raise exception.ConvFlexError(f"ndarray conversion error.")
+            raise exception.ConvFlexError(f"Dict conversion error: {e}")
+
+    def to_list(self) -> list:
+        """
+        To Python list
+
+        Return the value in Python list format.
+
+        Returns:
+            list: Data.
+        """
+
+        return self.data.tolist()
+
+    def __array__(self, dtype=None):
+        return self.data if dtype is None else self.data.astype(dtype)
+
+    def __getattr__(self, attr):
+        return getattr(self.data, attr)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+    def __setitem__(self, idx, value):
+        self.data[idx] = value
+
+    def __delitem__(self, idx):
+        del self.data[idx]
+
+    def __len__(self):
+        return len(self.data)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({repr(self.data)})"
+
+    def __str__(self):
+        return str(self.data)

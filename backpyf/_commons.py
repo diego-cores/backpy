@@ -47,7 +47,7 @@ _init_funds = 0
 
 __custom_plot = {}
 
-__binance_timeout = 0.2
+__binance_timeout = 0.08
 
 __COLORS = {
     'RED': "\033[91m",

@@ -73,7 +73,7 @@ def load_binance_data(symbol:str = 'BTCUSDT', interval:str = '1d',
                                startTime=st_t, 
                                endTime=int(datetime.strptime(end_time, '%Y-%m-%d').timestamp() * 1000), 
                                limit=1000)
-            
+
             if progress:
                 nonlocal step
 
@@ -83,7 +83,7 @@ def load_binance_data(symbol:str = 'BTCUSDT', interval:str = '1d',
                 utils.load_bar(size=step, step=step-1, count=False, text=text)
 
             return dt
-            
+
         client = Client()
         data = utils._loop_data(
             function=__loop_def,
@@ -320,6 +320,7 @@ def run(cls:type, initial_funds:int = 10000,
     
     step_t = time()
     step_history = np.zeros(10)
+    steph_index = 0
 
     skip = max(1, _cm.__data.shape[0] // _cm.max_bar_updates)
 
@@ -327,23 +328,25 @@ def run(cls:type, initial_funds:int = 10000,
         if (progress and (f % skip == 0 or f >= _cm.__data.shape[0]) 
             and _cm.__data.shape[0] >= f):
 
-            step_history[f % 10] = time()-step_t
-
+            step_time = time()-step_t
+            step_history[steph_index % 10] = step_time
+            steph_index += 1
+ 
             run_timer_text = (
                 f"| RunTimer: {utils.num_align(time()-t)} \n"
                 f"| TimerPredict: " + utils.num_align(
-                    time()-t + (np.median(step_history)
-                    + (time()-t - step_history.sum())/(f+1)) * 
-                    (_cm.__data.shape[0]-(f+1))) + " \n"
+                    time()-t + (((md:=np.median(step_history))
+                    + (time()-t - md*f)/f) *
+                    (_cm.__data.shape[0]-f))) + " \n"
             ) if _cm.run_timer else ""
 
             text = utils.text_fix(f"""
-                | StepTime: {utils.num_align(step_history[-1])} 
+                | StepTime: {utils.num_align(step_time)} 
                 {run_timer_text}
                 """)
 
             utils.load_bar(size=_cm.__data.shape[0], step=f, text=text) 
-            step_t = time()
+        step_t = time()
 
         instance._StrategyClass__before(data=_cm.__data.iloc[:f])
     if progress or _cm.run_timer:

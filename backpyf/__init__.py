@@ -4,7 +4,7 @@ Back Test Py.
 BackPy is a library used to test strategies in the market.
 
 Version:
-    0.9.64b3
+    0.9.65b3
 
 Repository:
     https://github.com/Diego-Cores/BackPy
@@ -37,6 +37,7 @@ from .strategy import StrategyClass
 from ._commons import (
     __binance_timeout,
     extract_without,
+    max_bar_updates,
     run_timer,
     alert,
     dots,
@@ -98,6 +99,7 @@ __all__ = [
     '__binance_timeout',
     'plot_strategy_add',
     'extract_without',
+    'max_bar_updates',
     'StrategyClass',
     'plot_strategy',
     'get_drawdowns',

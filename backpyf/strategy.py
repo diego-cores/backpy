@@ -282,7 +282,7 @@ class StrategyClass(ABC):
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
-        
+
         return flx.DataWrapper(
             __data.iloc[len(__data)-last 
                         if last != None and last < len(__data) else 0:])
