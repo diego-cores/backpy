@@ -23,10 +23,8 @@ class DataWrapper(MutableSequence, Generic[T]):
 
     Datawrapper unifies pd.dataframe, pd.series, np.ndarray, lists, and dictionaries.
 
-    Attributes:
-        data: The stored data in np.ndarray type.
-
     Private Attributes:
+        _data: The stored data in np.ndarray type.
         _index: Pandas index
 
     Methods:
@@ -35,7 +33,7 @@ class DataWrapper(MutableSequence, Generic[T]):
         to_series: Returns what is stored in Pandas Series.
         to_dict: Return the value in Python dict format.
         to_list: Return the value in Python list format.
-        unwrap: Returns self.data in its np.ndarray format.
+        unwrap: Returns self._data in its np.ndarray format.
 
     Private Methods:
         __init__: Constructor method.
@@ -52,13 +50,9 @@ class DataWrapper(MutableSequence, Generic[T]):
             data (Union[List[T], Dict[str, List[T]]]): Value to store.
         """
 
-        self.data = self.__set_convertible(data)
+        self._data = self.__set_convertible(data)
         self._index = self.__set_index(data)
-
-        try: 
-            super().__init__()
-        except TypeError as e:
-            raise exception.DataFlexError(f"Error converting data to Numpy array. {e}")
+        super().__init__()
 
     def __set_convertible(self, data) -> np.ndarray:
         """
@@ -69,8 +63,10 @@ class DataWrapper(MutableSequence, Generic[T]):
         Returns:
             list: 'data' in list type.
         """
-        if type(data) is DataWrapper or type(data) is np.ndarray:
-            return data
+        if data is None:
+            return np.array([])
+        elif type(data) is DataWrapper:
+            return data.unwrap()
         elif type(data) is list:
             return np.array(data)
         elif type(data) is dict:
@@ -86,7 +82,7 @@ class DataWrapper(MutableSequence, Generic[T]):
             case np.ndarray:
                 return data
 
-        raise exception.DataFlexError("Unsupported data format.")
+        return data
 
     def __set_index(self, data) -> np.ndarray:
         """
@@ -112,14 +108,14 @@ class DataWrapper(MutableSequence, Generic[T]):
         Returns the index if it is suitable.
 
         Args:
-            flatten (bool, optional): The length of self.data.fallten 
-                is calculated instead of self.data.
+            flatten (bool, optional): The length of self._data.fallten 
+                is calculated instead of self._data.
 
         Returns:
             list: Index in list type.
         """
 
-        return self._index.tolist() if isinstance(self._index, np.ndarray) and len(self._index) == (len(self.data.flatten()) if flatten else len(self.data)) else None
+        return self._index.tolist() if isinstance(self._index, np.ndarray) and len(self._index) == (len(self._data.flatten()) if flatten else len(self._data)) else None
 
     def insert(self, idx:int, value:any) -> None:
         """
@@ -133,19 +129,19 @@ class DataWrapper(MutableSequence, Generic[T]):
             value (any): Value to insert.
         """
 
-        self.data = np.insert(self.data, idx, value)
+        self._data = np.insert(self._data, idx, value)
 
     def unwrap(self) -> np.ndarray:
         """
         Unwrap
 
-        Returns self.data in its np.ndarray format.
+        Returns self._data in its np.ndarray format.
         
         Returns:
-            np.ndarray: self.data.
+            np.ndarray: self._data.
         """
 
-        return self.data
+        return self._data
 
     def to_dataframe(self) -> pd.DataFrame:
         """
@@ -158,7 +154,7 @@ class DataWrapper(MutableSequence, Generic[T]):
         """
 
         try: 
-            return pd.DataFrame(self.data, index=self.__valid_index())
+            return pd.DataFrame(self._data, index=self.__valid_index())
         except ValueError as e: 
             raise exception.ConvFlexError(f"Dataframe conversion error.")
 
@@ -173,7 +169,7 @@ class DataWrapper(MutableSequence, Generic[T]):
         """
 
         try: 
-            return pd.Series(self.data.flatten(), index=self.__valid_index(True))
+            return pd.Series(self._data.flatten(), index=self.__valid_index(True))
         except ValueError as e: 
             raise exception.ConvFlexError(f"Series conversion error.")
 
@@ -188,10 +184,10 @@ class DataWrapper(MutableSequence, Generic[T]):
         """
 
         try:
-            if self.data.ndim == 2:
-                return {i: list(col) for i, col in enumerate(self.data.T)}
+            if self._data.ndim == 2:
+                return {i: list(col) for i, col in enumerate(self._data.T)}
             else:
-                return {i: [val] for i, val in enumerate(self.data)}
+                return {i: [val] for i, val in enumerate(self._data)}
         except ValueError as e:
             raise exception.ConvFlexError(f"Dict conversion error: {e}")
 
@@ -205,28 +201,55 @@ class DataWrapper(MutableSequence, Generic[T]):
             list: Data.
         """
 
-        return self.data.tolist()
+        return self._data.tolist()
+
+    def __getattr__(self, name):
+        attr = getattr(self._data, name, None)
+        if callable(attr):
+            def wrapper(*args, **kwargs):
+                try:
+                    result = attr(*args, **kwargs)
+
+                    return DataWrapper(result) if isinstance(result, np.ndarray) else result
+                except Exception as e:
+                    raise exception.ConvFlexError(f"Error when calling '{name}': {e}")
+            return wrapper
+        elif attr is not None:
+            return attr
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
     def __array__(self, dtype=None):
-        return self.data if dtype is None else self.data.astype(dtype)
-
-    def __getattr__(self, attr):
-        return getattr(self.data, attr)
+        return self._data if dtype is None else self._data.astype(dtype)
 
     def __getitem__(self, idx):
-        return self.data[idx]
+        return self._data[idx]
 
     def __setitem__(self, idx, value):
-        self.data[idx] = value
+        self._data[idx] = value
 
     def __delitem__(self, idx):
-        del self.data[idx]
+        del self._data[idx]
 
     def __len__(self):
-        return len(self.data)
+        return len(self._data)
+
+    def __iter__(self):
+        return iter(self._data)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({repr(self.data)})"
+        return f"{self.__class__.__name__}"
 
     def __str__(self):
-        return str(self.data)
+        return str(self._data)
+
+    def __add__(self, other):
+        return DataWrapper(self._data + (other.unwrap() if isinstance(other, DataWrapper) else other))
+
+    def __sub__(self, other):
+        return DataWrapper(self._data - (other.unwrap() if isinstance(other, DataWrapper) else other))
+
+    def __mul__(self, other):
+        return DataWrapper(self._data * (other.unwrap() if isinstance(other, DataWrapper) else other))
+
+    def __truediv__(self, other):
+        return DataWrapper(self._data / (other.unwrap() if isinstance(other, DataWrapper) else other))

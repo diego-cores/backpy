@@ -21,5 +21,3 @@ class StyClassError(Exception):pass
 class ActionError(Exception):pass
 
 class ConvFlexError(Exception):pass
-
-class DataFlexError(Exception):pass
