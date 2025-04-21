@@ -113,8 +113,8 @@ class StrategyClass(ABC):
     def __init__(self, data:pd.DataFrame = pd.DataFrame(), 
                  trades_cl:pd.DataFrame = pd.DataFrame(), 
                  trades_ac:pd.DataFrame = pd.DataFrame(),
-                 spread_pct :float = 0, commission:float = 0, 
-                 init_funds:int = 0) -> None: 
+                 spread_pct:float = 0, commission:float = 0, 
+                 slippage_pct:float = 0, init_funds:int = 0) -> None: 
         """
         __init__
 
@@ -126,6 +126,7 @@ class StrategyClass(ABC):
             trades_ac (pd.DataFrame, optional): Open trades.
             spread_pct (float, optional): Spread per trade.
             commission (float, optional): Commission per trade.
+            slippage_pct (float, optional): Slippage per trade.
             init_founds (int, optional): Initial funds for the strategy.
         """
 
@@ -145,6 +146,7 @@ class StrategyClass(ABC):
         self.interval, self.icon, self.width = _data_info()
 
         self.__spread_pct  = spread_pct
+        self.__slippage_pct = slippage_pct
         self.__commission = commission
         self.__init_funds = init_funds
 
@@ -273,20 +275,22 @@ class StrategyClass(ABC):
         __data = self.__data
         if label == 'index': 
             return flx.DataWrapper(__data.index)
-        elif label != None:
-            __data = __data[label]
 
         if (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
-                raise ValueError(utils.text_fix("""
-                                Last has to be less than the length of 
-                                'data' and greater than 0.
-                                """, newline_exclude=True))
+            raise ValueError(utils.text_fix("""
+                            Last has to be less than the length of 
+                            'data' and greater than 0.
+                            """, newline_exclude=True))
 
-        return flx.DataWrapper(
-            __data.iloc[len(__data)-last 
-                        if last != None and last < len(__data) else 0:])
-    
+        data = __data.values[
+            len(__data) - last if last is not None and last < len(__data) else 0:]
+
+        if label != None: 
+            data = data[:,__data.columns.get_loc(label)]
+
+        return flx.DataWrapper(data)
+
     def prev_trades_cl(self, label:str = None, last:int = None) -> flx.DataWrapper:
         """
         Prev of trades closed.
@@ -312,8 +316,8 @@ class StrategyClass(ABC):
             - StopLoss: The stop loss position.
             - TakeProfit: The take profit position.
             - PositionOpen: The 'Close' price at the trade's start.
-            - PositionClose: Price at which the position was closed
-            - PositionCloseNoSpread: Price at which the position was closed without spread
+            - PositionClose: Price at which the position was closed.
+            - PositionCloseNoS: Price at which the position was closed without any slipage.
             - PositionDate: The step date when the trade ends.
             - Amount: Chosen amount.
             - ProfitPer: Trade profit in percentage.
@@ -325,20 +329,25 @@ class StrategyClass(ABC):
         """
 
         __trades_cl = self.__trades_cl
-        if label == 'index': return flx.DataWrapper(__trades_cl.index)
-        elif __trades_cl.empty: return flx.DataWrapper()
-        elif label != None: __trades_cl = __trades_cl[label]
+        if label == 'index': 
+            return flx.DataWrapper(__trades_cl.index)
+        elif __trades_cl.empty: 
+            return flx.DataWrapper()
 
         if (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
-                raise ValueError(utils.text_fix("""
-                                Last has to be less than the length of 
-                                'data' and greater than 0.
-                                """, newline_exclude=True))
+            raise ValueError(utils.text_fix("""
+                            Last has to be less than the length of 
+                            'data' and greater than 0.
+                            """, newline_exclude=True))
 
-        return flx.DataWrapper(
-            __trades_cl.iloc[len(__trades_cl)-last 
-                                if last != None and last < len(__trades_cl) else 0:])
+        data = __trades_cl.values[
+            len(__trades_cl) - last if last is not None and last < len(__trades_cl) else 0:]
+        
+        if label != None: 
+            data = data[:,__trades_cl.columns.get_loc(label)]
+
+        return flx.DataWrapper(data)
     
     def prev_trades_ac(self, label:str = None, last:int = None) -> flx.DataWrapper:
         """
@@ -373,20 +382,25 @@ class StrategyClass(ABC):
         """
 
         __trades_ac = self.__trades_ac
-        if label == 'index': return flx.DataWrapper(__trades_ac.index)
-        elif __trades_ac.empty: return flx.DataWrapper()
-        elif label != None: __trades_ac = __trades_ac[label]
+        if label == 'index': 
+            return flx.DataWrapper(__trades_ac.index)
+        elif __trades_ac.empty: 
+            return flx.DataWrapper()
 
         if (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
-                raise ValueError(utils.text_fix("""
-                                Last has to be less than the length of 
-                                'data' and greater than 0.
-                                """, newline_exclude=True))
+            raise ValueError(utils.text_fix("""
+                            Last has to be less than the length of 
+                            'data' and greater than 0.
+                            """, newline_exclude=True))
 
-        return flx.DataWrapper(
-             __trades_ac.iloc[len(__trades_ac)-last 
-                                if last != None and last < len(__trades_ac) else 0:])
+        data = __trades_ac.values[
+            len(__trades_ac) - last if last is not None and last < len(__trades_ac) else 0:]
+    
+        if label != None: 
+            data = data[:,__trades_ac.columns.get_loc(label)]
+
+        return flx.DataWrapper(data)
     
     def idc_hvolume(self, start:int = 0, end:int = None, 
                     bar:int = 10) -> flx.DataWrapper:
@@ -514,7 +528,7 @@ class StrategyClass(ABC):
 
         return ema.iloc[len(ema)-last 
                         if last != None and last < len(ema) else 0:]
-    
+
     def idc_sma(self, length:int = any, 
                 source:str = 'Close', last:int = None) -> flx.DataWrapper:
         """
@@ -1981,9 +1995,11 @@ class StrategyClass(ABC):
                                incorrectly configured for the position type_.
                                """, newline_exclude=True))
         
-        # Spread calc.
+        # Spread and slipage calc.
         spread = self.__data["Close"].iloc[-1]*(self.__spread_pct/100)
-        position_open = self.__data["Close"].iloc[-1]+spread if type_ else self.__data["Close"].iloc[-1]-spread
+        slippage = self.__data["Close"].iloc[-1]*(self.__slippage_pct/100)
+        position_open = (self.__data["Close"].iloc[-1]+spread+slippage
+                         if type_ else self.__data["Close"].iloc[-1]-spread-slippage)
 
         # Create new trade.
         self.__trade = pd.DataFrame({'Date':self.__data.index[-1],
@@ -1993,7 +2009,7 @@ class StrategyClass(ABC):
                                      'High':self.__data["High"].iloc[-1],
                                      'PositionOpen':position_open,
                                      'PositionClose':np.nan,
-                                     'PositionCloseNoSpread':np.nan,
+                                     'PositionCloseNoS':np.nan,
                                      'PositionDate':np.nan,
                                      'StopLoss':stop_loss,
                                      'TakeProfit':take_profit,
@@ -2043,12 +2059,14 @@ class StrategyClass(ABC):
                                  if self.__data["Low"].iloc[-1] <= take 
                                  else self.__data["Close"].iloc[-1]))
 
-        # Spread calc.
+        # Spread and slipage calc.
         spread = self.__data["Close"].iloc[-1]*(self.__spread_pct/100)
-        position_close_spread = position_close+spread if trade['Type'].iloc[0] else position_close-spread
+        slippage = self.__data["Close"].iloc[-1]*(self.__slippage_pct/100)
+        position_close_spread = (position_close-spread-slippage 
+                                 if trade['Type'].iloc[0] else position_close+spread+slippage)
 
         # Fill data.
-        trade['PositionCloseNoSpread'] = position_close
+        trade['PositionCloseNoS'] = position_close
         trade['PositionClose'] = position_close_spread
         trade['PositionDate'] = self.__data.index[-1]
         open = trade['PositionOpen'].iloc[0]

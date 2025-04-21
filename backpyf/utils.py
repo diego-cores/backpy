@@ -404,7 +404,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
 
                 route  = Rectangle(xy=(row['Date'], row['PositionOpen']), 
                                 width=row['PositionDate']-row['Date'], 
-                                height=row['PositionCloseNoSpread']-row['PositionOpen'], 
+                                height=row['PositionCloseNoS']-row['PositionOpen'], 
                                 facecolor=cl, edgecolor=cl)
             
                 route.set_alpha(alpha)

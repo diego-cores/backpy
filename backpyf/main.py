@@ -268,8 +268,8 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
 
     if statistics: stats_icon(prnt=True)
 
-def run(cls:type, initial_funds:int = 10000, 
-        commission:float = 0, spread:float = 0, 
+def run(cls:type, initial_funds:int = 10000, commission:float = 0, 
+        spread:float = 0, slippage:float = 0,
         prnt:bool = True, progress:bool = True) -> str:
     """
     Run Your Strategy.
@@ -284,6 +284,8 @@ def run(cls:type, initial_funds:int = 10000,
         commission (float, optional): Commission percentage for each trade. Used for 
                             statistics. Default is 0.
         spread (float, optional): Spread percentage for each trade. It is calculated 
+                            at the closing and opening of each trade.
+        slippage (float, optional): Slippage percentage for each trade. It is calculated 
                             at the closing and opening of each trade.
         prnt (bool, optional): If True, prints trade statistics. If False, returns a string 
                     with the statistics. Default is True.
@@ -303,6 +305,10 @@ def run(cls:type, initial_funds:int = 10000,
         raise exception.RunError("'initial_funds' cannot be less than 0.")
     elif commission < 0: 
         raise exception.RunError("'commission' cannot be less than 0.")
+    elif spread < 0: 
+        raise exception.RunError("'spread' cannot be less than 0.")
+    elif slippage < 0: 
+        raise exception.RunError("'slipage' cannot be less than 0.")
     elif not issubclass(cls, strategy.StrategyClass):
         raise exception.RunError(
             f"'{cls.__name__}' is not a subclass of 'strategy.StrategyClass'")
@@ -314,8 +320,8 @@ def run(cls:type, initial_funds:int = 10000,
     _cm.__data_width = utils.calc_width(_cm.__data.index, True)
 
     _cm._init_funds = initial_funds
-    instance = cls(spread_pct=spread , commission=commission, 
-                   init_funds=initial_funds)
+    instance = cls(spread_pct=spread, commission=commission, 
+                   slippage_pct=slippage, init_funds=initial_funds)
     t = time()
     
     step_t = time()
