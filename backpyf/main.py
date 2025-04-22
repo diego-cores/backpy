@@ -33,14 +33,127 @@ from . import strategy
 from . import utils
 from . import stats
 
-def load_binance_data(symbol:str = 'BTCUSDT', interval:str = '1d', 
-                      start_time:str = None, end_time:str = None,
-                      statistics:bool = True, progress:bool = True,
-                      data_extract:bool = False) -> tuple:
+def load_binance_data_futures(symbol:str = 'BTCUSDT', interval:str = '1d', 
+                            start_time:str = None, end_time:str = None,
+                            statistics:bool = True, progress:bool = True,
+                            data_extract:bool = False) -> tuple:
     """
-    Load Binance Data.
+    Load Binance data from futures.
 
-    Loads data using the binance-connector module.
+    Loads data using the binance-connector module from futures.
+
+    Why this differentiation?
+        Binance futures data is different from spot data, 
+        so it's up to you to decide which one to use based on how you plan to trade.
+
+    Args:
+        symbol (str, optional): The trading pair.
+        interval (str, optional): Data interval, e.g 1s, 1m, 5m, 1h, 1d, etc.
+        start_time (str): Start date for load data in YYYY-MM-DD format.
+        end_time (str): End date for load data in YYYY-MM-DD format.
+        statistics (bool, optional): If True, prints statistics of the loaded data.
+        progress (bool, optional): If True, shows a progress bar and timer.
+        data_extract (bool, optional): If True, the data will be returned and 
+            the module variables will not be assigned with them.
+
+    Returns:
+        tuple: If 'data_extract' is true, 
+            a tuple containing the data will be returned (data, data_width).
+    """
+    # Exceptions.
+    if start_time is None or end_time is None:
+        raise exception.BinanceError('Binance parameters error.')
+    
+    try:
+        from binance.um_futures import UMFutures as Client
+
+        if progress:
+            t = time()
+            step = 0
+        
+        def __loop_def (st_t):
+            dt = client.klines(symbol=symbol, 
+                               interval=interval, 
+                               startTime=st_t, 
+                               endTime=int(datetime.strptime(end_time, '%Y-%m-%d').timestamp() * 1000), 
+                               limit=1000)
+
+            if progress:
+                nonlocal step
+
+                step += 1
+
+                text = f'0 of 1 completed | DataTimer: {utils.num_align(time()-t)} '
+                utils.load_bar(size=step, step=step-1, count=False, text=text)
+
+            return dt
+
+        client = Client()
+        data = utils._loop_data(
+            function=__loop_def,
+            bpoint=lambda x, y=None: y == int(x[0].iloc[-1]) if y else int(x[0].iloc[-1]),
+            init = int(datetime.strptime(start_time, '%Y-%m-%d').timestamp() * 1000),
+            timeout = _cm.__binance_timeout
+            ).astype(float)
+        
+        data.columns = ['timestamp', 
+                        'Open', 
+                        'High', 
+                        'Low', 
+                        'Close', 
+                        'Volume', 
+                        'Close_time', 
+                        'Quote_asset_volume', 
+                        'Number_of_trades', 
+                        'Taker_buy_base', 
+                        'Taker_buy_quote', 
+                        'Ignore']
+
+        data.index = data['timestamp']
+        data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
+
+        if data.empty: 
+            raise exception.BinanceError('Data empty error.')
+        
+        if progress: 
+            utils.load_bar(size=1, step=1)
+            print('| DataTimer:',utils.num_align(round(time()-t,2)))
+        
+        data.index = mpl.dates.date2num(data.index)
+        data_width = utils.calc_width(data.index)
+
+        if statistics: stats_icon(prnt=True, 
+                                  data=data, 
+                                  data_icon=symbol.strip(),
+                                  data_interval=interval.strip())
+
+        if data_extract:
+            return data, data_width
+        
+        _cm.__data = data
+        _cm.__data_width = data_width
+        _cm.__data_icon = symbol.strip()
+        _cm.__data_interval = interval.strip()
+        _cm.__data_width_day = utils.calc_day(interval, data_width)
+        _cm.__data_year_days = 365
+
+    except ModuleNotFoundError: 
+        raise exception.BinanceError('Binance futures connector is not installed.')
+    except: 
+        raise exception.BinanceError('Binance parameters error.')
+
+def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d', 
+                            start_time:str = None, end_time:str = None,
+                            statistics:bool = True, progress:bool = True,
+                            data_extract:bool = False) -> tuple:
+    """
+    Load Binance data from spot.
+
+    Loads data using the binance-connector module from spot.
+
+    Why this differentiation?
+        Binance spot data is different from futures data, 
+        so it's up to you to decide which one to use based on how you plan to trade.
 
     Args:
         symbol (str, optional): The trading pair.
@@ -285,6 +398,7 @@ def run(cls:type, initial_funds:int = 10000, commission:float = 0,
                             statistics. Default is 0.
         spread (float, optional): Spread percentage for each trade. It is calculated 
                             at the closing and opening of each trade.
+                            Spread as the total difference between the ask and the bid.
         slippage (float, optional): Slippage percentage for each trade. It is calculated 
                             at the closing and opening of each trade.
         prnt (bool, optional): If True, prints trade statistics. If False, returns a string 

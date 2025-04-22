@@ -1,5 +1,5 @@
 backpyf/__pycache__/
 .vscode/
-.vtest/
+venv/
 yfinance_cache
 test

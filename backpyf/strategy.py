@@ -1996,7 +1996,7 @@ class StrategyClass(ABC):
                                """, newline_exclude=True))
         
         # Spread and slipage calc.
-        spread = self.__data["Close"].iloc[-1]*(self.__spread_pct/100)
+        spread = self.__data["Close"].iloc[-1]*(self.__spread_pct/100/2)
         slippage = self.__data["Close"].iloc[-1]*(self.__slippage_pct/100)
         position_open = (self.__data["Close"].iloc[-1]+spread+slippage
                          if type_ else self.__data["Close"].iloc[-1]-spread-slippage)
@@ -2060,7 +2060,7 @@ class StrategyClass(ABC):
                                  else self.__data["Close"].iloc[-1]))
 
         # Spread and slipage calc.
-        spread = self.__data["Close"].iloc[-1]*(self.__spread_pct/100)
+        spread = self.__data["Close"].iloc[-1]*(self.__spread_pct/100/2)
         slippage = self.__data["Close"].iloc[-1]*(self.__slippage_pct/100)
         position_close_spread = (position_close-spread-slippage 
                                  if trade['Type'].iloc[0] else position_close+spread+slippage)

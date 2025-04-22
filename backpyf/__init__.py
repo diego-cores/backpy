@@ -4,7 +4,7 @@ Back Test Py.
 BackPy is a library used to test strategies in the market.
 
 Version:
-    0.9.67b3
+    0.9.68b3
 
 Repository:
     https://github.com/Diego-Cores/BackPy
@@ -43,9 +43,10 @@ from ._commons import (
     dots,
 )
 from .main import (
+    load_binance_data_futures,
     plot_strategy_decorator,
+    load_binance_data_spot,
     load_yfinance_data, 
-    load_binance_data,
     plot_strategy_add,
     plot_strategy,
     stats_trades,
@@ -93,9 +94,10 @@ What can I do with BackPy?
 """
 
 __all__ = [
+    'load_binance_data_futures',
     'plot_strategy_decorator',
+    'load_binance_data_spot',
     'load_yfinance_data',
-    'load_binance_data',
     '__binance_timeout',
     'plot_strategy_add',
     'extract_without',

@@ -6,7 +6,7 @@ with open("README.md", encoding="utf-8") as file:
 
 setup(
     name='backpyf',
-    version='0.9.67b3',
+    version='0.9.68b3',
     packages=find_packages(),
     description='''BackPy is a library made in python for back testing in 
     financial markets. Read Risk_notice.txt and LICENSE.''',
@@ -27,6 +27,7 @@ setup(
     extras_require={
         'optional': [
             'yfinance==0.2.50',
-            'binance-connector==3.10.0']
+            'binance-connector==3.10.0',
+            'binance-futures-connector==4.1.0']
     }
 )
