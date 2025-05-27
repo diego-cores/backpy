@@ -20,4 +20,6 @@ class StyClassError(Exception):pass
 
 class ActionError(Exception):pass
 
-class ConvFlexError(Exception):pass
+class ConvWrapperError(Exception):pass
+
+class CostValueError(Exception):pass

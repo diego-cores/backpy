@@ -227,17 +227,7 @@ class StrategyClass(ABC):
         self.next()
 
         # Concat new trade.
-        if (
-            _cm.extract_without and
-            not self.__trade.empty and 
-            np.isnan(self.__trade['StopLoss'].iloc[0]) and 
-            np.isnan(self.__trade['TakeProfit'].iloc[0])
-            ):
-
-            self.__trades_cl = pd.concat([self.__trades_cl, self.__trade], 
-                                         ignore_index=True)
-            self.__trades_cl.reset_index(drop=True, inplace=True)
-        elif not self.__trade.empty: 
+        if not self.__trade.empty: 
             self.__trades_ac = pd.concat([self.__trades_ac, self.__trade], 
                                          ignore_index=True)
 
@@ -313,12 +303,12 @@ class StrategyClass(ABC):
             - Open: The open price at the trade's start.
             - Low: The lowest price at the trade's start.
             - High: The highest price at the trade's start.
-            - StopLoss: The stop loss position.
-            - TakeProfit: The take profit position.
             - PositionOpen: The 'Close' price at the trade's start.
             - PositionClose: Price at which the position was closed.
             - PositionCloseNoS: Price at which the position was closed without any slipage.
             - PositionDate: The step date when the trade ends.
+            - StopLoss: The stop loss position.
+            - TakeProfit: The take profit position.
             - Amount: Chosen amount.
             - ProfitPer: Trade profit in percentage.
             - Profit: Trade profit based on amount.
@@ -372,9 +362,14 @@ class StrategyClass(ABC):
             - Low: The lowest price at the trade's start.
             - High: The highest price at the trade's start.
             - PositionOpen: The 'Close' price at the trade's start.
+            - PositionClose: Price at which the position was closed.
+            - PositionCloseNoS: Price at which the position was closed without any slipage.
+            - PositionDate: The step date when the trade ends.
             - StopLoss: The stop loss position.
             - TakeProfit: The take profit position.
             - Amount: Chosen amount.
+            - ProfitPer: Trade profit in percentage.
+            - Profit: Trade profit based on amount.
             - Type: Type of trade.
         
         Returns:

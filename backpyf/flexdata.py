@@ -49,7 +49,8 @@ class DataWrapper(MutableSequence, Generic[T]):
         __valid_columns: Returns the correct column names.
     """
 
-    def __init__(self, data: Union[List[T], Dict[str, List[T]]] = None, columns:np.ndarray = None) -> None:
+    def __init__(self, data: Union[List[T], Dict[str, List[T]]] = None, 
+                 columns:np.ndarray = None) -> None:
         """
         Builder method.
 
@@ -257,7 +258,8 @@ class DataWrapper(MutableSequence, Generic[T]):
         try:
             if self._data.ndim == 2:
                 columns = self.__valid_columns()
-                return {columns[i]: list(self._data.T[i]) for i in range(len(self._data.T))}
+                return {columns[i]: list(self._data.T[i]) 
+                            for i in range(len(self._data.T))}
             else:
                 return {i: [val] for i, val in enumerate(self._data)}
         except ValueError as e:
@@ -284,11 +286,13 @@ class DataWrapper(MutableSequence, Generic[T]):
 
                     return DataWrapper(result) if isinstance(result, np.ndarray) else result
                 except Exception as e:
-                    raise exception.ConvWrapperError(f"Error when calling '{name}': {e}")
+                    raise exception.ConvWrapperError(
+                        f"Error when calling '{name}': {e}")
             return wrapper
         elif attr is not None:
             return attr
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+        raise AttributeError(
+            f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
     def __array__(self, dtype=None):
         return self._data if dtype is None else self._data.astype(dtype)
@@ -315,16 +319,20 @@ class DataWrapper(MutableSequence, Generic[T]):
         return str(self._data)
 
     def __add__(self, other):
-        return DataWrapper(self._data + (other.unwrap() if isinstance(other, DataWrapper) else other))
+        return DataWrapper(
+            self._data + (other.unwrap() if isinstance(other, DataWrapper) else other))
 
     def __sub__(self, other):
-        return DataWrapper(self._data - (other.unwrap() if isinstance(other, DataWrapper) else other))
+        return DataWrapper(
+            self._data - (other.unwrap() if isinstance(other, DataWrapper) else other))
 
     def __mul__(self, other):
-        return DataWrapper(self._data * (other.unwrap() if isinstance(other, DataWrapper) else other))
+        return DataWrapper(
+            self._data * (other.unwrap() if isinstance(other, DataWrapper) else other))
 
     def __truediv__(self, other):
-        return DataWrapper(self._data / (other.unwrap() if isinstance(other, DataWrapper) else other))
+        return DataWrapper(
+            self._data / (other.unwrap() if isinstance(other, DataWrapper) else other))
 
 class CostsValue:
     """
@@ -373,7 +381,8 @@ class CostsValue:
                 self.__maker = self.__process_value(value[0])
                 self.__taker = self.__process_value(value[1])
             else:
-                raise exception.CostValueError("Tuple must have 1 or 2 elements: (maker, taker)")
+                raise exception.CostValueError(
+                    "Tuple must have 1 or 2 elements: (maker, taker)")
         else:
             self.__maker = self.__taker = self.__process_value(value)
 
