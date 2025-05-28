@@ -892,16 +892,23 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
     diary_profit = trades_calc.groupby('Diary')['Profit'].sum()
 
     # Consecutive trades calc.
-
-    # Trade streak calc.
     trades_count_cs = _cm.__trades['Profit'].apply(
         lambda x: 1 if x > 0 else (-1 if x < 0 else 0)
-        ).cumsum()
+        )
+    trades_count_cs = pd.concat(
+        [pd.Series([0]), trades_count_cs], ignore_index=True)
 
-    max_values = np.maximum.accumulate(trades_count_cs)
-    trades_streak = trades_count_cs - max_values
+    group = (
+        (trades_count_cs != trades_count_cs.shift()) 
+        & (trades_count_cs != 0) 
+        & (trades_count_cs.shift() != 0)
+    ).cumsum()
+    
+    trades_csct = trades_count_cs.groupby(group).cumsum()
 
-    print(trades_streak)
+    # Trade streak calc.
+    trades_streak = (trades_count_cs.cumsum() 
+                     - np.maximum.accumulate(trades_count_cs.cumsum()))
 
     text = utils.statistics_format({
         'Trades':[len(_cm.__trades.index),
@@ -1016,14 +1023,24 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
             _cm.__COLORS['RED']],
 
         'Average duration winn':[str(utils.round_r(trades_calc['Duration'][
-                trades_calc['ProfitPer'] > 0].dropna().mean()))+'d'],
+                trades_calc['ProfitPer'] > 0].dropna().mean()))+'d',
+                _cm.__COLORS['CYAN']],
 
         'Average duration loss':[str(utils.round_r(trades_calc['Duration'][
-                trades_calc['ProfitPer'] < 0].dropna().mean()))+'d'],
+                trades_calc['ProfitPer'] < 0].dropna().mean()))+'d',
+                _cm.__COLORS['CYAN']],
 
         'Daily frequency op':[utils.round_r(
             len(_cm.__trades.index) / (op_years*_cm.__data_year_days), 2),
             _cm.__COLORS['CYAN']],
+
+        'Max consecutive winn':[trades_csct.max(),
+                                _cm.__COLORS['GREEN']],
+
+        'Max consecutive loss':[abs(trades_csct.min()),
+                                _cm.__COLORS['RED']],
+
+        'Max losing streak':[abs(trades_streak.min())],
 
         'Max drawdown':[str(round(
             stats.max_drawdown(np.cumprod(
