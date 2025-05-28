@@ -151,7 +151,7 @@ def sharpe_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
         float: Sharpe ratio.
     """
     std_dev = np.std(diary_per.dropna(), ddof=1)
-    if std_dev < 1e-8: return 0
+    if std_dev < 1e-2: return 0
 
     return (ann_av / np.sqrt(year_days) / std_dev)
 
@@ -173,10 +173,9 @@ def sortino_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
         float: Sortino ratio.
     """
     std_dev = np.std(diary_per[diary_per < 0].dropna(), ddof=1)
-    if std_dev < 1e-8: return 0
+    if std_dev < 1e-2: return 0
 
-    return (ann_av / np.sqrt(year_days)
-            / std_dev)
+    return (ann_av / np.sqrt(year_days) / std_dev)
 
 def payoff_ratio(profits:pd.Series) -> float:
     """

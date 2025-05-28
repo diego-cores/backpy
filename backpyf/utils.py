@@ -60,7 +60,7 @@ def load_bar(size:int, step:int, count:bool = True, text:str = '') -> None:
 
     print(
         f'\r[{first}{per}%%{sec}] ' 
-        + (f' {step} of {size} completed ' if count else '')
+        + (f' {num_align(step, len(str(size)))} of {size} completed ' if count else '')
         + (text if text.split() != '' else ''), 
         end='')
 

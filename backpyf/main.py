@@ -68,30 +68,39 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
 
     if progress:
         t = time()
-        step = 0
-    
+        size = None
+
     def __loop_def (st_t):
+        end = int(datetime.strptime(end_time, '%Y-%m-%d').timestamp() * 1000)
+
         dt = client.klines(symbol=symbol, 
                         interval=interval, 
                         startTime=st_t, 
-                        endTime=int(datetime.strptime(end_time, '%Y-%m-%d').timestamp() * 1000), 
+                        endTime=end, 
                         limit=1000)
 
         if progress:
-            nonlocal step
+            nonlocal size
 
-            step += 1
+            period = end-start ## Not work
 
-            text = f'0 of 1 completed | DataTimer: {utils.num_align(time()-t)} '
-            utils.load_bar(size=step, step=step-1, count=False, text=text)
+            if not size:
+                size = period/(dt[-1][0]-start)
+
+            step_time = period//size
+            step = (dt[-1][0]-start)//step_time
+
+            text = f'| DataTimer: {utils.num_align(time()-t)} '
+            utils.load_bar(size=int(size), step=int(step), text=text)
 
         return dt
+    start = int(datetime.strptime(start_time, '%Y-%m-%d').timestamp() * 1000)
 
     client = client()
     data = utils._loop_data(
         function=__loop_def,
         bpoint=lambda x, y=None: y == int(x[0].iloc[-1]) if y else int(x[0].iloc[-1]),
-        init = int(datetime.strptime(start_time, '%Y-%m-%d').timestamp() * 1000),
+        init = start,
         timeout = _cm.__binance_timeout
         ).astype(float)
     
@@ -113,10 +122,6 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
 
     if data.empty: 
         raise exception.BinanceError('Data empty error.')
-
-    if progress: 
-        utils.load_bar(size=1, step=1)
-        print('| DataTimer:',utils.num_align(round(time()-t,2)))
 
     data.index = mpl.dates.date2num(data.index)
     data_width = utils.calc_width(data.index)
