@@ -31,6 +31,7 @@ import numpy as np
 from time import time
 
 from . import _commons as _cm
+from . import flexdata as flx
 from . import exception
 from . import strategy
 from . import utils
@@ -69,6 +70,7 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
     if progress:
         t = time()
         size = None
+        ini_time = None
 
     def __loop_def (st_t):
         end = int(datetime.strptime(end_time, '%Y-%m-%d').timestamp() * 1000)
@@ -80,18 +82,17 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
                         limit=1000)
 
         if progress:
-            nonlocal size
-
-            period = end-start ## Not work
+            nonlocal size, ini_time
 
             if not size:
-                size = period/(dt[-1][0]-start)
+                ini_time = dt[0][0]
+                size = (end-ini_time)//(dt[-1][0]-dt[0][0])
 
-            step_time = period//size
-            step = (dt[-1][0]-start)//step_time
+            step_time = (end-ini_time)//size
+            step = int(round((dt[-1][0]-ini_time)/step_time,0))
 
             text = f'| DataTimer: {utils.num_align(time()-t)} '
-            utils.load_bar(size=int(size), step=int(step), text=text)
+            utils.load_bar(size=size, step=step, text=text)
 
         return dt
     start = int(datetime.strptime(start_time, '%Y-%m-%d').timestamp() * 1000)
@@ -103,6 +104,9 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
         init = start,
         timeout = _cm.__binance_timeout
         ).astype(float)
+
+    if progress:
+        print(end='\n')
     
     data.columns = ['timestamp', 
                     'Open', 
@@ -269,8 +273,9 @@ def load_yfinance_data(tickers:str = any,
 
         yf.set_tz_cache_location('.\yfinance_cache')
         
-        data = yf.download(tickers, start=start, end=end, 
-                             interval=interval, progress=progress)
+        data = yf.download(tickers, start=start, 
+                           end=end, interval=interval, 
+                           progress=progress, auto_adjust=False)
         
         if data.empty: 
             raise exception.YfinanceError('The symbol does not exist.')
@@ -290,7 +295,7 @@ def load_yfinance_data(tickers:str = any,
         if data_extract:
             return data, data_width
         
-        _cm.__data = data
+        _cm.__data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
         _cm.__data_width = data_width
         _cm.__data_icon = tickers.strip()
         _cm.__data_interval = interval.strip()
@@ -359,8 +364,8 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
 
     if statistics: stats_icon(prnt=True)
 
-def run(cls:type, initial_funds:int = 10000, commission:float = 0, 
-        spread:float = 0, slippage:float = 0,
+def run(cls:type, initial_funds:int = 10000, commission:tuple = 0, 
+        spread:tuple = 0, slippage:tuple = 0,
         prnt:bool = True, progress:bool = True) -> str:
     """
     Run Your Strategy.
@@ -373,12 +378,12 @@ def run(cls:type, initial_funds:int = 10000, commission:float = 0,
         initial_funds (int, optional): Initial amount of funds to start with. Used for 
                             statistics. Default is 10,000.
         commission (float, optional): Commission percentage for each trade. Used for 
-                            statistics. Default is 0.
+                            statistics. Default is 0. # <->
         spread (float, optional): Spread percentage for each trade. It is calculated 
                             at the closing and opening of each trade.
-                            Spread as the total difference between the ask and the bid.
+                            Spread as the total difference between the ask and the bid. # <->
         slippage (float, optional): Slippage percentage for each trade. It is calculated 
-                            at the closing and opening of each trade.
+                            at the closing and opening of each trade. # <->
         prnt (bool, optional): If True, prints trade statistics. If False, returns a string 
                     with the statistics. Default is True.
         progress (bool, optional): If True, shows a progress bar and timer. Default is True.
@@ -395,25 +400,25 @@ def run(cls:type, initial_funds:int = 10000, commission:float = 0,
         raise exception.RunError('Data not loaded.')
     elif initial_funds < 0: 
         raise exception.RunError("'initial_funds' cannot be less than 0.")
-    elif commission < 0: 
-        raise exception.RunError("'commission' cannot be less than 0.")
-    elif spread < 0: 
-        raise exception.RunError("'spread' cannot be less than 0.")
-    elif slippage < 0: 
-        raise exception.RunError("'slipage' cannot be less than 0.")
     elif not issubclass(cls, strategy.StrategyClass):
         raise exception.RunError(
             f"'{cls.__name__}' is not a subclass of 'strategy.StrategyClass'")
     elif cls.__abstractmethods__:
         raise exception.RunError(
             "The implementation of the 'next' abstract method is missing.")
+
     # Corrections.
     _cm.__data.index = utils.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index, True)
-
     _cm._init_funds = initial_funds
-    instance = cls(spread_pct=spread, commission=commission, 
-                   slippage_pct=slippage, init_funds=initial_funds)
+
+    # Costs
+    spread_cv = flx.CostsValue(spread, supp_double=False)
+    commission_cv = flx.CostsValue(commission)
+    slippage_cv = flx.CostsValue(slippage)
+
+    instance = cls(spread_pct=spread_cv, commission=commission_cv, 
+                   slippage_pct=slippage_cv, init_funds=initial_funds)
     t = time()
     
     step_t = time()
@@ -459,9 +464,9 @@ def run(cls:type, initial_funds:int = 10000, commission:float = 0,
         _cm.__trades, act_trades.dropna(axis=1, how='all')
         ], ignore_index=True)
 
-    #try: 
-    return stats_trades(prnt=prnt)
-    #except: pass
+    try: 
+        return stats_trades(prnt=prnt)
+    except: pass
     
 def plot(log:bool = False, progress:bool = True, 
          position:str = 'complex', block:bool = True) -> None:
@@ -558,7 +563,7 @@ def plot(log:bool = False, progress:bool = True,
         f"Back testing: '{_cm.__data_icon}' {s_date}~{e_date}")
 
     if progress: 
-        text = f'| PlotTimer: {utils.num_align(time()-t)} '
+        text = f'| PlotTimer: {utils.num_align(time()-t)} \n'
         utils.load_bar(size=4, step=4, text=text)
 
     mpl.pyplot.show(block=block)

@@ -113,8 +113,10 @@ class StrategyClass(ABC):
     def __init__(self, data:pd.DataFrame = pd.DataFrame(), 
                  trades_cl:pd.DataFrame = pd.DataFrame(), 
                  trades_ac:pd.DataFrame = pd.DataFrame(),
-                 spread_pct:float = 0, commission:float = 0, 
-                 slippage_pct:float = 0, init_funds:int = 0) -> None: 
+                 spread_pct:flx.CostsValue = 0, 
+                 commission:flx.CostsValue = 0, 
+                 slippage_pct:flx.CostsValue = 0, 
+                 init_funds:int = 0) -> None: 
         """
         __init__
 
@@ -1989,7 +1991,7 @@ class StrategyClass(ABC):
                                'stop_loss' or 'take_profit' 
                                incorrectly configured for the position type_.
                                """, newline_exclude=True))
-        
+
         # Spread and slipage calc.
         spread = self.__data["Close"].iloc[-1]*(self.__spread_pct/100/2)
         slippage = self.__data["Close"].iloc[-1]*(self.__slippage_pct/100)
