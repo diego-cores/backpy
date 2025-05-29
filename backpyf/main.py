@@ -378,7 +378,7 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
         initial_funds (int, optional): Initial amount of funds to start with. Used for 
                             statistics. Default is 10,000.
         commission (float, optional): Commission percentage for each trade. Used for 
-                            statistics. Default is 0. # <->
+                            statistics. Default is 0. # <-> #################
         spread (float, optional): Spread percentage for each trade. It is calculated 
                             at the closing and opening of each trade.
                             Spread as the total difference between the ask and the bid. # <->
@@ -413,9 +413,9 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
     _cm._init_funds = initial_funds
 
     # Costs
-    spread_cv = flx.CostsValue(spread, supp_double=False)
-    commission_cv = flx.CostsValue(commission)
+    commission_cv = flx.CostsValue(commission, supp_double=True)
     slippage_cv = flx.CostsValue(slippage)
+    spread_cv = flx.CostsValue(spread)
 
     instance = cls(spread_pct=spread_cv, commission=commission_cv, 
                    slippage_pct=slippage_cv, init_funds=initial_funds)

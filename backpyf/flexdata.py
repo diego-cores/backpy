@@ -375,9 +375,12 @@ class CostsValue:
         self._value = value
         self._rand_supp = supp_random
         if isinstance(value, tuple):
-            if len(value) == 1:
+            if (
+                (len(value) == 1 or (len(value) == 2 and supp_random)) 
+                and not supp_double
+                ):
                 self.__taker = self.__maker = self.__process_value(value)
-            if len(value) == 2 and supp_double:
+            elif len(value) == 2 and supp_double:
                 self.__maker = self.__process_value(value[0])
                 self.__taker = self.__process_value(value[1])
             else:
