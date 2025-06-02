@@ -52,8 +52,8 @@ def average_ratio(trades:pd.DataFrame) -> float:
         and not trades['StopLoss'].apply(lambda x: x is None or x <= 0).all()
         ):
 
-        return ((abs(trades['Close']-trades['TakeProfit']) 
-                / abs(trades['Close']-trades['StopLoss'])).mean())
+        return ((abs(trades['PositionOpen']-trades['TakeProfit']) 
+                / abs(trades['PositionOpen']-trades['StopLoss'])).mean())
     return 0
 
 def profit_fact(profits:pd.Series) -> float:
