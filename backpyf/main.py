@@ -856,6 +856,9 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         - Daily frequency op: It is calculated by dividing the number of t
                 ransactions by the number of trading days, where high 
                 values ​​mean high frequency and low values ​​mean the opposite.
+        - Max consecutive winn: Maximum consecutive winnings count. 
+        - Max consecutive loss: Maximum consecutive loss count. 
+        - Max losing streak: Maximum number of lost trades in drawdown.
         - Max drawdown:  The biggest drawdown the equity has ever had.
         - Average drawdown: The average of all drawdowns of equity curve, 
                 indicating the typical loss experienced before recovery.
