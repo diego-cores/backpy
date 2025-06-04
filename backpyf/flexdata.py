@@ -56,7 +56,7 @@ class DataWrapper(MutableSequence, Generic[T]):
 
         Args:
             data (Union[List[T], Dict[str, List[T]]]): Value to store.
-            columns: Column names.
+            columns (np.ndarray, optional): Column names.
         """
         if type(columns) != np.ndarray and not columns is None:
             columns = self.__get_columns(columns)
@@ -83,7 +83,7 @@ class DataWrapper(MutableSequence, Generic[T]):
         elif type(columns) is pd.Index:
             return columns.to_numpy()
         else:
-            return np.array(columns)
+            return np.array(columns, ndmin=1)
 
     def __set_convertible(self, data) -> np.ndarray:
         """
@@ -346,6 +346,7 @@ class CostsValue:
 
     Private Attributes:
         _value: Given value.
+        _error: Custom message displayed at the end of an error.
         _rand_supp: Whether random values can be generated or not.
         __maker: function that returns maker value.  
         __taker: function that returns taker value. 
@@ -362,7 +363,8 @@ class CostsValue:
     def __init__(self, value: Union[
         float, Tuple[float, float], 
         Tuple[Union[float, Tuple[float, float]], Union[float, Tuple[float, float]]]], 
-        supp_random:bool = True, supp_double:bool = False) -> None:
+        supp_random:bool = True, supp_double:bool = False,
+        cust_error:str = None) -> None:
         """
         Builder method.
 
@@ -370,10 +372,14 @@ class CostsValue:
             value: Data tuple with this format: (maker, taker).
             supp_random (bool, optional): If it supports random values.
             supp_double (bool, optional): False if there is only one side (maker, taker).
+            cust_error (str, optional): If an error occurs, 
+                you can add custom text at the end of the error.
         """
 
         self._value = value
         self._rand_supp = supp_random
+        self._error = ' ' + (cust_error or '')
+
         if isinstance(value, tuple):
             if (
                 (len(value) == 1 or (len(value) == 2 and supp_random)) 
@@ -385,7 +391,7 @@ class CostsValue:
                 self.__taker = self.__process_value(value[1])
             else:
                 raise exception.CostValueError(
-                    "Tuple must have 1 or 2 elements: (maker, taker)")
+                    f"Tuple must have 1 or 2 elements: (maker, taker).{self._error}")
         else:
             self.__maker = self.__taker = self.__process_value(value)
 
@@ -405,16 +411,19 @@ class CostsValue:
 
         if isinstance(val, tuple) and len(val) == 2 and self._rand_supp:
             if min(*val) < 0:
-                raise exception.CostValueError("No value can be less than 0.")
+                raise exception.CostValueError(
+                    f"No value can be less than 0.{self._error}")
 
             return lambda: rd.uniform(*val)
         elif isinstance(val, (int, float)):
             if val < 0:
-                raise exception.CostValueError("No value can be less than 0.")
+                raise exception.CostValueError(
+                    f"No value can be less than 0.{self._error}")
 
             return lambda: val
         else:
-            raise exception.CostValueError("Invalid value format")
+            raise exception.CostValueError(
+                f"Invalid value format.{self._error}")
 
     def get_maker(self) -> float:
         """

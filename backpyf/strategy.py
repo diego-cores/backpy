@@ -165,6 +165,7 @@ class StrategyClass(ABC):
 
         Info:
             To get the value use: 'get_maker' or 'get_taker'.
+            In this case they will return the same.
 
         Returns:
             flx.CostsValue: The value of the hidden variable `__spread_pct`.
@@ -178,6 +179,7 @@ class StrategyClass(ABC):
 
         Info:
             To get the value use: 'get_maker' or 'get_taker'.
+            In this case they will return the same.
 
         Returns:
             flx.CostsValue: The value of the hidden variable `__slippage_pct`.
@@ -295,7 +297,7 @@ class StrategyClass(ABC):
 
         __data = self.__data
         if label == 'index': 
-            return flx.DataWrapper(__data.index)
+            return flx.DataWrapper(__data.index, columns='index')
 
         if (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
@@ -355,7 +357,7 @@ class StrategyClass(ABC):
 
         __trades_cl = self.__trades_cl
         if label == 'index': 
-            return flx.DataWrapper(__trades_cl.index)
+            return flx.DataWrapper(__trades_cl.index, columns='index')
         elif __trades_cl.empty: 
             return flx.DataWrapper()
 
@@ -418,7 +420,7 @@ class StrategyClass(ABC):
 
         __trades_ac = self.__trades_ac
         if label == 'index': 
-            return flx.DataWrapper(__trades_ac.index)
+            return flx.DataWrapper(__trades_ac.index, columns='index')
         elif __trades_ac.empty: 
             return flx.DataWrapper()
 
@@ -2102,7 +2104,7 @@ class StrategyClass(ABC):
                                  else self.__data["Close"].iloc[-1]))
 
         # Costs calc.
-        commission = self.__commission.get_taker()+trade['Commission'].iloc[0]
+        commission = self.__commission.get_taker()
         spread = self.__data["Close"].iloc[-1]*(self.__spread_pct.get_taker()/100/2)
         slippage = self.__data["Close"].iloc[-1]*(self.__slippage_pct.get_taker()/100)
 
@@ -2117,8 +2119,12 @@ class StrategyClass(ABC):
         trade['ProfitPer'] = ((position_close_spread-open)/open*100 
                               if trade['Type'].iloc[0] 
                               else (open-position_close_spread)/open*100)
-        trade['Profit'] = (trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]
-                           /100-trade['Amount']*(commission/100) 
+
+        trade['Profit'] = (trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]/100-
+                           trade['Amount'].iloc[0]*(commission/100)-
+                           (trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]/100+
+                            trade['Amount'].iloc[0])*
+                             (trade['Commission'].iloc[0]/100)
                            if not np.isnan(trade['Amount'].iloc[0]) else np.nan)
 
         del trade['Commission']

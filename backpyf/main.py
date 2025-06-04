@@ -372,18 +372,22 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
 
     Executes your trading strategy.
 
+    Info:
+        CostsValue format:
+            (maker, taker) may have an additional tuple indicating 
+            that it may be a random number between two numbers.
+
+        For commissions, spreads and slippage, the `CostsValue` format will be followed.
+
     Args:
         cls (type): A class inherited from `StrategyClass` where the strategy is 
                     implemented.
         initial_funds (int, optional): Initial amount of funds to start with. Used for 
                             statistics. Default is 10,000.
-        commission (float, optional): Commission percentage for each trade. Used for 
-                            statistics. Default is 0. # <-> #################
-        spread (float, optional): Spread percentage for each trade. It is calculated 
-                            at the closing and opening of each trade.
-                            Spread as the total difference between the ask and the bid. # <->
-        slippage (float, optional): Slippage percentage for each trade. It is calculated 
-                            at the closing and opening of each trade. # <->
+        commission (float, optional): The commission will be charged for each purchase/sale execution.
+        spread (float, optional): The spread is the separation between the bid and ask 
+            price and is used to mark the order book limits.
+        slippage (float, optional): It will be calculated at each entry and exit.
         prnt (bool, optional): If True, prints trade statistics. If False, returns a string 
                     with the statistics. Default is True.
         progress (bool, optional): If True, shows a progress bar and timer. Default is True.
@@ -402,7 +406,7 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
         raise exception.RunError("'initial_funds' cannot be less than 0.")
     elif not issubclass(cls, strategy.StrategyClass):
         raise exception.RunError(
-            f"'{cls.__name__}' is not a subclass of 'strategy.StrategyClass'")
+            f"'{cls.__name__}' is not a subclass of 'strategy.StrategyClass'.")
     elif cls.__abstractmethods__:
         raise exception.RunError(
             "The implementation of the 'next' abstract method is missing.")
@@ -413,9 +417,10 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
     _cm._init_funds = initial_funds
 
     # Costs
-    commission_cv = flx.CostsValue(commission, supp_double=True)
-    slippage_cv = flx.CostsValue(slippage)
-    spread_cv = flx.CostsValue(spread)
+    commission_cv = flx.CostsValue(commission, supp_double=True, 
+                                   cust_error="Error of 'commission'.")
+    slippage_cv = flx.CostsValue(slippage, cust_error="Error of 'slippage'.")
+    spread_cv = flx.CostsValue(spread, cust_error="Error of 'spread'.")
 
     instance = cls(spread_pct=spread_cv, commission=commission_cv, 
                    slippage_pct=slippage_cv, init_funds=initial_funds)
