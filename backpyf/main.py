@@ -72,9 +72,7 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
         size = None
         ini_time = None
 
-    def __loop_def (st_t):
-        end = int(datetime.strptime(end_time, '%Y-%m-%d').timestamp() * 1000)
-
+    def __loop_def(st_t):
         dt = client.klines(symbol=symbol, 
                         interval=interval, 
                         startTime=st_t, 
@@ -96,6 +94,9 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
 
         return dt
     start = int(datetime.strptime(start_time, '%Y-%m-%d').timestamp() * 1000)
+    if ((end:=int(datetime.strptime(end_time, '%Y-%m-%d').timestamp() * 1000)) 
+        > (now:=int(datetime.now().timestamp() * 1000))):
+        end = now
 
     client = client()
     data = utils._loop_data(
@@ -387,7 +388,9 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
         commission (float, optional): The commission will be charged for each purchase/sale execution.
         spread (float, optional): The spread is the separation between the bid and ask 
             price and is used to mark the order book limits.
+            There is no variation between maker and taker.
         slippage (float, optional): It will be calculated at each entry and exit.
+            There is no variation between maker and taker.
         prnt (bool, optional): If True, prints trade statistics. If False, returns a string 
                     with the statistics. Default is True.
         progress (bool, optional): If True, shows a progress bar and timer. Default is True.
