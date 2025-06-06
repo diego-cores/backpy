@@ -5,8 +5,6 @@ This module contains all global variables for better manipulation.
 
 Variables:
     alert (bool): If True, shows alerts in the console.
-    extract_without (bool): If it is true, the trades that are opened without 
-        takeprofit or stoploss will closed.
     dots (bool): If false, the '.' will be replaced by commas "," in prints.
     run_timer (bool): If false the execution timer will never appear in the console.
     max_bar_updates (int): Number of times the 'run' loading bar is updated, 
@@ -33,7 +31,6 @@ dots = True
 run_timer = True
 
 max_bar_updates = 1000
-extract_without = False
 
 __data_year_days = 365
 __data_width_day = None

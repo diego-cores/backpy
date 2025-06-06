@@ -15,6 +15,9 @@ Functions:
     plot_strategy_add: Add functions and then see them graphed with 'plot_strategy'.
     stats_icon: Shows statistics related to the financial icon.
     stats_trades: Statistics of the trades.
+
+Hidden Functions:
+    __load_binance_data: Load data from Binance using a client.
 """
 
 from datetime import datetime
@@ -28,10 +31,120 @@ import numpy as np
 from time import time
 
 from . import _commons as _cm
+from . import flexdata as flx
 from . import exception
 from . import strategy
 from . import utils
 from . import stats
+
+def __load_binance_data(client:callable, symbol:str = 'BTCUSDT', 
+                        interval:str = '1d', start_time:str = None, 
+                        end_time:str = None, statistics:bool = True, 
+                        progress:bool = True, data_extract:bool = False) -> tuple:
+    """
+    Load Binance data.
+
+    Loads data using the Binance client.
+
+    Args:
+        client (callable): Bianance client.
+        symbol (str, optional): The trading pair.
+        interval (str, optional): Data interval, e.g 1s, 1m, 5m, 1h, 1d, etc.
+        start_time (str): Start date for load data in YYYY-MM-DD format.
+        end_time (str): End date for load data in YYYY-MM-DD format.
+        statistics (bool, optional): If True, prints statistics of the loaded data.
+        progress (bool, optional): If True, shows a progress bar and timer.
+        data_extract (bool, optional): If True, the data will be returned and 
+            the module variables will not be assigned with them.
+
+    Returns:
+        tuple: If 'data_extract' is true, 
+            a tuple containing the data will be returned (data, data_width).
+    """
+
+    # Exceptions.
+    if start_time is None or end_time is None:
+        raise exception.BinanceError(
+            "'start_time' and 'end_time' cannot be None.")
+
+    if progress:
+        t = time()
+        size = None
+        ini_time = None
+
+    def __loop_def(st_t):
+        dt = client.klines(symbol=symbol, 
+                        interval=interval, 
+                        startTime=st_t, 
+                        endTime=end, 
+                        limit=1000)
+
+        if progress:
+            nonlocal size, ini_time
+
+            if not size:
+                ini_time = dt[0][0]
+                size = (end-ini_time)//(dt[-1][0]-dt[0][0])
+
+            step_time = (end-ini_time)//size
+            step = int(round((dt[-1][0]-ini_time)/step_time,0))
+
+            text = f'| DataTimer: {utils.num_align(time()-t)} '
+            utils.load_bar(size=size, step=step, text=text)
+
+        return dt
+    start = int(datetime.strptime(start_time, '%Y-%m-%d').timestamp() * 1000)
+    if ((end:=int(datetime.strptime(end_time, '%Y-%m-%d').timestamp() * 1000)) 
+        > (now:=int(datetime.now().timestamp() * 1000))):
+        end = now
+
+    client = client()
+    data = utils._loop_data(
+        function=__loop_def,
+        bpoint=lambda x, y=None: y == int(x[0].iloc[-1]) if y else int(x[0].iloc[-1]),
+        init = start,
+        timeout = _cm.__binance_timeout
+        ).astype(float)
+
+    if progress:
+        print(end='\n')
+    
+    data.columns = ['timestamp', 
+                    'Open', 
+                    'High', 
+                    'Low', 
+                    'Close', 
+                    'Volume', 
+                    'Close_time', 
+                    'Quote_asset_volume', 
+                    'Number_of_trades', 
+                    'Taker_buy_base', 
+                    'Taker_buy_quote', 
+                    'Ignore']
+
+    data.index = data['timestamp']
+    data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
+
+    if data.empty: 
+        raise exception.BinanceError('Data empty error.')
+
+    data.index = mpl.dates.date2num(data.index)
+    data_width = utils.calc_width(data.index)
+
+    if statistics: stats_icon(prnt=True, 
+                            data=data, 
+                            data_icon=symbol.strip(),
+                            data_interval=interval.strip())
+
+    if data_extract:
+        return data, data_width
+
+    _cm.__data = data
+    _cm.__data_width = data_width
+    _cm.__data_icon = symbol.strip()
+    _cm.__data_interval = interval.strip()
+    _cm.__data_width_day = utils.calc_day(interval, data_width)
+    _cm.__data_year_days = 365
 
 def load_binance_data_futures(symbol:str = 'BTCUSDT', interval:str = '1d', 
                             start_time:str = None, end_time:str = None,
@@ -60,82 +173,17 @@ def load_binance_data_futures(symbol:str = 'BTCUSDT', interval:str = '1d',
         tuple: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
-    # Exceptions.
-    if start_time is None or end_time is None:
-        raise exception.BinanceError('Binance parameters error.')
-    
     try:
         from binance.um_futures import UMFutures as Client
 
-        if progress:
-            t = time()
-            step = 0
-        
-        def __loop_def (st_t):
-            dt = client.klines(symbol=symbol, 
-                               interval=interval, 
-                               startTime=st_t, 
-                               endTime=int(datetime.strptime(end_time, '%Y-%m-%d').timestamp() * 1000), 
-                               limit=1000)
-
-            if progress:
-                nonlocal step
-
-                step += 1
-
-                text = f'0 of 1 completed | DataTimer: {utils.num_align(time()-t)} '
-                utils.load_bar(size=step, step=step-1, count=False, text=text)
-
-            return dt
-
-        client = Client()
-        data = utils._loop_data(
-            function=__loop_def,
-            bpoint=lambda x, y=None: y == int(x[0].iloc[-1]) if y else int(x[0].iloc[-1]),
-            init = int(datetime.strptime(start_time, '%Y-%m-%d').timestamp() * 1000),
-            timeout = _cm.__binance_timeout
-            ).astype(float)
-        
-        data.columns = ['timestamp', 
-                        'Open', 
-                        'High', 
-                        'Low', 
-                        'Close', 
-                        'Volume', 
-                        'Close_time', 
-                        'Quote_asset_volume', 
-                        'Number_of_trades', 
-                        'Taker_buy_base', 
-                        'Taker_buy_quote', 
-                        'Ignore']
-
-        data.index = data['timestamp']
-        data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
-
-        if data.empty: 
-            raise exception.BinanceError('Data empty error.')
-        
-        if progress: 
-            utils.load_bar(size=1, step=1)
-            print('| DataTimer:',utils.num_align(round(time()-t,2)))
-        
-        data.index = mpl.dates.date2num(data.index)
-        data_width = utils.calc_width(data.index)
-
-        if statistics: stats_icon(prnt=True, 
-                                  data=data, 
-                                  data_icon=symbol.strip(),
-                                  data_interval=interval.strip())
-
-        if data_extract:
-            return data, data_width
-        
-        _cm.__data = data
-        _cm.__data_width = data_width
-        _cm.__data_icon = symbol.strip()
-        _cm.__data_interval = interval.strip()
-        _cm.__data_width_day = utils.calc_day(interval, data_width)
-        _cm.__data_year_days = 365
+        __load_binance_data(client=Client, 
+                            symbol=symbol, 
+                            interval=interval, 
+                            start_time=start_time, 
+                            end_time=end_time, 
+                            statistics=statistics, 
+                            progress=progress, 
+                            data_extract=data_extract)
 
     except ModuleNotFoundError: 
         raise exception.BinanceError('Binance futures connector is not installed.')
@@ -169,82 +217,17 @@ def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d',
         tuple: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
-    # Exceptions.
-    if start_time is None or end_time is None:
-        raise exception.BinanceError('Binance parameters error.')
-    
     try:
         from binance.spot import Spot as Client
 
-        if progress:
-            t = time()
-            step = 0
-        
-        def __loop_def (st_t):
-            dt = client.klines(symbol=symbol, 
-                               interval=interval, 
-                               startTime=st_t, 
-                               endTime=int(datetime.strptime(end_time, '%Y-%m-%d').timestamp() * 1000), 
-                               limit=1000)
-
-            if progress:
-                nonlocal step
-
-                step += 1
-
-                text = f'0 of 1 completed | DataTimer: {utils.num_align(time()-t)} '
-                utils.load_bar(size=step, step=step-1, count=False, text=text)
-
-            return dt
-
-        client = Client()
-        data = utils._loop_data(
-            function=__loop_def,
-            bpoint=lambda x, y=None: y == int(x[0].iloc[-1]) if y else int(x[0].iloc[-1]),
-            init = int(datetime.strptime(start_time, '%Y-%m-%d').timestamp() * 1000),
-            timeout = _cm.__binance_timeout
-            ).astype(float)
-        
-        data.columns = ['timestamp', 
-                        'Open', 
-                        'High', 
-                        'Low', 
-                        'Close', 
-                        'Volume', 
-                        'Close_time', 
-                        'Quote_asset_volume', 
-                        'Number_of_trades', 
-                        'Taker_buy_base', 
-                        'Taker_buy_quote', 
-                        'Ignore']
-
-        data.index = data['timestamp']
-        data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
-
-        if data.empty: 
-            raise exception.BinanceError('Data empty error.')
-        
-        if progress: 
-            utils.load_bar(size=1, step=1)
-            print('| DataTimer:',utils.num_align(round(time()-t,2)))
-        
-        data.index = mpl.dates.date2num(data.index)
-        data_width = utils.calc_width(data.index)
-
-        if statistics: stats_icon(prnt=True, 
-                                  data=data, 
-                                  data_icon=symbol.strip(),
-                                  data_interval=interval.strip())
-
-        if data_extract:
-            return data, data_width
-        
-        _cm.__data = data
-        _cm.__data_width = data_width
-        _cm.__data_icon = symbol.strip()
-        _cm.__data_interval = interval.strip()
-        _cm.__data_width_day = utils.calc_day(interval, data_width)
-        _cm.__data_year_days = 365
+        __load_binance_data(client=Client, 
+                            symbol=symbol, 
+                            interval=interval, 
+                            start_time=start_time, 
+                            end_time=end_time, 
+                            statistics=statistics, 
+                            progress=progress, 
+                            data_extract=data_extract)
 
     except ModuleNotFoundError: 
         raise exception.BinanceError('Binance connector is not installed.')
@@ -291,8 +274,9 @@ def load_yfinance_data(tickers:str = any,
 
         yf.set_tz_cache_location('.\yfinance_cache')
         
-        data = yf.download(tickers, start=start, end=end, 
-                             interval=interval, progress=progress)
+        data = yf.download(tickers, start=start, 
+                           end=end, interval=interval, 
+                           progress=progress, auto_adjust=False)
         
         if data.empty: 
             raise exception.YfinanceError('The symbol does not exist.')
@@ -312,7 +296,7 @@ def load_yfinance_data(tickers:str = any,
         if data_extract:
             return data, data_width
         
-        _cm.__data = data
+        _cm.__data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
         _cm.__data_width = data_width
         _cm.__data_icon = tickers.strip()
         _cm.__data_interval = interval.strip()
@@ -381,26 +365,32 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
 
     if statistics: stats_icon(prnt=True)
 
-def run(cls:type, initial_funds:int = 10000, commission:float = 0, 
-        spread:float = 0, slippage:float = 0,
+def run(cls:type, initial_funds:int = 10000, commission:tuple = 0, 
+        spread:tuple = 0, slippage:tuple = 0,
         prnt:bool = True, progress:bool = True) -> str:
     """
     Run Your Strategy.
 
     Executes your trading strategy.
 
+    Info:
+        CostsValue format:
+            (maker, taker) may have an additional tuple indicating 
+            that it may be a random number between two numbers.
+
+        For commissions, spreads and slippage, the `CostsValue` format will be followed.
+
     Args:
         cls (type): A class inherited from `StrategyClass` where the strategy is 
                     implemented.
         initial_funds (int, optional): Initial amount of funds to start with. Used for 
                             statistics. Default is 10,000.
-        commission (float, optional): Commission percentage for each trade. Used for 
-                            statistics. Default is 0.
-        spread (float, optional): Spread percentage for each trade. It is calculated 
-                            at the closing and opening of each trade.
-                            Spread as the total difference between the ask and the bid.
-        slippage (float, optional): Slippage percentage for each trade. It is calculated 
-                            at the closing and opening of each trade.
+        commission (float, optional): The commission will be charged for each purchase/sale execution.
+        spread (float, optional): The spread is the separation between the bid and ask 
+            price and is used to mark the order book limits.
+            There is no variation between maker and taker.
+        slippage (float, optional): It will be calculated at each entry and exit.
+            There is no variation between maker and taker.
         prnt (bool, optional): If True, prints trade statistics. If False, returns a string 
                     with the statistics. Default is True.
         progress (bool, optional): If True, shows a progress bar and timer. Default is True.
@@ -417,25 +407,26 @@ def run(cls:type, initial_funds:int = 10000, commission:float = 0,
         raise exception.RunError('Data not loaded.')
     elif initial_funds < 0: 
         raise exception.RunError("'initial_funds' cannot be less than 0.")
-    elif commission < 0: 
-        raise exception.RunError("'commission' cannot be less than 0.")
-    elif spread < 0: 
-        raise exception.RunError("'spread' cannot be less than 0.")
-    elif slippage < 0: 
-        raise exception.RunError("'slipage' cannot be less than 0.")
     elif not issubclass(cls, strategy.StrategyClass):
         raise exception.RunError(
-            f"'{cls.__name__}' is not a subclass of 'strategy.StrategyClass'")
+            f"'{cls.__name__}' is not a subclass of 'strategy.StrategyClass'.")
     elif cls.__abstractmethods__:
         raise exception.RunError(
             "The implementation of the 'next' abstract method is missing.")
+
     # Corrections.
     _cm.__data.index = utils.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index, True)
-
     _cm._init_funds = initial_funds
-    instance = cls(spread_pct=spread, commission=commission, 
-                   slippage_pct=slippage, init_funds=initial_funds)
+
+    # Costs
+    commission_cv = flx.CostsValue(commission, supp_double=True, 
+                                   cust_error="Error of 'commission'.")
+    slippage_cv = flx.CostsValue(slippage, cust_error="Error of 'slippage'.")
+    spread_cv = flx.CostsValue(spread, cust_error="Error of 'spread'.")
+
+    instance = cls(spread_pct=spread_cv, commission=commission_cv, 
+                   slippage_pct=slippage_cv, init_funds=initial_funds)
     t = time()
     
     step_t = time()
@@ -580,7 +571,7 @@ def plot(log:bool = False, progress:bool = True,
         f"Back testing: '{_cm.__data_icon}' {s_date}~{e_date}")
 
     if progress: 
-        text = f'| PlotTimer: {utils.num_align(time()-t)} '
+        text = f'| PlotTimer: {utils.num_align(time()-t)} \n'
         utils.load_bar(size=4, step=4, text=text)
 
     mpl.pyplot.show(block=block)
@@ -873,6 +864,9 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         - Daily frequency op: It is calculated by dividing the number of t
                 ransactions by the number of trading days, where high 
                 values ​​mean high frequency and low values ​​mean the opposite.
+        - Max consecutive winn: Maximum consecutive winnings count. 
+        - Max consecutive loss: Maximum consecutive loss count. 
+        - Max losing streak: Maximum number of lost trades in drawdown.
         - Max drawdown:  The biggest drawdown the equity has ever had.
         - Average drawdown: The average of all drawdowns of equity curve, 
                 indicating the typical loss experienced before recovery.
@@ -918,6 +912,25 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
     diary_return = trades_calc.groupby('Diary')['Multiplier'].prod()
     diary_profit = trades_calc.groupby('Diary')['Profit'].sum()
 
+    # Consecutive trades calc.
+    trades_count_cs = _cm.__trades['Profit'].apply(
+        lambda x: 1 if x > 0 else (-1 if x < 0 else 0)
+        )
+    trades_count_cs = pd.concat(
+        [pd.Series([0]), trades_count_cs], ignore_index=True)
+
+    group = (
+        (trades_count_cs != trades_count_cs.shift()) 
+        & (trades_count_cs != 0) 
+        & (trades_count_cs.shift() != 0)
+    ).cumsum()
+    
+    trades_csct = trades_count_cs.groupby(group).cumsum()
+
+    # Trade streak calc.
+    trades_streak = (trades_count_cs.cumsum() 
+                     - np.maximum.accumulate(trades_count_cs.cumsum()))
+
     text = utils.statistics_format({
         'Trades':[len(_cm.__trades.index),
                   _cm.__COLORS['BOLD']+_cm.__COLORS['CYAN']],
@@ -927,7 +940,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         'Return':[str(_return:=utils.round_r((trades_calc['Multiplier'].prod()-1)*100,2))+'%',
                   _cm.__COLORS['GREEN'] if float(_return) > 0 else _cm.__COLORS['RED'],],
 
-        'Profit':[(_profit:=utils.round_r(_cm.__trades['Profit'].sum(),2)),
+        'Profit':[str(_profit:=utils.round_r(_cm.__trades['Profit'].sum(),2)),
                 _cm.__COLORS['GREEN'] if float(_profit) > 0 else _cm.__COLORS['RED'],],
 
         'Max return':[str(utils.round_r((
@@ -961,11 +974,11 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         'Average ratio':[utils.round_r(stats.average_ratio(_cm.__trades), 2),
                         _cm.__COLORS['YELLOW'],],
 
-        'Average return':[utils.round_r((
-                trades_calc['Multiplier'].dropna().mean()-1)*100,2)+'%',
+        'Average return':[str(utils.round_r((
+                trades_calc['Multiplier'].dropna().mean()-1)*100,2))+'%',
             _cm.__COLORS['YELLOW'],],
 
-        'Average profit':[utils.round_r(_cm.__trades['Profit'].mean(),2)+'%',
+        'Average profit':[str(utils.round_r(_cm.__trades['Profit'].mean(),2))+'%',
                     _cm.__COLORS['YELLOW'],],
 
         'Profit fact':[_profit_fact:=utils.round_r(stats.profit_fact(_cm.__trades['Profit']), 2),
@@ -1031,14 +1044,24 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
             _cm.__COLORS['RED']],
 
         'Average duration winn':[str(utils.round_r(trades_calc['Duration'][
-                trades_calc['ProfitPer'] > 0].dropna().mean()))+'d'],
+                trades_calc['ProfitPer'] > 0].dropna().mean()))+'d',
+                _cm.__COLORS['CYAN']],
 
         'Average duration loss':[str(utils.round_r(trades_calc['Duration'][
-                trades_calc['ProfitPer'] < 0].dropna().mean()))+'d'],
+                trades_calc['ProfitPer'] < 0].dropna().mean()))+'d',
+                _cm.__COLORS['CYAN']],
 
         'Daily frequency op':[utils.round_r(
             len(_cm.__trades.index) / (op_years*_cm.__data_year_days), 2),
             _cm.__COLORS['CYAN']],
+
+        'Max consecutive winn':[trades_csct.max(),
+                                _cm.__COLORS['GREEN']],
+
+        'Max consecutive loss':[abs(trades_csct.min()),
+                                _cm.__COLORS['RED']],
+
+        'Max losing streak':[abs(trades_streak.min())],
 
         'Max drawdown':[str(round(
             stats.max_drawdown(np.cumprod(

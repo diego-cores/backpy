@@ -113,8 +113,10 @@ class StrategyClass(ABC):
     def __init__(self, data:pd.DataFrame = pd.DataFrame(), 
                  trades_cl:pd.DataFrame = pd.DataFrame(), 
                  trades_ac:pd.DataFrame = pd.DataFrame(),
-                 spread_pct:float = 0, commission:float = 0, 
-                 slippage_pct:float = 0, init_funds:int = 0) -> None: 
+                 spread_pct:flx.CostsValue = 0, 
+                 commission:flx.CostsValue = 0, 
+                 slippage_pct:flx.CostsValue = 0, 
+                 init_funds:int = 0) -> None: 
         """
         __init__
 
@@ -157,9 +159,40 @@ class StrategyClass(ABC):
     @abstractmethod
     def next(self) -> None: ...
 
-    def get_commission(self) -> float:
+    def get_spread(self) -> flx.CostsValue:
+        """
+        Get __spread_pct.
+
+        Info:
+            To get the value use: 'get_maker' or 'get_taker'.
+            In this case they will return the same.
+
+        Returns:
+            flx.CostsValue: The value of the hidden variable `__spread_pct`.
+        """
+
+        return self.__spread_pct
+
+    def get_slippage(self) -> flx.CostsValue:
+        """
+        Get __slippage_pct.
+
+        Info:
+            To get the value use: 'get_maker' or 'get_taker'.
+            In this case they will return the same.
+
+        Returns:
+            flx.CostsValue: The value of the hidden variable `__slippage_pct`.
+        """
+
+        return self.__slippage_pct
+
+    def get_commission(self) -> flx.CostsValue:
         """
         Get __commission.
+
+        Info:
+            To get the value use: 'get_maker' or 'get_taker'.
 
         Returns:
             float: The value of the hidden variable `__commission`.
@@ -227,17 +260,7 @@ class StrategyClass(ABC):
         self.next()
 
         # Concat new trade.
-        if (
-            _cm.extract_without and
-            not self.__trade.empty and 
-            np.isnan(self.__trade['StopLoss'].iloc[0]) and 
-            np.isnan(self.__trade['TakeProfit'].iloc[0])
-            ):
-
-            self.__trades_cl = pd.concat([self.__trades_cl, self.__trade], 
-                                         ignore_index=True)
-            self.__trades_cl.reset_index(drop=True, inplace=True)
-        elif not self.__trade.empty: 
+        if not self.__trade.empty: 
             self.__trades_ac = pd.concat([self.__trades_ac, self.__trade], 
                                          ignore_index=True)
 
@@ -274,7 +297,7 @@ class StrategyClass(ABC):
 
         __data = self.__data
         if label == 'index': 
-            return flx.DataWrapper(__data.index)
+            return flx.DataWrapper(__data.index, columns='index')
 
         if (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
@@ -283,13 +306,17 @@ class StrategyClass(ABC):
                             'data' and greater than 0.
                             """, newline_exclude=True))
 
+        data_columns = __data.columns
         data = __data.values[
             len(__data) - last if last is not None and last < len(__data) else 0:]
 
         if label != None: 
-            data = data[:,__data.columns.get_loc(label)]
+            _loc = data.columns.get_loc(label)
 
-        return flx.DataWrapper(data)
+            data_columns = data_columns[_loc]
+            data = data[:,_loc]
+
+        return flx.DataWrapper(data, columns=data_columns)
 
     def prev_trades_cl(self, label:str = None, last:int = None) -> flx.DataWrapper:
         """
@@ -313,12 +340,12 @@ class StrategyClass(ABC):
             - Open: The open price at the trade's start.
             - Low: The lowest price at the trade's start.
             - High: The highest price at the trade's start.
-            - StopLoss: The stop loss position.
-            - TakeProfit: The take profit position.
             - PositionOpen: The 'Close' price at the trade's start.
             - PositionClose: Price at which the position was closed.
             - PositionCloseNoS: Price at which the position was closed without any slipage.
             - PositionDate: The step date when the trade ends.
+            - StopLoss: The stop loss position.
+            - TakeProfit: The take profit position.
             - Amount: Chosen amount.
             - ProfitPer: Trade profit in percentage.
             - Profit: Trade profit based on amount.
@@ -330,7 +357,7 @@ class StrategyClass(ABC):
 
         __trades_cl = self.__trades_cl
         if label == 'index': 
-            return flx.DataWrapper(__trades_cl.index)
+            return flx.DataWrapper(__trades_cl.index, columns='index')
         elif __trades_cl.empty: 
             return flx.DataWrapper()
 
@@ -341,13 +368,17 @@ class StrategyClass(ABC):
                             'data' and greater than 0.
                             """, newline_exclude=True))
 
+        data_columns = __trades_cl.columns
         data = __trades_cl.values[
             len(__trades_cl) - last if last is not None and last < len(__trades_cl) else 0:]
         
         if label != None: 
-            data = data[:,__trades_cl.columns.get_loc(label)]
+            _loc = __trades_cl.columns.get_loc(label)
 
-        return flx.DataWrapper(data)
+            data_columns = data_columns[_loc]
+            data = data[:,_loc]
+
+        return flx.DataWrapper(data, columns=data_columns)
     
     def prev_trades_ac(self, label:str = None, last:int = None) -> flx.DataWrapper:
         """
@@ -372,18 +403,24 @@ class StrategyClass(ABC):
             - Low: The lowest price at the trade's start.
             - High: The highest price at the trade's start.
             - PositionOpen: The 'Close' price at the trade's start.
+            - PositionClose: Price at which the position was closed.
+            - PositionCloseNoS: Price at which the position was closed without any slipage.
+            - PositionDate: The step date when the trade ends.
             - StopLoss: The stop loss position.
             - TakeProfit: The take profit position.
             - Amount: Chosen amount.
+            - ProfitPer: Trade profit in percentage.
+            - Profit: Trade profit based on amount.
             - Type: Type of trade.
-        
+            - Commission: Commission of the operation.
+
         Returns:
             DataWrapper: DataWrapper containing the data from active trades.
         """
 
         __trades_ac = self.__trades_ac
         if label == 'index': 
-            return flx.DataWrapper(__trades_ac.index)
+            return flx.DataWrapper(__trades_ac.index, columns='index')
         elif __trades_ac.empty: 
             return flx.DataWrapper()
 
@@ -394,13 +431,17 @@ class StrategyClass(ABC):
                             'data' and greater than 0.
                             """, newline_exclude=True))
 
+        data_columns = __trades_ac.columns
         data = __trades_ac.values[
             len(__trades_ac) - last if last is not None and last < len(__trades_ac) else 0:]
     
         if label != None: 
-            data = data[:,__trades_ac.columns.get_loc(label)]
+            _loc = __trades_ac.columns.get_loc(label)
 
-        return flx.DataWrapper(data)
+            data_columns = data_columns[_loc]
+            data = data[:,_loc]
+
+        return flx.DataWrapper(data, columns=data_columns)
     
     def idc_hvolume(self, start:int = 0, end:int = None, 
                     bar:int = 10) -> flx.DataWrapper:
@@ -1994,10 +2035,12 @@ class StrategyClass(ABC):
                                'stop_loss' or 'take_profit' 
                                incorrectly configured for the position type_.
                                """, newline_exclude=True))
-        
-        # Spread and slipage calc.
-        spread = self.__data["Close"].iloc[-1]*(self.__spread_pct/100/2)
-        slippage = self.__data["Close"].iloc[-1]*(self.__slippage_pct/100)
+
+        # Costs calc.
+        commission = self.__commission.get_taker()
+        spread = self.__data["Close"].iloc[-1]*(self.__spread_pct.get_taker()/100/2)
+        slippage = self.__data["Close"].iloc[-1]*(self.__slippage_pct.get_taker()/100)
+
         position_open = (self.__data["Close"].iloc[-1]+spread+slippage
                          if type_ else self.__data["Close"].iloc[-1]-spread-slippage)
 
@@ -2016,7 +2059,8 @@ class StrategyClass(ABC):
                                      'Amount':amount,
                                      'ProfitPer':np.nan,
                                      'Profit':np.nan,
-                                     'Type':type_},index=[1])
+                                     'Type':type_,
+                                     'Commission':commission},index=[1])
 
     def act_close(self, index:int = 0) -> None:
         """
@@ -2059,9 +2103,11 @@ class StrategyClass(ABC):
                                  if self.__data["Low"].iloc[-1] <= take 
                                  else self.__data["Close"].iloc[-1]))
 
-        # Spread and slipage calc.
-        spread = self.__data["Close"].iloc[-1]*(self.__spread_pct/100/2)
-        slippage = self.__data["Close"].iloc[-1]*(self.__slippage_pct/100)
+        # Costs calc.
+        commission = self.__commission.get_taker()
+        spread = self.__data["Close"].iloc[-1]*(self.__spread_pct.get_taker()/100/2)
+        slippage = self.__data["Close"].iloc[-1]*(self.__slippage_pct.get_taker()/100)
+
         position_close_spread = (position_close-spread-slippage 
                                  if trade['Type'].iloc[0] else position_close+spread+slippage)
 
@@ -2073,9 +2119,15 @@ class StrategyClass(ABC):
         trade['ProfitPer'] = ((position_close_spread-open)/open*100 
                               if trade['Type'].iloc[0] 
                               else (open-position_close_spread)/open*100)
-        trade['Profit'] = (trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]
-                           /100-trade['Amount']*(self.__commission/100) 
+
+        trade['Profit'] = (trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]/100-
+                           trade['Amount'].iloc[0]*(commission/100)-
+                           (trade['Amount'].iloc[0]*trade['ProfitPer'].iloc[0]/100+
+                            trade['Amount'].iloc[0])*
+                             (trade['Commission'].iloc[0]/100)
                            if not np.isnan(trade['Amount'].iloc[0]) else np.nan)
+
+        del trade['Commission']
 
         self.__trades_cl = pd.concat([self.__trades_cl,trade], 
                                      ignore_index=True) 

@@ -60,7 +60,7 @@ def load_bar(size:int, step:int, count:bool = True, text:str = '') -> None:
 
     print(
         f'\r[{first}{per}%%{sec}] ' 
-        + (f' {step} of {size} completed ' if count else '')
+        + (f' {num_align(step, len(str(size)))} of {size} completed ' if count else '')
         + (text if text.split() != '' else ''), 
         end='')
 
@@ -151,7 +151,7 @@ def num_align(num:float, digits:int = 4, side:bool = True) -> str:
     data_s = side_c(round(num, digits-len(int_part)-1))
     return data_s if _cm.dots else data_s.replace('.', ',')
 
-def round_r(num:float, r:int = 1) -> float:
+def round_r(num:float, r:int = 1) -> str:
     """
     Round right.
 
@@ -172,7 +172,7 @@ def round_r(num:float, r:int = 1) -> float:
         return 0
     
     if int(num) != num:
-        num = (round(num) 
+        num = float(round(num) 
             if len(str(num).split('.')[0]) > r 
             else f'{{:.{r}g}}'.format(num))
             

@@ -35,6 +35,9 @@ def average_ratio(trades:pd.DataFrame) -> float:
     Based on the take profit and stop loss 
         positions, it calculates an average ratio.
 
+    If the 'TakeProfit' or 'StopLoss' columns are 
+        not present, 0 will be returned.
+
     Args:
         trades (pd.DataFrame): A dataframe with these columns: 
             'TakeProfit','StopLoss','Close'.
@@ -43,11 +46,14 @@ def average_ratio(trades:pd.DataFrame) -> float:
         float: Average ratio.
     """
 
-    if (not trades['TakeProfit'].apply(lambda x: x is None or x <= 0).all() 
-        and not trades['StopLoss'].apply(lambda x: x is None or x <= 0).all()):
+    if (
+        'TakeProfit' in trades.columns and 'StopLoss' in trades.columns
+        and not trades['TakeProfit'].apply(lambda x: x is None or x <= 0).all() 
+        and not trades['StopLoss'].apply(lambda x: x is None or x <= 0).all()
+        ):
 
-        return ((abs(trades['Close']-trades['TakeProfit']) 
-                / abs(trades['Close']-trades['StopLoss'])).mean())
+        return ((abs(trades['PositionOpen']-trades['TakeProfit']) 
+                / abs(trades['PositionOpen']-trades['StopLoss'])).mean())
     return 0
 
 def profit_fact(profits:pd.Series) -> float:
@@ -134,6 +140,8 @@ def sharpe_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
     Calculate the Sharpe ratio using the 
         returns / sqrt(days of the year) / standard deviation of the data.
 
+    If the standard deviation is too close to 0, returns 0 to avoid inflated values.
+
     Args:
         ann_av (float): Annual returns.
         year_days (int): Operable days of the year (normally 252).
@@ -142,9 +150,10 @@ def sharpe_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
     Returns:
         float: Sharpe ratio.
     """
+    std_dev = np.std(diary_per.dropna(), ddof=1)
+    if std_dev < 1e-2: return 0
 
-    return (ann_av / np.sqrt(year_days)
-            / np.std(diary_per.dropna(),ddof=1))
+    return (ann_av / np.sqrt(year_days) / std_dev)
 
 def sortino_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
     """
@@ -152,6 +161,8 @@ def sortino_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
 
     Calculate the Sortino ratio with a calculation similar to the 
         Sharpe ratio but only with the standard deviation of negative data.
+
+    If the standard deviation is too close to 0, returns 0 to avoid inflated values.
 
     Args:
         ann_av (float): Annual returns.
@@ -161,10 +172,10 @@ def sortino_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
     Returns:
         float: Sortino ratio.
     """
+    std_dev = np.std(diary_per[diary_per < 0].dropna(), ddof=1)
+    if std_dev < 1e-2: return 0
 
-
-    return (ann_av / np.sqrt(year_days)
-            / np.std(diary_per[diary_per < 0].dropna(), ddof=1))
+    return (ann_av / np.sqrt(year_days) / std_dev)
 
 def payoff_ratio(profits:pd.Series) -> float:
     """
@@ -292,5 +303,5 @@ def get_drawdowns(values:list) -> list:
 
     max_values = np.maximum.accumulate(values)
     drawdowns = (values - max_values) / max_values
-    
+
     return drawdowns
