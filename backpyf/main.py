@@ -28,7 +28,7 @@ import matplotlib as mpl
 import pandas as pd
 import numpy as np
 
-from time import time
+from time import time, gmtime
 
 from . import _commons as _cm
 from . import flexdata as flx
@@ -128,7 +128,7 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
     if data.empty: 
         raise exception.BinanceError('Data empty error.')
 
-    data.index = mpl.dates.date2num(data.index)
+    data.index = mpl.dates.date2num(pd.to_datetime(data.index, unit='ms', utc=True))
     data_width = utils.calc_width(data.index)
 
     if statistics: stats_icon(prnt=True, 
@@ -632,18 +632,22 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
             case 1: 
                 ax = mpl.pyplot.subplot2grid((6,2), loc[0], 
                                              rowspan=6, colspan=2)
+                ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
             case 2: 
                 ax = mpl.pyplot.subplot2grid((6,2), loc[i], 
                                              rowspan=3, colspan=2, 
                                              sharex=ax)
+                ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
             case 3: 
                 ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, 
                                              colspan=2 if i==0 else 1, 
                                              sharex=ax)
+                ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
             case 4: 
                 ax = mpl.pyplot.subplot2grid((6,2), loc[i], 
                                              rowspan=3, colspan=1, 
                                              sharex=ax)
+                ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
 
         match v: ## Aqui
             case 'p':
