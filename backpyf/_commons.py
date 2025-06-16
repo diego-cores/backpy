@@ -1,5 +1,5 @@
 """
-Commons hidden Module.
+Commons hidden module.
 
 This module contains all global variables for better manipulation.
 

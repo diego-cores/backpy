@@ -1,5 +1,5 @@
 """
-Strategy Module.
+Strategy module.
 
 This module contains the main class that must be inherited to create your 
 own strategy.

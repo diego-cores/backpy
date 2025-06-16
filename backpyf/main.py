@@ -1,5 +1,5 @@
 """
-Main Module.
+Main module.
 
 This module contains the main functions of BackPy, including data loading, 
 strategy processing, and graph display.
@@ -645,26 +645,26 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
                                              rowspan=3, colspan=1, 
                                              sharex=ax)
 
-        match v:
+        match v: ## Aqui
             case 'p':
-                ax.plot(_cm.__trades.index,_cm.__trades['Profit'].cumsum(), 
-                        c='black', label='Profit.')
+                ax.plot(_cm.__trades['PositionDate'],_cm.__trades['Profit'].cumsum(), 
+                        c='black', label='Profit.', ds='steps-post')
                 
                 if log: ax.set_yscale('symlog')
             case 'w':
-                ax.plot(_cm.__trades.index,
+                ax.plot(_cm.__trades['PositionDate'],
                         (_cm.__trades['ProfitPer'].apply(
                             lambda row: 1 if row>0 else -1)).cumsum(), 
-                        c='black', label='Winnings.')
+                        c='black', label='Winnings.', ds='steps-post')
             case 'e':
-                ax.plot(_cm.__trades.index, 
+                ax.plot(_cm.__trades['PositionDate'], 
                         np.cumprod(1 + _cm.__trades['ProfitPer'] / 100), 
-                        c='black', label='Equity.')
+                        c='black', label='Equity.', ds='steps-post')
 
                 if log: ax.set_yscale('symlog')
             case 'r':
-                ax.plot(_cm.__trades.index,_cm.__trades['ProfitPer'].cumsum(), 
-                        c='black', label='Return.')
+                ax.plot(_cm.__trades['PositionDate'],_cm.__trades['ProfitPer'].cumsum(), 
+                        c='black', label='Return.', ds='steps-post')
 
                 if log: ax.set_yscale('symlog')
             case key if key in _cm.__custom_plot.keys():

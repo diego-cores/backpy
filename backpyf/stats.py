@@ -1,5 +1,5 @@
 """
-Stats Module.
+Stats module.
 
 This module contains functions to calculate different metrics.
 

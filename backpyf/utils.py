@@ -1,5 +1,5 @@
 """
-Utils Module.
+Utils module.
 
 Contains various utility functions for the operation of the main code.
 
