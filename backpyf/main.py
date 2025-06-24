@@ -1,11 +1,12 @@
 """
-Main module.
+Main module
 
 This module contains the main functions of BackPy, including data loading, 
 strategy processing, and graph display.
 
 Functions:
-    load_binance_data: Loads data using the binance-connector module.
+    load_binance_data_spot: Loads data using the binance-connector module.
+    load_binance_data_futures: Loads data using the binance-futures-connector module.
     load_yfinance_data: Loads data using the yfinance module.
     load_data: Loads user-provided data.
     run: Executes the backtesting process.
@@ -380,27 +381,27 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
 
         For commissions, spreads and slippage, the `CostsValue` format will be followed.
 
+    Note:
+        If your function prints to the console, the loading bar may not 
+        function as expected.
+
     Args:
         cls (type): A class inherited from `StrategyClass` where the strategy is 
                     implemented.
         initial_funds (int, optional): Initial amount of funds to start with. Used for 
                             statistics. Default is 10,000.
-        commission (float, optional): The commission will be charged for each purchase/sale execution.
-        spread (float, optional): The spread is the separation between the bid and ask 
+        commission (tuple, optional): The commission will be charged for each purchase/sale execution.
+        spread (tuple, optional): The spread is the separation between the bid and ask 
             price and is used to mark the order book limits.
             There is no variation between maker and taker.
-        slippage (float, optional): It will be calculated at each entry and exit.
+        slippage (tuple, optional): It will be calculated at each entry and exit.
             There is no variation between maker and taker.
         prnt (bool, optional): If True, prints trade statistics. If False, returns a string 
                     with the statistics. Default is True.
         progress (bool, optional): If True, shows a progress bar and timer. Default is True.
 
-    Note:
-        If your function prints to the console, the loading bar may not 
-        function as expected.
-
     Returns:
-        str: statistics.
+        str: Statistics.
     """
     # Exceptions.
     if _cm.__data is None: 
@@ -603,6 +604,7 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
             windows are closed. If False, the script continues running after 
             displaying the figures. Default is True.
     """
+
     for i in custom_graph: plot_strategy_add(custom_graph[i], i)
 
     view = view.lower().strip().split('/')
@@ -649,7 +651,7 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
                                              sharex=ax)
                 ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
 
-        match v: ## Aqui
+        match v:
             case 'p':
                 ax.plot(_cm.__trades['PositionDate'],_cm.__trades['Profit'].cumsum(), 
                         c='black', label='Profit.', ds='steps-post')
@@ -687,7 +689,7 @@ def plot_strategy_decorator(name:str) -> callable:
     Add statistics for plot decorator.
 
     Use a decorator to add the function to 
-    'custom_plot' so you can run it in 'plot_strategy'.
+        'custom_plot' so you can run it in 'plot_strategy'.
 
     To avoid visual problems, I suggest using 
         'trades.index' as the x-axis or normalizing the axis.
@@ -746,10 +748,10 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame = None,
         str: statistics.
     """
 
-    data_interval = __data_interval if data_interval is None else data_interval
-    data_icon = __data_icon if data_icon is None else data_icon
-    data = __data if data is None else data
-    
+    data_interval = _cm.__data_interval if data_interval is None else data_interval
+    data_icon = _cm.__data_icon if data_icon is None else data_icon
+    data = _cm.__data if data is None else data
+
     # Exceptions.
     if data is None: 
         raise exception.StatsError('Data not loaded.')
@@ -828,9 +830,9 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         - Profit diary std: The standard deviation of daily profit, 
                 which indicates the variability in performance.
         - Math hope: The mathematical expectation (or expected value) of returns, 
-                calculated as (Win rate × Average win) - (Loss rate × Average loss).
+                calculated as (Win rate * Average win) - (Loss rate * Average loss).
         - Math hope r: The relative mathematical expectation, 
-                calculated as (Win rate × Average ratio) - (Loss rate × 1).
+                calculated as (Win rate * Average ratio) - (Loss rate * 1).
         - Historical var: The Value at Risk (VaR) estimated using historical data, 
                 calculated as the profit at the (100 - confidence level) percentile.
         - Parametric var: The Value at Risk (VaR) calculated assuming a normal distribution, 
@@ -850,7 +852,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         - Payoff ratio: Ratio between the average profit of winning trades and 
                 the average loss of losing trades (in absolute value).
         - Expectation: Expected value per trade, calculated as 
-                (Win rate × Average win) - (Loss rate × Average loss).
+                (Win rate * Average win) - (Loss rate * Average loss).
         - Skewness: It measures the asymmetry of the return distribution. 
                 A positive skewness indicates tails to the right (potentially large gains), 
                 while a negative skewness indicates tails to the left (potentially large losses).
@@ -867,7 +869,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
                 of each losing trade. 1 = 1 day.
         - Daily frequency op: It is calculated by dividing the number of t
                 ransactions by the number of trading days, where high 
-                values ​​mean high frequency and low values ​​mean the opposite.
+                values mean high frequency and low values mean the opposite.
         - Max consecutive winn: Maximum consecutive winnings count. 
         - Max consecutive loss: Maximum consecutive loss count. 
         - Max losing streak: Maximum number of lost trades in drawdown.
@@ -881,7 +883,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         - Winnings: Percentage of operations won.
 
     Returns:
-        str: statistics.
+        str: Statistics.
     """
 
     # Exceptions.

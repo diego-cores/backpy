@@ -1,5 +1,5 @@
 """
-Strategy module.
+Strategy module
 
 This module contains the main class that must be inherited to create your 
 own strategy.
@@ -51,13 +51,14 @@ class StrategyClass(ABC):
         close: Last 'Close' value from `data`.
         volume: Last 'Volume' value from `data`.
         date: Last index from `data`.
-        width: Data width from `main.__data_width`.
-        icon: Data icon from `main.__data_icon`.
-        interval: Data interval from `main.__data_interval`.
+        width: Data width from `__data_width`.
+        icon: Data icon from `__data_icon`.
+        interval: Data interval from `__data_interval`.
 
     Private Attributes:
         __init_funds: Initial funds for the strategy.
         __spread_pct: Closing and opening spread.
+        __slippage_pct: Closing and opening slippage.
         __commission: Commission per trade.
         __trade: DataFrame for new trades.
         __trades_ac: DataFrame for open trades.
@@ -65,8 +66,10 @@ class StrategyClass(ABC):
         __data: DataFrame containing all data.
 
     Methods:
-        get_init_funds: Returns the initial funds for the strategy.
+        get_spread: Get __spread_pct.
+        get_slippage: Get __slippage_pct.
         get_commission: Returns the commission per trade.
+        get_init_funds: Returns the initial funds for the strategy.
         act_mod: Modifies an existing trade.
         act_close: Closes an existing trade.
         act_open: Opens a new trade.
@@ -84,13 +87,14 @@ class StrategyClass(ABC):
         idc_stochastic: Calculates the Stochastic Oscillator indicator.
         idc_adx: Calculates the Average Directional Index (ADX).
         idc_macd: Calculates the Moving Average Convergence Divergence (MACD).
-        idc_sqzmom: Calculates the Squeeze Momentum indicator.
+        idc_sqzmom: Calculates the Squeeze Momentum indicator (SQZMOM).
         idc_mom: Calculates the Momentum indicator (MOM).
         idc_ichimoku: Calculates the Ichimoku indicator.
         idc_fibonacci: Calculates Fibonacci retracement levels.
         idc_atr: Calculates the Average True Range (ATR).
 
     Private Methods:
+        __data_updater: Updates all data with the provided DataFrame.
         __act_close: Closes an existing trade.
         __idc_ema: Calculates the Exponential Moving Average (EMA) indicator.
         __idc_sma: Calculates the Simple Moving Average (SMA) indicator.
@@ -102,11 +106,13 @@ class StrategyClass(ABC):
         __idc_stochastic: Calculates the Stochastic Oscillator indicator.
         __idc_adx: Calculates the Average Directional Index (ADX).
         __idc_macd: Calculates the Moving Average Convergence Divergence (MACD).
-        __idc_sqzmom: Calculates the Squeeze Momentum indicator.
+        __idc_sqzmom: Calculates the Squeeze Momentum indicator (SQZMOM).
+        __idc_rlinreg: This function calculates the rolling linear regression.
         __idc_mom: Calculates the Momentum indicator (MOM).
         __idc_ichimoku: Calculates the Ichimoku indicator.
         __idc_fibonacci: Calculates Fibonacci retracement levels.
         __idc_atr: Calculates the Average True Range (ATR).
+        __idc_trange: This function calculates the true range.
         __before: This function is used to run trades and other operations.
     """
 
@@ -126,9 +132,9 @@ class StrategyClass(ABC):
             data (pd.DataFrame, optional): All data from the step and previous ones.
             trades_cl (pd.DataFrame, optional): Closed trades.
             trades_ac (pd.DataFrame, optional): Open trades.
-            spread_pct (float, optional): Spread per trade.
-            commission (float, optional): Commission per trade.
-            slippage_pct (float, optional): Slippage per trade.
+            spread_pct (CostsValue, optional): Spread per trade.
+            commission (CostsValue, optional): Commission per trade.
+            slippage_pct (CostsValue, optional): Slippage per trade.
             init_founds (int, optional): Initial funds for the strategy.
         """
 
@@ -234,14 +240,14 @@ class StrategyClass(ABC):
         self.__data = data
         self.__trade = self.__trade.iloc[0:0]
 
-    def __before(self, data=pd.DataFrame()):
+    def __before(self, data:pd.DataFrame = pd.DataFrame()):
         """
         Before.
 
         This function is used to run trades and other operations.
 
         Args:
-            data (pd.DataFrame): Data from the current and previous steps.
+            data (pd.DataFrame, optional): Data from the current and previous steps.
         """
 
         self.__data_updater(data=data)
@@ -459,7 +465,7 @@ class StrategyClass(ABC):
                 horizontal volume. Defaults to 0.
             end (int, optional): Ending point from now to capture the horizontal 
                 volume. If None, data is captured from the beginning.
-            bar (int): Number of horizontal volume bars. More bars increase 
+            bar (int, optional): Number of horizontal volume bars. More bars increase 
                 precision.
 
         Returns:
@@ -517,7 +523,7 @@ class StrategyClass(ABC):
 
         Args:
             length (int): The length of the EMA.
-            source (str): The data source for the EMA calculation. Allowed 
+            source (str, optional): The data source for the EMA calculation. Allowed 
                 parameters are 'Close', 'Open', 'High', 'Low', and 'Volume'.
             last (int, optional): Number of data points to return from the 
                 present backwards. If None, returns data for all time.
@@ -558,7 +564,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (pd.Series): Series of data to perform the EMA calculation.
+            data (pd.Series, optional): Series of data to perform the EMA calculation.
 
         Returns:
             np.ndarray: Array containing the EMA values for each step.
@@ -579,7 +585,7 @@ class StrategyClass(ABC):
 
         Args:
             length (int): Length of the SMA.
-            source (str): Data source for SMA calculation. Allowed values are 
+            source (str, optional): Data source for SMA calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low', 'Volume').
             last (int, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
@@ -620,7 +626,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (pd.Series): Series of data to perform the SMA calculation.
+            data (pd.Series, optional): Series of data to perform the SMA calculation.
 
         Returns:
             np.ndarray: Array containing the SMA values for each step.
@@ -641,9 +647,9 @@ class StrategyClass(ABC):
 
         Args:
             length (int): Length of the WMA.
-            source (str): Data source for WMA calculation. Allowed values are 
+            source (str, optional): Data source for WMA calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low', 'Volume').
-            invt_weight (bool): If True, the distribution of weights is reversed.
+            invt_weight (bool, optional): If True, the distribution of weights is reversed.
             last (int, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
@@ -685,7 +691,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (pd.Series): Series of data to perform the WMA calculation.
+            data (pd.Series, optional): Series of data to perform the WMA calculation.
 
         Returns:
             np.ndarray: Array containing the WMA values for each step.
@@ -710,7 +716,7 @@ class StrategyClass(ABC):
 
         Args:
             length (int): Length of the SMMA.
-            source (str): Data source for SMMA calculation. Allowed values are 
+            source (str, optional): Data source for SMMA calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low', 'Volume').
             last (int, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
@@ -751,7 +757,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (pd.Series): Series of data to perform the SMMA calculation.
+            data (pd.Series, optional): Series of data to perform the SMMA calculation.
 
         Returns:
             np.ndarray: Array containing the SMMA values for each step.
@@ -774,19 +780,19 @@ class StrategyClass(ABC):
         This function calculates the SEMA.
 
         Args:
-            length (int): Length of the EMA.
-            method (str): Smoothing method. Choices include various smoothing 
+            length (int, optional): Length of the EMA.
+            method (str, optional): Smoothing method. Choices include various smoothing 
                           methods.
-            smooth (int): Length of the smoothing method.
-            only (bool): If True, returns only a Series with the values of the 
+            smooth (int, optional): Length of the smoothing method.
+            only (bool, optional): If True, returns only a Series with the values of the 
                         'method'.
-            source (str): Data source for EMA calculation. Allowed values are 
+            source (str, optional): Data source for EMA calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low', 'Volume').
             last (int, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
         Returns:
-            flx.DataWrapper: DataWrapper containing the 'ema' and 'smoothed' values for 
+            DataWrapper: DataWrapper containing the 'ema' and 'smoothed' values for 
                               each step.
         
         Columns:
@@ -838,7 +844,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (pd.Series): Series of data to perform the SEMA calculation.
+            data (pd.Series, optional): Series of data to perform the SEMA calculation.
 
         Returns:
             pd.DataFrame: DataFrame containing 'ema' and 'smoothed' values for 
@@ -878,11 +884,11 @@ class StrategyClass(ABC):
         This function calculates the BB.
 
         Args:
-            length (int): Window length for calculating Bollinger Bands.
-            std_dev (float): Number of standard deviations for the bands.
-            ma_type (str): Type of moving average. For example, 'sma' for simple 
+            length (int, optional): Window length for calculating Bollinger Bands.
+            std_dev (float, optional): Number of standard deviations for the bands.
+            ma_type (str, optional): Type of moving average. For example, 'sma' for simple 
                           moving average.
-            source (str): Data source for calculation. Allowed values are 
+            source (str, optional): Data source for calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low').
             last (int, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
@@ -941,8 +947,8 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (pd.Series): Series of data to perform the Bollinger Bands 
-                              calculation.
+            data (pd.Series, optional): Series of data to perform the Bollinger Bands 
+                calculation.
 
         Returns:
             pd.DataFrame: DataFrame containing 'Upper', '{ma_type}', and 'Lower' 
@@ -981,16 +987,16 @@ class StrategyClass(ABC):
         This function calculates the RSI.
 
         Args:
-            length_rsi (int): Window length for the RSI calculation using 
+            length_rsi (int, optional): Window length for the RSI calculation using 
                               `rsi_ma_type`. Default is 14.
-            length (int): Window length for the moving average applied to RSI. 
+            length (int, optional): Window length for the moving average applied to RSI. 
                           Default is 14.
-            rsi_ma_type (str): Type of moving average used for calculating RSI. 
+            rsi_ma_type (str, optional): Type of moving average used for calculating RSI. 
                               For example, 'wma' for weighted moving average.
-            base_type (str): Type of moving average applied to RSI. For example, 
+            base_type (str, optional): Type of moving average applied to RSI. For example, 
                             'sma' for simple moving average.
-            bb_std_dev (float): Standard deviation for Bollinger Bands. Default is 2.
-            source (str): Data source for calculation. Allowed values are 
+            bb_std_dev (float, optional): Standard deviation for Bollinger Bands. Default is 2.
+            source (str, optional): Data source for calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low').
             last (int, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
@@ -1060,7 +1066,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (pd.Series): Series of data to perform the RSI calculation.
+            data (pd.Series, optional): Series of data to perform the RSI calculation.
 
         Returns:
             pd.DataFrame: DataFrame containing 'rsi' and '{base_type}' values for 
@@ -1110,13 +1116,13 @@ class StrategyClass(ABC):
         This function calculates the stochastic oscillator.
 
         Args:
-            length_k (int): Window length for calculating the stochastic values.
-            smooth_k (int): Smoothing window length for the stochastic values.
-            length_d (int): Window length for the moving average applied to 
+            length_k (int, optional): Window length for calculating the stochastic values.
+            smooth_k (int, optional): Smoothing window length for the stochastic values.
+            length_d (int, optional): Window length for the moving average applied to 
                             the stochastic values.
-            d_type (str): Type of moving average used for the stochastic oscillator. 
+            d_type (str, optional): Type of moving average used for the stochastic oscillator. 
                           For example, 'sma' for simple moving average.
-            source (str): Data source for calculation. Allowed values are 
+            source (str, optional): Data source for calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low').
             last (int, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
@@ -1180,7 +1186,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (pd.Series): Series of data to perform the stochastic calculation.
+            data (pd.Series, optional): Series of data to perform the stochastic calculation.
 
         Returns:
             pd.DataFrame: DataFrame containing 'stoch' and '{d_type}' values for each 
@@ -1212,7 +1218,7 @@ class StrategyClass(ABC):
                                  if last != None and 
                                  last < len(result.index) else 0:], axis=0) 
 
-    def idc_adx(self, smooth:int = 14, length_di:int = 14, 
+    def idc_adx(self, smooth:int = 14, length_di:int = 14,
                 only:bool = False, last:int = None) -> flx.DataWrapper:
         """
         Average Directional Index (ADX).
@@ -1220,9 +1226,9 @@ class StrategyClass(ABC):
         This function calculates the ADX.
 
         Args:
-            smooth (int): Smoothing length. Default is 14.
-            length_di (int): Window length for calculating +DI and -DI. Default is 14.
-            only (bool): If True, returns only a Series with the ADX values.
+            smooth (int, optional): Smoothing length. Default is 14.
+            length_di (int, optional): Window length for calculating +DI and -DI. Default is 14.
+            only (bool, optional): If True, returns only a Series with the ADX values.
             last (int, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
@@ -1271,7 +1277,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (pd.Series): Series of data to perform the ADX calculation.
+            data (pd.Series, optional): Series of data to perform the ADX calculation.
 
         Returns:
             pd.DataFrame: DataFrame containing 'adx', '+di', and '-di' values for 
@@ -1324,15 +1330,15 @@ class StrategyClass(ABC):
         This function calculates the MACD.
 
         Args:
-            short_len (int): Length of the short moving average used to calculate MACD.
-            long_len (int): Length of the long moving average used to calculate MACD.
-            signal_len (int): Length of the moving average for the MACD signal line.
-            macd_ma_type (str): Type of moving average used to calculate MACD.
-            signal_ma_type (str): Type of moving average used to smooth the MACD.
-            histogram (bool): If True, includes an additional 'histogram' column.
-            source (str): Data source for calculations. Allowed values: 'Close', 
+            short_len (int, optional): Length of the short moving average used to calculate MACD.
+            long_len (int, optional): Length of the long moving average used to calculate MACD.
+            signal_len (int, optional): Length of the moving average for the MACD signal line.
+            macd_ma_type (str, optional): Type of moving average used to calculate MACD.
+            signal_ma_type (str, optional): Type of moving average used to smooth the MACD.
+            histogram (bool, optional): If True, includes an additional 'histogram' column.
+            source (str, optional): Data source for calculations. Allowed values: 'Close', 
                 'Open', 'High', 'Low'.
-            last (int or None): Number of data points to return starting from the
+            last (int, optional): Number of data points to return starting from the
                 present backward. If None, returns data for all available periods.
 
         Returns:
@@ -1403,7 +1409,7 @@ class StrategyClass(ABC):
             It does not include exception handling.
 
         Args:
-            data (pd.DataFrame): The data used for calculation of MACD.
+            data (pd.Series, optional): The data used for calculation of MACD.
 
         Returns:
             pd.DataFrame: A DataFrame with MACD values and signal line for each step.
@@ -1460,17 +1466,17 @@ class StrategyClass(ABC):
         be considered financial advice.
 
         Args:
-            bb_len (int): Bollinger band length.
-            bb_mult (float): Bollinger band standard deviation.
-            kc_len (int): Keltner channel length.
-            kc_mult (float): Keltner channel standard deviation.
-            use_tr (bool): If False, ('High' - 'Low') is used instead of the true 
+            bb_len (int, optional): Bollinger band length.
+            bb_mult (float, optional): Bollinger band standard deviation.
+            kc_len (int, optional): Keltner channel length.
+            kc_mult (float, optional): Keltner channel standard deviation.
+            use_tr (bool, optional): If False, ('High' - 'Low') is used instead of the true 
                 range.
-            histogram_len (int): Number of steps from the present backward to calculate
+            histogram_len (int, optional): Number of steps from the present backward to calculate
                 the histogram. If 0, the 'histogram' column will not be returned.
-            source (str): Data source for calculations. Allowed values: 'Close', 
+            source (str, optional): Data source for calculations. Allowed values: 'Close', 
                 'Open', 'High', 'Low'.
-            last (int or None): Number of data points to return starting from the
+            last (int, optional): Number of data points to return starting from the
                 present backward. If None, returns data for all available periods.
 
         Returns:
@@ -1547,7 +1553,7 @@ class StrategyClass(ABC):
             It does not include exception handling.
 
         Args:
-            data (pd.DataFrame): The data used for calculating the Squeeze Momentum.
+            data (pd.Series, optional): The data used for calculating the Squeeze Momentum.
 
         Returns:
             pd.DataFrame: A DataFrame with Squeeze Momentum values and histogram for 
@@ -1614,9 +1620,9 @@ class StrategyClass(ABC):
             prevent user modification and does not include exception handling.
 
         Args:
-            data (pd.Series): The data used for linear regression calculations.
-            length (int): Length of each window for the rolling regression.
-            offset (int): Offset used in the regression calculation.
+            data (pd.Series, optional): The data used for linear regression calculations.
+            length (int, optional): Length of each window for the rolling regression.
+            offset (int, optional): Offset used in the regression calculation.
 
         Returns:
             np.ndarray: Array with the linear regression values for each window.
@@ -1639,10 +1645,10 @@ class StrategyClass(ABC):
         This function calculates the MOM.
 
         Args:
-            length (int): Length for calculating momentum.
-            source (str): Data source for momentum calculation. Allowed values:
+            length (int, optional): Length for calculating momentum.
+            source (str, optional): Data source for momentum calculation. Allowed values:
                 'Close', 'Open', 'High', 'Low'.
-            last (int or None): Number of data points to return starting from the
+            last (int, optional): Number of data points to return starting from the
                 present backward. If None, returns data for all available periods.
 
         Returns:
@@ -1681,8 +1687,7 @@ class StrategyClass(ABC):
             It does not include exception handling.
 
         Args:
-            data (pd.DataFrame): The data used to calculate momentum.
-            length (int): The length of the momentum calculation.
+            data (pd.Series, optional): The data used to calculate momentum.
 
         Returns:
             np.array: Array with the momentum values for each step.
@@ -1694,8 +1699,8 @@ class StrategyClass(ABC):
         return mom.iloc[len(mom)-last 
                         if last != None and last < len(mom) else 0:]
 
-    def idc_ichimoku(self, tenkan_period:int = 9, kijun_period=26, 
-                     senkou_span_b_period=52, ichimoku_lines:bool = True, 
+    def idc_ichimoku(self, tenkan_period:int = 9, kijun_period:int = 26, 
+                     senkou_span_b_period:int = 52, ichimoku_lines:bool = True, 
                      last:int = None) -> flx.DataWrapper:
         """
         Calculate Ichimoku cloud values.
@@ -1703,12 +1708,12 @@ class StrategyClass(ABC):
         This function calculates the Ichimoku cloud.
 
         Args:
-            tenkan_period (int): Window length to calculate the Tenkan-sen line.
-            kijun_period (int): Window length to calculate the Kijun-sen line.
-            senkou_span_b_period (int): Window length to calculate the Senkou Span B.
-            ichimoku_lines (str): If set, adds the columns 'tenkan_sen' and 
-                'kijun_sen' to the DataFrame. Possible values: 'ema', 'sma', etc.
-            last (int or None): Number of data points to return starting from the
+            tenkan_period (int, optional): Window length to calculate the Tenkan-sen line.
+            kijun_period (int, optional): Window length to calculate the Kijun-sen line.
+            senkou_span_b_period (int, optional): Window length to calculate the Senkou Span B.
+            ichimoku_lines (bool, optional): If True, adds the columns 'tenkan_sen' and
+                'kijun_sen' to the returned DataFrame.
+            last (int, optional): Number of data points to return starting from the
                 present backwards. If None, returns data for all available periods.
 
         Returns:
@@ -1754,7 +1759,7 @@ class StrategyClass(ABC):
                                 last=last))
 
     def __idc_ichimoku(self, data:pd.Series = None, tenkan_period:int = 9, 
-                       kijun_period=26, senkou_span_b_period=52, 
+                       kijun_period:int = 26, senkou_span_b_period:int = 52, 
                        ichimoku_lines:bool = True, 
                        last:int = None) -> pd.DataFrame:
         """
@@ -1767,9 +1772,7 @@ class StrategyClass(ABC):
             It does not include exception handling.
 
         Args:
-            data (pd.DataFrame): The data used to calculate the Ichimoku cloud values.
-            ichimoku_lines (bool): If True, adds the columns 'tenkan_sen' and
-                'kijun_sen' to the returned DataFrame.
+            data (pd.Series, optional): The data used to calculate the Ichimoku cloud values.
 
         Returns:
             pd.DataFrame: A DataFrame with Ichimoku cloud values and optionally
@@ -1815,17 +1818,17 @@ class StrategyClass(ABC):
         This function calculates the Fibonacci retracement levels.
 
         Args:
-            start (int or None): The number of candles back to set level 0. If
+            start (int, optional): The number of candles back to set level 0. If
                 `met` is False, `start` specifies the number of candles back to
                 open the Fibonacci levels. If None, level 0 is set at the most
                 recent data (equivalent to 0).
-            end (int): The number of candles back to set level 1. If `met` is False,
+            end (int, optional): The number of candles back to set level 1. If `met` is False,
                 `end` specifies the number of candles back to close the Fibonacci levels.
                 If None, level 1 is set at the most recent data (equivalent to 0).
-            met (bool): If False, `start` and `end` are the number of candles backward
+            met (bool, optional): If False, `start` and `end` are the number of candles backward
                 from the current position. If True, `start` and `end` are the values
                 from which the Fibonacci levels are calculated.
-            source (str): Data source for the Fibonacci levels. Format: 's/s' where 's'
+            source (str, optional): Data source for the Fibonacci levels. Format: 's/s' where 's'
                 is each source. Supported values: 'Close', 'Open', 'High', 'Low'. If
                 `met` is True, this parameter is ignored.
 
@@ -1895,9 +1898,9 @@ class StrategyClass(ABC):
         This function calculates the ATR.
 
         Args:
-            length (int): Window length used to smooth the average true range (ATR).
-            smooth (str): Type of moving average used to smooth the ATR. 
-            last (int or None): Number of data points to return starting from the 
+            length (int, optional): Window length used to smooth the average true range (ATR).
+            smooth (str, optional): Type of moving average used to smooth the ATR. 
+            last (int, optional): Number of data points to return starting from the 
                 present backward. If None, returns data for all available periods.
 
         Returns:
@@ -1934,9 +1937,6 @@ class StrategyClass(ABC):
             This is a hidden function intended to prevent user modification.
             It does not include exception handling.
 
-        Args:
-            data (pd.DataFrame): The data used to perform the calculation of true range.
-
         Returns:
             np.ndarray: Array with the average true range values for each step.
         """
@@ -1966,8 +1966,11 @@ class StrategyClass(ABC):
             It does not include exception handling.
 
         Args:
-            data (pd.DataFrame): The data used to perform the calculation.
-            handle_na (bool): Whether to handle NaN values in 'Close' as per TradingView's rules.
+            data (pd.Series, optional): The data used to perform the calculation.
+            handle_na (bool, optional): Whether to handle NaN values in 'Close' as 
+                per TradingView's rules.
+            last (int, optional): Number of data points to return starting from the 
+                present backward. If None, returns data for all available periods.
 
         Returns:
             np.ndarray: Array with the true range values for each step.
@@ -1991,7 +1994,7 @@ class StrategyClass(ABC):
         return tr.iloc[len(tr)-last 
                        if last != None and last < len(tr) else 0:]
 
-    def act_open(self, type_:bool = 1, stop_loss:int = np.nan, 
+    def act_open(self, type_:bool = True, stop_loss:int = np.nan, 
                  take_profit:int = np.nan, amount:int = np.nan) -> None:
         """
         Opens an action for trading.
@@ -2003,7 +2006,7 @@ class StrategyClass(ABC):
             your trade will be counted as closed, and you can't modify or close it.
 
         Args:
-            type_ (bool): 0 for sell, 1 for buy. Other values Python evaluates 
+            type_ (bool, optional): 0 for sell, 1 for buy. Other values Python evaluates 
                         as booleans are supported.
             stop_loss (int): Price for stop loss. If np.nan or None, no stop loss 
                             will be set.
@@ -2067,7 +2070,7 @@ class StrategyClass(ABC):
         Close an active trade.
 
         Args:
-            index (int): The index of the active trade you want to close.
+            index (int, optional): The index of the active trade you want to close.
         """
 
         # Check exceptions.
@@ -2143,10 +2146,10 @@ class StrategyClass(ABC):
             return None and will not execute any changes.
 
         Args:
-            index (int): The index of the active trade to modify.
-            new_stop (int or None): New stop loss price. If None, stop loss will
+            index (int, optional): The index of the active trade to modify.
+            new_stop (int, optional): New stop loss price. If None, stop loss will
                 not be modified. If np.nan, stop loss will be removed.
-            new_take (int or None): New take profit price. If None, take profit 
+            new_take (int, optional): New take profit price. If None, take profit 
                 will not be modified. If np.nan, take profit will be removed.
         """
         

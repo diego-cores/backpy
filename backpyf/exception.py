@@ -1,5 +1,5 @@
 """
-Exception Module.
+Exception module
 
 Custom exceptions.
 """

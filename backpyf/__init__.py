@@ -1,5 +1,5 @@
 """
-Back Test Py.
+Back Test Py
 
 BackPy is a library used to test strategies in the market.
 

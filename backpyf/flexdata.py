@@ -1,5 +1,5 @@
 """
-Flex data module.
+Flex data module
 
 This module has types and classes that BackPy uses.
 

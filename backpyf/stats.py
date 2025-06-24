@@ -1,5 +1,5 @@
 """
-Stats module.
+Stats module
 
 This module contains functions to calculate different metrics.
 
@@ -17,8 +17,8 @@ Functions:
             Sharpe ratio but only with the standard deviation of negative data.
     payoff_ratio: Calculates the payout rate using the absolute 
             mean of positive numbers/mean of negative numbers.
-    long_exposure: Calculate the percentage of 1 in the given Series.
     expectation: Calculate the expectation based on payoff.
+    long_exposure: Calculate the percentage of 1 in the given Series.
     var_historical: Calculate the historical var.
     var_parametric: Calculate the parametric var.
     max_drawdown: Function to return the maximum drawdown from the given data.

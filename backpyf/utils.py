@@ -1,5 +1,5 @@
 """
-Utils module.
+Utils module
 
 Contains various utility functions for the operation of the main code.
 
@@ -46,7 +46,7 @@ def load_bar(size:int, step:int, count:bool = True, text:str = '') -> None:
         step (int): Current step in the loading process.
         count (bool, optional): If you want the number of 
             steps and the current step to be displayed.
-        text (text, optional): If you want to optimize your 
+        text (str, optional): If you want to optimize your 
             code by sending only one print to the console 
             at a time, you can enter the text you want to 
             appear to the right of the loading bar.
@@ -151,7 +151,7 @@ def num_align(num:float, digits:int = 4, side:bool = True) -> str:
     data_s = side_c(round(num, digits-len(int_part)-1))
     return data_s if _cm.dots else data_s.replace('.', ',')
 
-def round_r(num:float, r:int = 1) -> str:
+def round_r(num:float, r:int = 1) -> float:
     """
     Round right.
 
@@ -178,7 +178,7 @@ def round_r(num:float, r:int = 1) -> str:
             
     return num
 
-def not_na(x:any, y:any, f:callable = max):
+def not_na(x:any, y:any, f:callable = max) -> any:
     """
     If not np.nan.
 
