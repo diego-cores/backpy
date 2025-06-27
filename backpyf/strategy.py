@@ -8,13 +8,16 @@ Classes:
     StrategyClass: This is the class you have to inherit to create your strategy.
 
 Hidden Functions:
-    _data_info: Gathers information about the dataset (hidden function).
+    _data_info: Gathers information about the dataset.
+    __app_decorator: Apply an decorator with instance to the instance.
 """
 
 import pandas as pd
 import numpy as np
 
 from abc import ABC, abstractmethod
+from inspect import signature
+from functools import wraps
 
 from . import _commons as _cm
 from . import flexdata as flx
@@ -23,7 +26,7 @@ from . import utils
 
 def _data_info() -> tuple:
     """
-    Data Info.
+    Data Info
 
     Returns all 'data' variables except `__data`.
 
@@ -33,11 +36,44 @@ def _data_info() -> tuple:
             - __data_icon (str): Data icon.
             - __data_width (int): Data index width.
     """
+
     return _cm.__data_interval, _cm.__data_icon, _cm.__data_width
 
+def __app_decorator(cls):
+    """
+    Apply decorator
+
+    Apply an decorator with instance to the instance.
+
+    Causes functions with attribute: 
+        '_store' to be decorated with '__data_store'.
+
+    Args:
+        cls (cls): Instance.
+
+    Returns:
+        type: The instance.
+    """
+
+    init = cls.__init__
+
+    @wraps(init)
+    def apply(self, *args, **kwargs):
+        init(self, *args, **kwargs)
+
+        for name in dir(self):
+            attr = getattr(self, name)
+            if callable(attr) and getattr(attr, "_store", False):
+                decorator = self._StrategyClass__data_store(attr)
+                setattr(self, name, decorator)
+
+    cls.__init__ = apply
+    return cls
+
+@__app_decorator
 class StrategyClass(ABC):
     """
-    StrategyClass.
+    StrategyClass
 
     This is the class you have to inherit to create your strategy.
 
@@ -77,6 +113,7 @@ class StrategyClass(ABC):
         prev_trades_cl: Retrieves previously closed trades.
         prev: Recovers all step data.
         idc_hvolume: Calculates the horizontal volume.
+        idc_fibonacci: Calculates Fibonacci retracement levels.
         idc_ema: Calculates the Exponential Moving Average (EMA) indicator.
         idc_sma: Calculates the Simple Moving Average (SMA) indicator.
         idc_wma: Calculates the Weighted Moving Average (WMA) indicator.
@@ -90,12 +127,15 @@ class StrategyClass(ABC):
         idc_sqzmom: Calculates the Squeeze Momentum indicator (SQZMOM).
         idc_mom: Calculates the Momentum indicator (MOM).
         idc_ichimoku: Calculates the Ichimoku indicator.
-        idc_fibonacci: Calculates Fibonacci retracement levels.
         idc_atr: Calculates the Average True Range (ATR).
 
     Private Methods:
+        __store_decorator: The 'store' attribute is a function.
+        __data_store: Save the function return and, if already saved, return it from storage.
+        __data_cut: Slices data for the user based on the current index.
         __data_updater: Updates all data with the provided DataFrame.
         __act_close: Closes an existing trade.
+        __idc_fibonacci: Calculates Fibonacci retracement levels.
         __idc_ema: Calculates the Exponential Moving Average (EMA) indicator.
         __idc_sma: Calculates the Simple Moving Average (SMA) indicator.
         __idc_wma: Calculates the Weighted Moving Average (WMA) indicator.
@@ -110,7 +150,6 @@ class StrategyClass(ABC):
         __idc_rlinreg: This function calculates the rolling linear regression.
         __idc_mom: Calculates the Momentum indicator (MOM).
         __idc_ichimoku: Calculates the Ichimoku indicator.
-        __idc_fibonacci: Calculates Fibonacci retracement levels.
         __idc_atr: Calculates the Average True Range (ATR).
         __idc_trange: This function calculates the true range.
         __before: This function is used to run trades and other operations.
@@ -138,9 +177,6 @@ class StrategyClass(ABC):
             init_founds (int, optional): Initial funds for the strategy.
         """
 
-        if not type(data) is pd.DataFrame: 
-            raise exception.StyClassError('Data is empty.')
-
         self.open = None
         self.high = None
         self.low = None
@@ -149,8 +185,11 @@ class StrategyClass(ABC):
         self.date = None
 
         self.__data = pd.DataFrame()
-        self.__data_updater(data=data)
-        
+        self.__data_all = data
+        self.__data_index = None
+
+        self.__idc_data = {}
+
         self.interval, self.icon, self.width = _data_info()
 
         self.__spread_pct  = spread_pct
@@ -167,7 +206,7 @@ class StrategyClass(ABC):
 
     def get_spread(self) -> flx.CostsValue:
         """
-        Get __spread_pct.
+        Get __spread_pct
 
         Info:
             To get the value use: 'get_maker' or 'get_taker'.
@@ -181,7 +220,7 @@ class StrategyClass(ABC):
 
     def get_slippage(self) -> flx.CostsValue:
         """
-        Get __slippage_pct.
+        Get __slippage_pct
 
         Info:
             To get the value use: 'get_maker' or 'get_taker'.
@@ -195,7 +234,7 @@ class StrategyClass(ABC):
 
     def get_commission(self) -> flx.CostsValue:
         """
-        Get __commission.
+        Get __commission
 
         Info:
             To get the value use: 'get_maker' or 'get_taker'.
@@ -208,15 +247,93 @@ class StrategyClass(ABC):
     
     def get_init_funds(self) -> int:
         """
-        Get __init_funds.
+        Get __init_funds
 
         Returns:
             float: The value of the hidden variable `__init_funds`.
         """
 
         return self.__init_funds
-    
-    def __data_updater(self, data:pd.DataFrame) -> None:
+
+    def __store_decorator(func:callable) -> callable:
+        """
+        Store decorator
+
+        Decorate a function with this to give it 
+            the attribute: '_store' and have it decorated with '__data_store'.
+
+        Args:
+            func (callable): Function.
+
+        Return:
+            callable: Function.
+        """
+
+        func._store = True
+        return func
+
+    def __data_store(self, func:callable) -> callable:
+        """
+        Data store
+
+        Save the function return and, if already saved, return it from storage.
+
+        Args:
+            func (callable): Function.
+
+        Return:
+            callable: Function.
+        """
+
+        def __wr_func(*args, **kwargs) -> callable:
+            """
+            Wrapper function
+
+            Save the function return and, if already saved, return it from storage.
+
+            Return:
+                callable: Function.
+            """
+
+            bound = signature(func).bind_partial(*args, **kwargs)
+            bound.apply_defaults()
+
+            id = f'{func.__name__}:'+'-'.join(map(str, bound.arguments.values()))
+
+            if id in self.__idc_data.keys():
+                if bound.arguments.get('cut', False):
+                    return self.__data_cut(self.__idc_data[id], bound.arguments.get('last', None))
+
+                return self.__idc_data[id]
+
+            result = func(*args, **kwargs)
+            self.__idc_data[id] = result
+
+            if bound.arguments.get('cut', False):
+                return self.__data_cut(result, bound.arguments.get('last', None))
+
+            return result
+        return __wr_func
+
+    def __data_cut(self, data:pd.DataFrame, last:int = None) -> pd.DataFrame:
+        """
+        Data cut
+
+        Slices data for the user based on the current index.
+
+        Args:
+            data (pd.DataFrame): Data to cut.
+            last (int, optional): You can get only the latest 'last' data.
+
+        Return:
+            pd.DataFrame: Data cut.
+        """
+
+        data = data.iloc[:self.__data_index]
+        return data.iloc[len(data)-last 
+                        if last != None and last < len(data) else 0:]
+
+    def __data_updater(self, index:int) -> None:
         """
         Data updater.
 
@@ -226,10 +343,9 @@ class StrategyClass(ABC):
             data (pd.DataFrame): All data from the step and previous ones.
         """
 
-        if data.empty:
-            return 'Data is empty.'
-
+        data = self.__data_all.iloc[:index]
         data_ = data.values[-1]
+
         self.open = data_[0]
         self.high = data_[1]
         self.low = data_[2]
@@ -238,9 +354,10 @@ class StrategyClass(ABC):
         self.date = data.index[-1]
 
         self.__data = data
+        self.__data_index = index
         self.__trade = self.__trade.iloc[0:0]
 
-    def __before(self, data:pd.DataFrame = pd.DataFrame()):
+    def __before(self, index:int):
         """
         Before.
 
@@ -250,7 +367,7 @@ class StrategyClass(ABC):
             data (pd.DataFrame, optional): Data from the current and previous steps.
         """
 
-        self.__data_updater(data=data)
+        self.__data_updater(index=index)
 
         # Check if a trade needs to be closed.
         if not self.__trades_ac.empty:
@@ -262,7 +379,7 @@ class StrategyClass(ABC):
                                 (self.__data["High"].iloc[-1] >= row['TakeProfit'] 
                                 or self.__data["Low"].iloc[-1] <= row['StopLoss'])) 
                                 else None, axis=1)
-        
+
         self.next()
 
         # Concat new trade.
@@ -448,10 +565,11 @@ class StrategyClass(ABC):
             data = data[:,_loc]
 
         return flx.DataWrapper(data, columns=data_columns)
-    
+
+    """
     def idc_hvolume(self, start:int = 0, end:int = None, 
                     bar:int = 10) -> flx.DataWrapper:
-        """
+        #
         Indicator horizontal volume.
 
         This function calculates the horizontal volume.
@@ -474,7 +592,7 @@ class StrategyClass(ABC):
         Columns:
             - 'Pos'
             - 'H_Volume'
-        """
+        #
 
         if start < 0: 
             raise ValueError("'start' must be greater or equal than 0.")
@@ -513,7 +631,88 @@ class StrategyClass(ABC):
         result["H_Volume"] += bar_list
 
         return flx.DataWrapper(result)
-        
+
+    def idc_fibonacci(self, start:int = None, end:int = 30, 
+                      met:bool = False, source:str = 'Low/High') -> flx.DataWrapper:
+        #
+        Calculate Fibonacci retracement levels.
+
+        This function calculates the Fibonacci retracement levels.
+
+        Args:
+            start (int, optional): The number of candles back to set level 0. If
+                `met` is False, `start` specifies the number of candles back to
+                open the Fibonacci levels. If None, level 0 is set at the most
+                recent data (equivalent to 0).
+            end (int, optional): The number of candles back to set level 1. If `met` is False,
+                `end` specifies the number of candles back to close the Fibonacci levels.
+                If None, level 1 is set at the most recent data (equivalent to 0).
+            met (bool, optional): If False, `start` and `end` are the number of candles backward
+                from the current position. If True, `start` and `end` are the values
+                from which the Fibonacci levels are calculated.
+            source (str, optional): Data source for the Fibonacci levels. Format: 's/s' where 's'
+                is each source. Supported values: 'Close', 'Open', 'High', 'Low'. If
+                `met` is True, this parameter is ignored.
+
+        Returns:
+            DataWrapper: A DataWrapper with Fibonacci levels and their corresponding
+                values.
+
+        Columns:
+            - 'Level'
+            - 'Value'
+        #
+
+        if met: return self.__idc_fibonacci(start=start, end=end)
+
+        source = source.split('/')
+        if (len(source) != 2 or source[0] == '' or 
+            source[1] == '' or not source[0] in ('Close', 'Open', 'High', 'Low')
+            or not source[1] in ('Close', 'Open', 'High', 'Low')): 
+
+            raise ValueError(utils.text_fix(#
+                            'source' it has to be in this format: 's/s' where 
+                             's' is each source.
+                            Values supported in source: 
+                              ('Close', 'Open', 'High', 'Low')
+                             #, newline_exclude=True))
+        data_start = self.__data[source[1]]; data_end = self.__data[source[0]]
+
+        # Fibonacci calc.
+        return flx.DataWrapper(
+            self.__idc_fibonacci(
+            start=data_start.iloc[len(data_start)-start-1 
+                                  if start != None and 
+                                  start < len(data_start) else 0], 
+            end=data_end.iloc[len(data_end)-end-1 
+                              if end != None and end < len(data_end) else 0]))
+
+    def __idc_fibonacci(self, start:int = 10, end:int = 1) -> pd.DataFrame:
+        #
+        Calculate Fibonacci retracement levels.
+
+        This function calculates the Fibonacci retracement levels.
+
+        Note:
+            This is a hidden function intended to prevent user modification.
+            It does not include exception handling.
+
+        Returns:
+            pd.DataFrame: A DataFrame with Fibonacci levels and their corresponding
+                values.
+
+        Columns:
+            - 'Level'
+            - 'Value'
+        #
+
+        fibo_levels = np.array([0, 0.236, 0.382, 0.5, 0.618, 
+                                0.786, 1, 1.618, 2.618, 3.618, 4.236])
+
+        return pd.DataFrame({'Level':fibo_levels,
+                             'Value':(start + (end - start) * fibo_levels)})
+    """
+
     def idc_ema(self, length:int = any, 
                 source:str = 'Close', last:int = None) -> flx.DataWrapper:
         """
@@ -550,10 +749,13 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Ema calc.
-        return flx.DataWrapper(self.__idc_ema(length=length, source=source, last=last))
+        return flx.DataWrapper(self.__idc_ema(length=length, source=source, 
+                                              last=last, cut=True))
 
+    @__store_decorator
     def __idc_ema(self, data:pd.Series = None, length:int = any, 
-                  source:str = 'Close', last:int = None) -> np.ndarray:
+                  source:str = 'Close', last:int = None, 
+                  cut:bool = False) -> pd.Series:
         """
         Exponential Moving Average (EMA).
 
@@ -565,16 +767,16 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.Series, optional): Series of data to perform the EMA calculation.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
-            np.ndarray: Array containing the EMA values for each step.
+            pd.Series: Series containing the EMA values for each step.
         """
 
-        data = self.__data[source] if data is None else data
+        data = self.__data_all[source] if data is None else data
         ema = data.ewm(span=length, adjust=False).mean()
 
-        return ema.iloc[len(ema)-last 
-                        if last != None and last < len(ema) else 0:]
+        return ema
 
     def idc_sma(self, length:int = any, 
                 source:str = 'Close', last:int = None) -> flx.DataWrapper:
@@ -612,10 +814,13 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Sma calc.
-        return flx.DataWrapper(self.__idc_sma(length=length, source=source, last=last))
-    
+        return flx.DataWrapper(self.__idc_sma(length=length, source=source, 
+                                              last=last, cut=True))
+
+    @__store_decorator
     def __idc_sma(self, data:pd.Series = None, length:int = any, 
-                  source:str = 'Close', last:int = None) -> np.ndarray:
+                  source:str = 'Close', last:int = None, 
+                  cut:bool = False) -> pd.Series:
         """
         Simple Moving Average (SMA).
 
@@ -627,17 +832,17 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.Series, optional): Series of data to perform the SMA calculation.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
-            np.ndarray: Array containing the SMA values for each step.
+            pd.Series: Series containing the SMA values for each step.
         """
 
-        data = self.__data[source] if data is None else data
+        data = self.__data_all[source] if data is None else data
         sma = data.rolling(window=length).mean()
 
-        return sma.iloc[len(sma)-last 
-                        if last != None and last < len(sma) else 0:]
-    
+        return sma
+
     def idc_wma(self, length:int = any, source:str = 'Close', 
                 invt_weight:bool = False, last:int = None) -> flx.DataWrapper:
         """
@@ -676,11 +881,13 @@ class StrategyClass(ABC):
 
         # Wma calc.
         return flx.DataWrapper(self.__idc_wma(length=length, source=source, 
-                              invt_weight=invt_weight, last=last))
-    
+                              invt_weight=invt_weight, last=last, cut=True))
+
+    @__store_decorator
     def __idc_wma(self, data:pd.Series = None, 
                   length:int = any, source:str = 'Close', 
-                  invt_weight:bool = False, last:int = None) -> np.ndarray:
+                  invt_weight:bool = False, last:int = None, 
+                  cut:bool = False) -> pd.Series:
         """
         Weighted Moving Average (WMA).
 
@@ -692,20 +899,20 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.Series, optional): Series of data to perform the WMA calculation.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
-            np.ndarray: Array containing the WMA values for each step.
+            pd.Series: Series containing the WMA values for each step.
         """
 
-        data = self.__data[source] if data is None else data
+        data = self.__data_all[source] if data is None else data
 
         weight = (np.arange(1, length+1)[::-1] 
                   if invt_weight else np.arange(1, length+1))
         wma = data.rolling(window=length).apply(
             lambda x: (x*weight).sum() / weight.sum(), raw=True)
 
-        return wma.iloc[len(wma)-last 
-                        if last != None and last < len(wma) else 0:]
+        return wma
     
     def idc_smma(self, length:int = any, 
                  source:str = 'Close', last:int = None) -> flx.DataWrapper:
@@ -743,10 +950,13 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Smma calc.
-        return flx.DataWrapper(self.__idc_smma(length=length, source=source, last=last))
-    
+        return flx.DataWrapper(self.__idc_smma(length=length, source=source, 
+                                               last=last, cut=True))
+
+    @__store_decorator
     def __idc_smma(self, data:pd.Series = None, length:int = any, 
-                   source:str = 'Close', last:int = None) -> np.ndarray:
+                   source:str = 'Close', last:int = None, 
+                   cut:bool = False) -> pd.Series:
         """
         Smoothed Moving Average (SMMA).
 
@@ -758,18 +968,18 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.Series, optional): Series of data to perform the SMMA calculation.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
-            np.ndarray: Array containing the SMMA values for each step.
+            pd.Series: Series containing the SMMA values for each step.
         """
 
-        data = self.__data[source] if data is None else data
+        data = self.__data_all[source] if data is None else data
 
         smma = data.ewm(alpha=1/length, adjust=False).mean()
         smma.shift(1)
 
-        return smma.iloc[len(smma)-last 
-                        if last != None and last < len(smma) else 0:]
+        return smma
     
     def idc_sema(self, length:int = 9, method:str = 'sma', 
                   smooth:int = 5, only:bool = False, 
@@ -829,11 +1039,12 @@ class StrategyClass(ABC):
 
         # Sema calc.
         return flx.DataWrapper(self.__idc_sema(length=length, method=method, smooth=smooth, 
-                                only=only, source=source, last=last))
+                                only=only, source=source, last=last, cut=True))
     
+    @__store_decorator
     def __idc_sema(self, data:pd.Series = None, length:int = 9, 
                     method:str = 'sma', smooth:int = 5, only:bool = False, 
-                    source:str = 'Close', last:int = None) -> pd.DataFrame:
+                    source:str = 'Close', last:int = None, cut:bool = False) -> pd.DataFrame:
         """
         Smoothed Exponential Moving Average (SEMA).
 
@@ -845,6 +1056,7 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.Series, optional): Series of data to perform the SEMA calculation.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
             pd.DataFrame: DataFrame containing 'ema' and 'smoothed' values for 
@@ -855,7 +1067,7 @@ class StrategyClass(ABC):
             - 'smoothed'
         """
 
-        data = self.__data[source] if data is None else data
+        data = self.__data_all[source] if data is None else data
         ema = data.ewm(span=length, adjust=False).mean()
 
         match method:
@@ -870,11 +1082,7 @@ class StrategyClass(ABC):
                                  if last != None and last < len(smema) else 0:])
         
         smema = pd.DataFrame({'ema':ema, 'smoothed':smema}, index=ema.index)
-
-        return smema.apply(
-            lambda col: col.iloc[len(smema.index)-last 
-                                 if last != None and 
-                                 last < len(smema.index) else 0:], axis=0)
+        return smema
 
     def idc_bb(self, length:int = 20, std_dev:float = 2, ma_type:str = 'sma', 
                source:str = 'Close', last:int = None) -> flx.DataWrapper:
@@ -932,11 +1140,12 @@ class StrategyClass(ABC):
 
         # Bb calc.
         return flx.DataWrapper(self.__idc_bb(length=length, std_dev=std_dev, 
-                                ma_type=ma_type, source=source, last=last))
-    
+                                ma_type=ma_type, source=source, last=last, cut=True))
+
+    @__store_decorator
     def __idc_bb(self, data:pd.Series = None, length:int = 20, 
-                 std_dev:float = 2, ma_type:str = 'sma', 
-                 source:str = 'Close', last:int = None) -> pd.DataFrame:
+                 std_dev:float = 2, ma_type:str = 'sma', source:str = 'Close', 
+                 last:int = None, cut:bool = False) -> pd.DataFrame:
         """
         Bollinger Bands (BB).
 
@@ -949,6 +1158,7 @@ class StrategyClass(ABC):
         Args:
             data (pd.Series, optional): Series of data to perform the Bollinger Bands 
                 calculation.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
             pd.DataFrame: DataFrame containing 'Upper', '{ma_type}', and 'Lower' 
@@ -960,7 +1170,7 @@ class StrategyClass(ABC):
             - 'Lower'
         """
 
-        data = self.__data[source] if data is None else data
+        data = self.__data_all[source] if data is None else data
 
         match ma_type:
             case 'sma': ma = self.__idc_sma(data=data, length=length)
@@ -972,10 +1182,7 @@ class StrategyClass(ABC):
                            ma_type:ma,
                            'Lower':ma - std_}, index=ma.index)
 
-        return bb.apply(lambda col: col.iloc[len(bb.index)-last 
-                                             if last != None and 
-                                             last < len(bb.index) else 0:], 
-                                             axis=0)
+        return bb
 
     def idc_rsi(self, length_rsi:int = 14, length:int = 14, 
                 rsi_ma_type:str = 'smma', base_type:str = 'sma', 
@@ -1050,12 +1257,14 @@ class StrategyClass(ABC):
         # Rsi calc.
         return flx.DataWrapper(self.__idc_rsi(length_rsi=length_rsi, length=length, 
                               rsi_ma_type=rsi_ma_type, base_type=base_type, 
-                              bb_std_dev=bb_std_dev, source=source, last=last))
+                              bb_std_dev=bb_std_dev, source=source, 
+                              last=last, cut=True))
 
+    @__store_decorator
     def __idc_rsi(self, data:pd.Series = None, length_rsi:int = 14, 
-                  length:int = 14, rsi_ma_type:str = 'wma', 
+                  length:int = 14, rsi_ma_type:str = 'smma', 
                   base_type:str = 'sma', bb_std_dev:float = 2, 
-                  source:str = 'Close', last:int = None)  -> pd.DataFrame:
+                  source:str = 'Close', last:int = None, cut:bool = False)  -> pd.DataFrame:
         """
         Relative Strength Index (RSI).
 
@@ -1067,6 +1276,7 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.Series, optional): Series of data to perform the RSI calculation.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
             pd.DataFrame: DataFrame containing 'rsi' and '{base_type}' values for 
@@ -1077,7 +1287,7 @@ class StrategyClass(ABC):
             - '{base_type}'
         """
 
-        delta = self.__data[source].diff() if data is None else data.diff()
+        delta = self.__data_all[source].diff() if data is None else data.diff()
 
         match rsi_ma_type:
             case 'sma': ma = self.__idc_sma
@@ -1102,10 +1312,7 @@ class StrategyClass(ABC):
 
         rsi = pd.concat([pd.DataFrame({'rsi':rsi}), mv], axis=1)
 
-        return rsi.apply(
-            lambda col: col.iloc[len(rsi.index)-last 
-                                 if last != None and 
-                                 last < len(rsi.index) else 0:], axis=0)
+        return rsi
 
     def idc_stochastic(self, length_k:int = 14, smooth_k:int = 1, 
                        length_d:int = 3, d_type:str = 'sma', 
@@ -1171,11 +1378,12 @@ class StrategyClass(ABC):
         return flx.DataWrapper(
             self.__idc_stochastic(length_k=length_k, smooth_k=smooth_k, 
                                 length_d=length_d, d_type=d_type, 
-                                source=source, last=last))
+                                source=source, last=last, cut=True))
 
+    @__store_decorator
     def __idc_stochastic(self, data:pd.Series = None, length_k:int = 14, 
                          smooth_k:int = 1, length_d:int = 3, d_type:int = 'sma', 
-                         source:str = 'Close', last:int = None) -> pd.DataFrame:
+                         source:str = 'Close', last:int = None, cut:bool = False) -> pd.DataFrame:
         """
         Stochastic Oscillator.
 
@@ -1187,6 +1395,7 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.Series, optional): Series of data to perform the stochastic calculation.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
             pd.DataFrame: DataFrame containing 'stoch' and '{d_type}' values for each 
@@ -1197,10 +1406,10 @@ class StrategyClass(ABC):
             - '{d_type}'
         """
 
-        data = self.__data if data is None else data
+        data = self.__data_all if data is None else data
 
-        low_data = self.__data['Low'].rolling(window=length_k).min()
-        high_data = self.__data['High'].rolling(window=length_k).max()
+        low_data = data['Low'].rolling(window=length_k).min()
+        high_data = data['High'].rolling(window=length_k).max()
 
         match d_type:
             case 'sma': ma = self.__idc_sma
@@ -1208,15 +1417,12 @@ class StrategyClass(ABC):
             case 'wma': ma = self.__idc_wma
             case 'smma': ma = self.__idc_smma
 
-        stoch = (((self.__data[source] - low_data) / 
+        stoch = (((data[source] - low_data) / 
                   (high_data - low_data)) * 100).rolling(window=smooth_k).mean()
         result = pd.DataFrame({'stoch':stoch, 
                                d_type:ma(data=stoch, length=length_d)})
 
-        return result.apply(
-            lambda col: col.iloc[len(result.index)-last 
-                                 if last != None and 
-                                 last < len(result.index) else 0:], axis=0) 
+        return result
 
     def idc_adx(self, smooth:int = 14, length_di:int = 14,
                 only:bool = False, last:int = None) -> flx.DataWrapper:
@@ -1262,11 +1468,12 @@ class StrategyClass(ABC):
         # Calc adx.
         return flx.DataWrapper(
             self.__idc_adx(smooth=smooth, length_di=length_di, 
-                            only=only, last=last))
+                            only=only, last=last, cut=True))
 
+    @__store_decorator
     def __idc_adx(self, data:pd.Series = None, smooth:int = 14, 
                   length_di:int = 14, only:bool = False, 
-                  last:int = None) -> pd.DataFrame:
+                  last:int = None, cut:bool = False) -> pd.DataFrame:
         """
         Average Directional Index (ADX).
 
@@ -1278,6 +1485,7 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.Series, optional): Series of data to perform the ADX calculation.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
             pd.DataFrame: DataFrame containing 'adx', '+di', and '-di' values for 
@@ -1289,7 +1497,7 @@ class StrategyClass(ABC):
             - '-di'
         """
 
-        data = self.__data if data is None else data
+        data = self.__data_all if data is None else data
 
         atr = self.__idc_atr(length=length_di, smooth='smma')
 
@@ -1311,14 +1519,10 @@ class StrategyClass(ABC):
             length=smooth)
 
         if only: 
-            return adx.iloc[len(adx)-last 
-                            if last != None and last < len(adx) else 0:]
+            return adx
         adx = pd.DataFrame({'adx':adx, '+di':di_p, '-di':di_n})
 
-        return adx.apply(
-            lambda col: col.iloc[len(adx.index)-last 
-                                 if last != None and 
-                                 last < len(adx.index) else 0:], axis=0) 
+        return adx
 
     def idc_macd(self, short_len:int = 12, long_len:int = 26, 
                  signal_len:int = 9, macd_ma_type:str = 'ema', 
@@ -1392,13 +1596,14 @@ class StrategyClass(ABC):
             self.__idc_macd(short_len=short_len, long_len=long_len, 
                             signal_len=signal_len, macd_ma_type=macd_ma_type, 
                             signal_ma_type=signal_ma_type, histogram=histogram, 
-                            source=source, last=last))
+                            source=source, last=last, cut=True))
 
+    @__store_decorator
     def __idc_macd(self, data:pd.Series = None, short_len:int = 12, 
                    long_len:int = 26, signal_len:int = 9, 
                    macd_ma_type:str = 'ema', signal_ma_type:str = 'ema', 
                    histogram:bool = True, source:str = 'Close', 
-                   last:int = None) -> pd.DataFrame:
+                   last:int = None, cut:bool = False) -> pd.DataFrame:
         """
         Calculate the convergence/divergence of the moving average (MACD).
 
@@ -1410,6 +1615,7 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.Series, optional): The data used for calculation of MACD.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
             pd.DataFrame: A DataFrame with MACD values and signal line for each step.
@@ -1420,7 +1626,7 @@ class StrategyClass(ABC):
             - 'histogram'  
         """
 
-        data = self.__data if data is None else data
+        data = self.__data_all if data is None else data
 
         match macd_ma_type:
             case 'ema':
@@ -1445,15 +1651,12 @@ class StrategyClass(ABC):
                                if histogram else 
                                {'macd':macd, 'signal':signal_line})
 
-        return result.apply(
-            lambda col: col.iloc[len(result.index)-last 
-                                 if last != None and 
-                                 last < len(result.index) else 0:], axis=0) 
+        return result
 
     def idc_sqzmom(self, bb_len:int = 20, bb_mult:float = 1.5, 
                    kc_len:int = 20, kc_mult:float = 1.5, 
-                   use_tr:bool = True, histogram_len:int = 50, 
-                   source:str = 'Close', last:int = None) -> flx.DataWrapper:
+                   use_tr:bool = True, source:str = 'Close', 
+                   last:int = None) -> flx.DataWrapper:
         """
         Calculate Squeeze Momentum (SQZMOM).
 
@@ -1472,8 +1675,6 @@ class StrategyClass(ABC):
             kc_mult (float, optional): Keltner channel standard deviation.
             use_tr (bool, optional): If False, ('High' - 'Low') is used instead of the true 
                 range.
-            histogram_len (int, optional): Number of steps from the present backward to calculate
-                the histogram. If 0, the 'histogram' column will not be returned.
             source (str, optional): Data source for calculations. Allowed values: 'Close', 
                 'Open', 'High', 'Low'.
             last (int, optional): Number of data points to return starting from the
@@ -1508,11 +1709,6 @@ class StrategyClass(ABC):
                                             'bb_mult' it has to be greater than 
                                             0.001 and less than 50.
                                             """, newline_exclude=True))
-        elif histogram_len < 0: 
-            raise ValueError(utils.text_fix("""
-                                            'histogram_len' has to be greater 
-                                            or equal than 0.
-                                            """, newline_exclude=True))
         elif not source in ('Close','Open','High','Low'): 
             raise ValueError(utils.text_fix("""
                                             'source' only one of these values: 
@@ -1529,14 +1725,15 @@ class StrategyClass(ABC):
         return flx.DataWrapper(
             self.__idc_sqzmom(bb_len=bb_len, bb_mult=bb_mult, 
                             kc_len=kc_len, kc_mult=kc_mult, 
-                            use_tr=use_tr, histogram_len=histogram_len, 
-                            source=source, last=last))
+                            use_tr=use_tr, source=source, 
+                            last=last, cut=True))
 
+    @__store_decorator
     def __idc_sqzmom(self, data:pd.Series = None, 
                      bb_len:int = 20, bb_mult:float = 1.5, 
                      kc_len:int = 20, kc_mult:float = 1.5, 
-                     use_tr:bool = True, histogram_len:int = 50, 
-                     source:str = 'Close', last:int = None) -> pd.DataFrame:
+                     use_tr:bool = True, source:str = 'Close', 
+                     last:int = None, cut:bool = False) -> pd.DataFrame:
         """
         Calculate Squeeze Momentum (SQZMOM).
 
@@ -1554,6 +1751,7 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.Series, optional): The data used for calculating the Squeeze Momentum.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
             pd.DataFrame: A DataFrame with Squeeze Momentum values and histogram for 
@@ -1564,7 +1762,7 @@ class StrategyClass(ABC):
             - 'histogram'
         """
 
-        data = self.__data if data is None else data
+        data = self.__data_all if data is None else data
 
         basis = self.__idc_sma(length=bb_len)
         dev = bb_mult * data[source].rolling(window=bb_len).std(ddof=0)
@@ -1582,33 +1780,21 @@ class StrategyClass(ABC):
 
         sqz = np.where((lower_bb > lower_kc) & (upper_bb < upper_kc), 1, 0)
 
-        if histogram_len < 1: 
-            result = pd.DataFrame({'sqzmom':pd.Series(sqz, index=data.index)})
-            return result.apply(
-                lambda col: col.iloc[len(result.index)-last 
-                                     if last != None and 
-                                     last < len(result.index) else 0:], axis=0)
-        elif last and histogram_len > last: histogram = last
-        
-        histogram_len += kc_len
         d = data[source] - ((data['Low'].rolling(window=kc_len).min() + 
                              data['High'].rolling(window=kc_len).max()) / 2 + 
                              self.__idc_sma(length=kc_len)) / 2
 
-        histogram = self.__idc_rlinreg(data=d.iloc[len(d.index)-histogram_len 
-                                              if len(d.index) > histogram_len 
-                                              else 0:], length=kc_len, offset=0)
+        histogram = self.__idc_rlinreg(data=d, length=kc_len, offset=0)
 
         result = pd.DataFrame({'sqzmom':pd.Series(sqz, index=data.index), 
                                'histogram':pd.Series(histogram)}, 
                                index=data.index)
-        return result.apply(
-            lambda col: col.iloc[len(result.index)-last 
-                                 if last != None and 
-                                 last < len(result.index) else 0:], axis=0) 
+        return result
 
+    @__store_decorator
     def __idc_rlinreg(self, data:pd.Series = None, 
-                      length:int = 5, offset:int = 1) -> np.ndarray:
+                      length:int = 5, offset:int = 1,
+                      cut:bool = False) -> np.ndarray:
         """
         Calculate rolling linear regression values.
 
@@ -1623,6 +1809,7 @@ class StrategyClass(ABC):
             data (pd.Series, optional): The data used for linear regression calculations.
             length (int, optional): Length of each window for the rolling regression.
             offset (int, optional): Offset used in the regression calculation.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
             np.ndarray: Array with the linear regression values for each window.
@@ -1673,10 +1860,13 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc momentum.
-        return flx.DataWrapper(self.__idc_mom(length=length, source=source, last=last))
+        return flx.DataWrapper(self.__idc_mom(length=length, source=source, 
+                                              last=last, cut=True))
 
+    @__store_decorator
     def __idc_mom(self, data:pd.Series = None, length:int = 10, 
-                  source:str = 'Close', last:int = None) -> np.array:
+                  source:str = 'Close', last:int = None,
+                  cut:bool = False) -> pd.Series:
         """
         Calculate momentum values (MOM).
 
@@ -1688,16 +1878,16 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.Series, optional): The data used to calculate momentum.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
-            np.array: Array with the momentum values for each step.
+            pd.Series: Series with the momentum values for each step.
         """
 
-        data = self.__data if data is None else data
+        data = self.__data_all if data is None else data
         mom = data[source] - data[source].shift(length)
 
-        return mom.iloc[len(mom)-last 
-                        if last != None and last < len(mom) else 0:]
+        return mom
 
     def idc_ichimoku(self, tenkan_period:int = 9, kijun_period:int = 26, 
                      senkou_span_b_period:int = 52, ichimoku_lines:bool = True, 
@@ -1756,12 +1946,13 @@ class StrategyClass(ABC):
                                 kijun_period=kijun_period, 
                                 senkou_span_b_period=senkou_span_b_period, 
                                 ichimoku_lines=ichimoku_lines, 
-                                last=last))
+                                last=last, cut=True))
 
+    @__store_decorator
     def __idc_ichimoku(self, data:pd.Series = None, tenkan_period:int = 9, 
                        kijun_period:int = 26, senkou_span_b_period:int = 52, 
                        ichimoku_lines:bool = True, 
-                       last:int = None) -> pd.DataFrame:
+                       last:int = None, cut:bool = False) -> pd.DataFrame:
         """
         Calculate Ichimoku cloud values.
 
@@ -1773,6 +1964,7 @@ class StrategyClass(ABC):
 
         Args:
             data (pd.Series, optional): The data used to calculate the Ichimoku cloud values.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
             pd.DataFrame: A DataFrame with Ichimoku cloud values and optionally
@@ -1786,7 +1978,7 @@ class StrategyClass(ABC):
             - 'ichimoku_lines'
         """
 
-        data = self.__data if data is None else data
+        data = self.__data_all if data is None else data
 
         tenkan_sen_val = (data['High'].rolling(window=tenkan_period).max() + 
                           data['Low'].rolling(window=tenkan_period).min()) / 2
@@ -1805,90 +1997,7 @@ class StrategyClass(ABC):
                         pd.DataFrame({'senkou_a':senkou_span_a_val,
                                       'senkou_b':senkou_span_b_val}))
         
-        return senkou_span.apply(
-            lambda col: col.iloc[len(senkou_span.index)-last 
-                                 if last != None and 
-                                 last < len(senkou_span.index) else 0:], axis=0)
-
-    def idc_fibonacci(self, start:int = None, end:int = 30, 
-                      met:bool = False, source:str = 'Low/High') -> flx.DataWrapper:
-        """
-        Calculate Fibonacci retracement levels.
-
-        This function calculates the Fibonacci retracement levels.
-
-        Args:
-            start (int, optional): The number of candles back to set level 0. If
-                `met` is False, `start` specifies the number of candles back to
-                open the Fibonacci levels. If None, level 0 is set at the most
-                recent data (equivalent to 0).
-            end (int, optional): The number of candles back to set level 1. If `met` is False,
-                `end` specifies the number of candles back to close the Fibonacci levels.
-                If None, level 1 is set at the most recent data (equivalent to 0).
-            met (bool, optional): If False, `start` and `end` are the number of candles backward
-                from the current position. If True, `start` and `end` are the values
-                from which the Fibonacci levels are calculated.
-            source (str, optional): Data source for the Fibonacci levels. Format: 's/s' where 's'
-                is each source. Supported values: 'Close', 'Open', 'High', 'Low'. If
-                `met` is True, this parameter is ignored.
-
-        Returns:
-            DataWrapper: A DataWrapper with Fibonacci levels and their corresponding
-                values.
-
-        Columns:
-            - 'Level'
-            - 'Value'
-        """
-
-        if met: return self.__idc_fibonacci(start=start, end=end)
-
-        source = source.split('/')
-        if (len(source) != 2 or source[0] == '' or 
-            source[1] == '' or not source[0] in ('Close', 'Open', 'High', 'Low')
-            or not source[1] in ('Close', 'Open', 'High', 'Low')): 
-
-            raise ValueError(utils.text_fix("""
-                            'source' it has to be in this format: 's/s' where 
-                             's' is each source.
-                            Values supported in source: 
-                              ('Close', 'Open', 'High', 'Low')
-                             """, newline_exclude=True))
-        data_start = self.__data[source[1]]; data_end = self.__data[source[0]]
-
-        # Fibonacci calc.
-        return flx.DataWrapper(
-            self.__idc_fibonacci(
-            start=data_start.iloc[len(data_start)-start-1 
-                                  if start != None and 
-                                  start < len(data_start) else 0], 
-            end=data_end.iloc[len(data_end)-end-1 
-                              if end != None and end < len(data_end) else 0]))
-
-    def __idc_fibonacci(self, start:int = 10, end:int = 1) -> pd.DataFrame:
-        """
-        Calculate Fibonacci retracement levels.
-
-        This function calculates the Fibonacci retracement levels.
-
-        Note:
-            This is a hidden function intended to prevent user modification.
-            It does not include exception handling.
-
-        Returns:
-            pd.DataFrame: A DataFrame with Fibonacci levels and their corresponding
-                values.
-
-        Columns:
-            - 'Level'
-            - 'Value'
-        """
-
-        fibo_levels = np.array([0, 0.236, 0.382, 0.5, 0.618, 
-                                0.786, 1, 1.618, 2.618, 3.618, 4.236])
-
-        return pd.DataFrame({'Level':fibo_levels,
-                             'Value':(start + (end - start) * fibo_levels)})
+        return senkou_span
 
     def idc_atr(self, length:int = 14, smooth:str = 'smma', 
                 last:int = None) -> flx.DataWrapper:
@@ -1924,10 +2033,12 @@ class StrategyClass(ABC):
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
         # Calc atr.
-        return flx.DataWrapper(self.__idc_atr(length=length, smooth=smooth, last=last))
-    
+        return flx.DataWrapper(self.__idc_atr(length=length, smooth=smooth, 
+                                              last=last, cut=True))
+
+    @__store_decorator
     def __idc_atr(self, length:int = 14, smooth:str = 'smma', 
-                  last:int = None) -> np.ndarray:
+                  last:int = None, cut:bool = False) -> pd.Series:
         """
         Calculate the average true range (ATR).
 
@@ -1937,8 +2048,11 @@ class StrategyClass(ABC):
             This is a hidden function intended to prevent user modification.
             It does not include exception handling.
 
+        Args:
+            cut (bool, optional): True to return the trimmed data with current index.
+
         Returns:
-            np.ndarray: Array with the average true range values for each step.
+            pd.Series: Series with the average true range values for each step.
         """
 
         tr = self.__idc_trange()
@@ -1954,8 +2068,10 @@ class StrategyClass(ABC):
                 atr = self.__idc_smma(data=tr, length=length, last=last)
         return atr
 
+    @__store_decorator
     def __idc_trange(self, data:pd.Series = None, 
-                     handle_na: bool = True, last:int = None) -> np.ndarray:
+                     handle_na: bool = True, last:int = None,
+                     cut:bool = False) -> pd.Series:
         """
         Calculate the true range.
 
@@ -1971,12 +2087,13 @@ class StrategyClass(ABC):
                 per TradingView's rules.
             last (int, optional): Number of data points to return starting from the 
                 present backward. If None, returns data for all available periods.
+            cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
-            np.ndarray: Array with the true range values for each step.
+            pd.Series: Series with the true range values for each step.
         """
 
-        data = self.__data if data is None else data
+        data = self.__data_all if data is None else data
 
         close = data['Close'].shift(1)
 
@@ -1991,8 +2108,7 @@ class StrategyClass(ABC):
         if not handle_na:
             tr[close.isna()] = np.nan
 
-        return tr.iloc[len(tr)-last 
-                       if last != None and last < len(tr) else 0:]
+        return tr
 
     def act_open(self, type_:bool = True, stop_loss:int = np.nan, 
                  take_profit:int = np.nan, amount:int = np.nan) -> None:

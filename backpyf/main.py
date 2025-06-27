@@ -426,8 +426,9 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
     slippage_cv = flx.CostsValue(slippage, cust_error="Error of 'slippage'.")
     spread_cv = flx.CostsValue(spread, cust_error="Error of 'spread'.")
 
-    instance = cls(spread_pct=spread_cv, commission=commission_cv, 
-                   slippage_pct=slippage_cv, init_funds=initial_funds)
+    instance = cls(data=_cm.__data, spread_pct=spread_cv, 
+                   commission=commission_cv, slippage_pct=slippage_cv, 
+                   init_funds=initial_funds)
     t = time()
     
     step_t = time()
@@ -460,7 +461,7 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
             utils.load_bar(size=_cm.__data.shape[0], step=f, text=text) 
         step_t = time()
 
-        instance._StrategyClass__before(data=_cm.__data.iloc[:f])
+        instance._StrategyClass__before(index=f)
     if progress or _cm.run_timer:
         print(
             f'RunTimer: {utils.num_align(time()-t)}'

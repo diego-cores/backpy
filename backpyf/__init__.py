@@ -34,6 +34,7 @@ License:
 """
 
 from .strategy import StrategyClass
+
 from ._commons import (
     __binance_timeout,
     max_bar_updates,
@@ -41,6 +42,12 @@ from ._commons import (
     alert,
     dots,
 )
+
+from .flexdata import (
+    DataWrapper,
+    CostsValue,
+)
+
 from .main import (
     load_binance_data_futures,
     plot_strategy_decorator,
@@ -53,13 +60,14 @@ from .main import (
     load_data, 
     plot, 
     run, 
-    )
+)
 
-from .utils import utils
 from .stats import (
     get_drawdowns,
     max_drawdown,
 )
+
+from .utils import utils
 
 __doc__ = """
 BackPy documentation.
@@ -105,7 +113,9 @@ __all__ = [
     'get_drawdowns',
     'max_drawdown',
     'stats_trades',
+    'DataWrapper',
     'stats_icon',
+    'CostsValue',
     'load_data',
     'run_timer',
     'utils',
