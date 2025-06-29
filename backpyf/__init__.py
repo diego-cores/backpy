@@ -35,6 +35,7 @@ License:
 
 from .strategy import (
     StrategyClass,
+    idc_decorator,
 )
 
 from ._commons import (
@@ -111,6 +112,7 @@ __all__ = [
     'plot_strategy_add',
     'max_bar_updates',
     'StrategyClass',
+    'idc_decorator',
     'plot_strategy',
     'get_drawdowns',
     'max_drawdown',

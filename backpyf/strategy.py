@@ -7,6 +7,9 @@ own strategy.
 Classes:
     StrategyClass: This is the class you have to inherit to create your strategy.
 
+Functions:
+    idc_decorator: Create your own indicator.
+
 Hidden Functions:
     _data_info: Gathers information about the dataset.
     __app_decorator: Apply an decorator with instance to the instance.
@@ -23,6 +26,33 @@ from . import _commons as _cm
 from . import flexdata as flx
 from . import exception
 from . import utils
+
+def idc_decorator(func:callable) -> callable:
+    """
+    Indicator decorator
+
+    Create your own indicator.
+
+    Decorate a function with this to give it
+        the attribute: '_uidc' and have it decorated with '__uidc'.
+
+    Info:
+        Call it from next using self.
+        The indicator must accept a data argument. 
+        You must create the indicator inside the class with this decorator.
+        The instance will not be passed to it.
+        The indicator will be calculated only once 
+            by passing all the data and saving it within 'StrategyClass'.
+
+    Args:
+        func (callable): Function.
+
+    Return:
+        callable: Function.
+    """
+
+    func._uidc = True
+    return func
 
 def _data_info() -> tuple:
     """
@@ -136,8 +166,9 @@ class StrategyClass(ABC):
         idc_atr: Calculates the Average True Range (ATR).
 
     Private Methods:
+        __uidc: Send data argument to the indicator and wraps it with '__data_store'.
         __func_idg: Generates an id for a function call.
-        __store_decorator: The 'store' attribute is a function.
+        __store_decorator: Give '_store' attribute to a function.
         __data_store: Save the function return and, if already saved, return it from storage.
         __data_cut: Slices data for the user based on the current index.
         __data_updater: Updates all data with the provided DataFrame.
@@ -317,6 +348,46 @@ class StrategyClass(ABC):
                 return self.__data_cut(result, bound.arguments.get('last', None))
 
             return result
+        return __wr_func
+
+    def __uidc(self, func:callable) -> callable:
+        """
+        User indicator
+
+        Send data argument to the indicator and save the result.
+
+        Args:
+            func (callable): Function.
+
+        Return:
+            callable: Function.
+        """
+
+        func = staticmethod(func).__func__
+
+        def __wr_func(*args, **kwargs) -> callable:
+            """
+            Wrapper function
+
+            Save the function return and, if already saved, return it from storage.
+
+            Sends '__data_all' to the 'data' argument.
+
+            Return:
+                callable: Function.
+            """
+
+            id, bound = StrategyClass.__func_idg(*args, func=func, **kwargs)
+
+            if id in self.__idc_data.keys():
+                #return self.__idc_data[id]
+                return self.__data_cut(self.__idc_data[id])
+
+            result = func.__func__(self.__data_all, *args, **kwargs)
+            self.__idc_data[id] = result
+
+            #return result
+            return self.__data_cut(result)
         return __wr_func
 
     def __func_idg(func:callable, *args, **kwargs) -> tuple:
