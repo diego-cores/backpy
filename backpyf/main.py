@@ -615,7 +615,7 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
     if _cm.__trades.empty: 
         return 'Trades not loaded.'
     elif not 'Profit' in _cm.__trades.columns:  
-        return 'There is no data to see.'
+        return 'No data to see.'
     elif len(view) > 4 or len(view) < 1: 
         raise exception.StatsError(utils.text_fix(f"""
             'view' allowed format: 's/s/s/s' where s is the name of the graph.
@@ -629,6 +629,13 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
     fig = mpl.pyplot.figure(figsize=(16,8))
 
     loc = [(0,0), (3,0), (3,1), (0,1)]; ax = None
+
+    init_data = {col: 0 for col in _cm.__trades.columns}
+    init_data['PositionDate'] = _cm.__data.index[0]
+    init_p = pd.DataFrame([init_data])
+
+    trades = pd.concat([
+        init_p, _cm.__trades], ignore_index=True)
 
     for i,v in enumerate(view):
         match len(view):
@@ -654,28 +661,28 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
 
         match v:
             case 'p':
-                ax.plot(_cm.__trades['PositionDate'],_cm.__trades['Profit'].cumsum(), 
+                ax.plot(trades['PositionDate'],trades['Profit'].cumsum(), 
                         c='black', label='Profit.', ds='steps-post')
                 
                 if log: ax.set_yscale('symlog')
             case 'w':
-                ax.plot(_cm.__trades['PositionDate'],
-                        (_cm.__trades['ProfitPer'].apply(
+                ax.plot(trades['PositionDate'],
+                        (trades['ProfitPer'].apply(
                             lambda row: 1 if row>0 else -1)).cumsum(), 
                         c='black', label='Winnings.', ds='steps-post')
             case 'e':
-                ax.plot(_cm.__trades['PositionDate'], 
-                        np.cumprod(1 + _cm.__trades['ProfitPer'] / 100), 
+                ax.plot(trades['PositionDate'], 
+                        np.cumprod(1 + trades['ProfitPer'] / 100), 
                         c='black', label='Equity.', ds='steps-post')
 
                 if log: ax.set_yscale('symlog')
             case 'r':
-                ax.plot(_cm.__trades['PositionDate'],_cm.__trades['ProfitPer'].cumsum(), 
+                ax.plot(trades['PositionDate'],trades['ProfitPer'].cumsum(), 
                         c='black', label='Return.', ds='steps-post')
 
                 if log: ax.set_yscale('symlog')
             case key if key in _cm.__custom_plot.keys():
-                _cm.__custom_plot[v](ax, _cm.__trades, 
+                _cm.__custom_plot[v](ax, trades, 
                                     _cm.__data, log)
             case _: pass
 
@@ -814,6 +821,8 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         - Op years: Years operated from the first to the last.
         - Return: The total equity earned.
         - Profit: The total amount earned.
+        - Gross earnings: Only the profits.
+        - Gross losses: Only the losses.
         - Max return: The historical maximum of returns.
         - Return from max: Returns from the all-time high.
         - Days from max: Days from the all-time return high.
@@ -949,6 +958,14 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
 
         'Profit':[str(_profit:=utils.round_r(_cm.__trades['Profit'].sum(),2)),
                 _cm.__COLORS['GREEN'] if float(_profit) > 0 else _cm.__COLORS['RED'],],
+
+        'Gross earnings':[utils.round_r((_cm.__trades['Profit'][_cm.__trades['Profit']>0].sum()
+                           if not pd.isna(_cm.__trades['Profit']).all() else 0), 2),
+                        _cm.__COLORS['GREEN']],
+
+        'Gross losses':[utils.round_r(abs(_cm.__trades['Profit'][_cm.__trades['Profit']<=0].sum())
+                           if not pd.isna(_cm.__trades['Profit']).all() else 0, 2),
+                        _cm.__COLORS['RED']],
 
         'Max return':[str(utils.round_r((
             np.cumprod(trades_calc['Multiplier'].dropna()).max()-1)*100,2))+'%'],

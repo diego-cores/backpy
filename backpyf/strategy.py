@@ -46,7 +46,8 @@ def __app_decorator(cls):
     Apply an decorator with instance to the instance.
 
     Causes functions with attribute: 
-        '_store' to be decorated with '__data_store'.
+        '_store' to be decorated with '__data_store' and
+        '_uidc' to be decorated with '__uidc'.
 
     Args:
         cls (cls): Instance.
@@ -63,8 +64,14 @@ def __app_decorator(cls):
 
         for name in dir(self):
             attr = getattr(self, name)
-            if callable(attr) and getattr(attr, "_store", False):
+
+            if not callable(attr):
+                continue
+            elif getattr(attr, '_store', False):
                 decorator = self._StrategyClass__data_store(attr)
+                setattr(self, name, decorator)
+            elif getattr(attr, '_uidc', False):
+                decorator = self._StrategyClass__uidc(attr)
                 setattr(self, name, decorator)
 
     cls.__init__ = apply
@@ -112,7 +119,6 @@ class StrategyClass(ABC):
         prev_trades_ac: Retrieves previously opened trades.
         prev_trades_cl: Retrieves previously closed trades.
         prev: Recovers all step data.
-        idc_hvolume: Calculates the horizontal volume.
         idc_fibonacci: Calculates Fibonacci retracement levels.
         idc_ema: Calculates the Exponential Moving Average (EMA) indicator.
         idc_sma: Calculates the Simple Moving Average (SMA) indicator.
@@ -130,6 +136,7 @@ class StrategyClass(ABC):
         idc_atr: Calculates the Average True Range (ATR).
 
     Private Methods:
+        __func_idg: Generates an id for a function call.
         __store_decorator: The 'store' attribute is a function.
         __data_store: Save the function return and, if already saved, return it from storage.
         __data_cut: Slices data for the user based on the current index.
@@ -295,10 +302,7 @@ class StrategyClass(ABC):
                 callable: Function.
             """
 
-            bound = signature(func).bind_partial(*args, **kwargs)
-            bound.apply_defaults()
-
-            id = f'{func.__name__}:'+'-'.join(map(str, bound.arguments.values()))
+            id, bound = StrategyClass.__func_idg(*args, func=func, **kwargs)
 
             if id in self.__idc_data.keys():
                 if bound.arguments.get('cut', False):
@@ -314,6 +318,24 @@ class StrategyClass(ABC):
 
             return result
         return __wr_func
+
+    def __func_idg(func:callable, *args, **kwargs) -> tuple:
+        """
+        Function id generator
+
+        Generates an id for a function call.
+
+        Args:
+            func (callable): Function.
+
+        Return:
+            tuple: Generated id and 'Signature' object.
+        """
+
+        bound = signature(func).bind_partial(*args, **kwargs)
+        bound.apply_defaults()
+
+        return f"{func.__name__}:{bound.arguments}", bound
 
     def __data_cut(self, data:pd.DataFrame, last:int = None) -> pd.DataFrame:
         """
@@ -434,7 +456,7 @@ class StrategyClass(ABC):
             len(__data) - last if last is not None and last < len(__data) else 0:]
 
         if label != None: 
-            _loc = data.columns.get_loc(label)
+            _loc = __data.columns.get_loc(label)
 
             data_columns = data_columns[_loc]
             data = data[:,_loc]
@@ -566,129 +588,32 @@ class StrategyClass(ABC):
 
         return flx.DataWrapper(data, columns=data_columns)
 
-    """
-    def idc_hvolume(self, start:int = 0, end:int = None, 
-                    bar:int = 10) -> flx.DataWrapper:
-        #
-        Indicator horizontal volume.
-
-        This function calculates the horizontal volume.
-
-        Alert:
-            Using this function with the `end` parameter set to None is not 
-            recommended and may cause slowness in the program.
-
-        Args:
-            start (int, optional): Starting point from now to capture the 
-                horizontal volume. Defaults to 0.
-            end (int, optional): Ending point from now to capture the horizontal 
-                volume. If None, data is captured from the beginning.
-            bar (int, optional): Number of horizontal volume bars. More bars increase 
-                precision.
-
-        Returns:
-            DataWrapper: DataWrapper with the position of each bar and the volume.
-
-        Columns:
-            - 'Pos'
-            - 'H_Volume'
-        #
-
-        if start < 0: 
-            raise ValueError("'start' must be greater or equal than 0.")
-        elif end != None:
-            if end < 0: 
-                raise ValueError("'end' must be greater or equal than 0.")
-            elif start >= end: 
-                raise ValueError("'start' must be less than end.")
-        if bar <= 0: 
-            raise ValueError("'bar' must be greater than 0.")
-
-        data_len = self.__data.shape[0]
-        data_range = self.__data.iloc[data_len-end 
-                                      if end != None and end < data_len else 0:
-                                      data_len-start 
-                                      if start < data_len else data_len]
-
-        if bar == 1: 
-            return pd.DataFrame({"H_Volume":data_range["Volume"].sum()}, 
-                                index=[1])
-
-        bar_list = np.array([0]*bar, dtype=np.int64) 
-        result = pd.DataFrame({"Pos":(data_range["High"].max() - 
-                                      data_range["Low"].min())/(bar-1) * 
-                                      range(bar) + data_range["Low"].min(),
-                               "H_Volume":bar_list})
-
-        def vol_calc(row) -> None: 
-            bar_list[np.argmin(
-                np.abs(np.subtract(result["Pos"].values, row["Low"]))):
-                np.argmin(
-                    np.abs(np.subtract(result["Pos"].values, row["High"])))+1
-                ] += int(row["Volume"])
-
-        data_range.apply(vol_calc, axis=1)
-        result["H_Volume"] += bar_list
-
-        return flx.DataWrapper(result)
-
-    def idc_fibonacci(self, start:int = None, end:int = 30, 
-                      met:bool = False, source:str = 'Low/High') -> flx.DataWrapper:
-        #
+    def idc_fibonacci(self, lv0:float = 10, lv1:float = 1) -> flx.DataWrapper:
+        """
         Calculate Fibonacci retracement levels.
 
         This function calculates the Fibonacci retracement levels.
 
         Args:
-            start (int, optional): The number of candles back to set level 0. If
-                `met` is False, `start` specifies the number of candles back to
-                open the Fibonacci levels. If None, level 0 is set at the most
-                recent data (equivalent to 0).
-            end (int, optional): The number of candles back to set level 1. If `met` is False,
-                `end` specifies the number of candles back to close the Fibonacci levels.
-                If None, level 1 is set at the most recent data (equivalent to 0).
-            met (bool, optional): If False, `start` and `end` are the number of candles backward
-                from the current position. If True, `start` and `end` are the values
-                from which the Fibonacci levels are calculated.
-            source (str, optional): Data source for the Fibonacci levels. Format: 's/s' where 's'
-                is each source. Supported values: 'Close', 'Open', 'High', 'Low'. If
-                `met` is True, this parameter is ignored.
+            lv0 (float, optional): Level 0 position.
+            lv1 (float, optional): Level 1 position.
 
         Returns:
-            DataWrapper: A DataWrapper with Fibonacci levels and their corresponding
-                values.
+            DataWrapper: A DataWrapper with Fibonacci levels and their 
+                corresponding values.
 
         Columns:
             - 'Level'
             - 'Value'
-        #
-
-        if met: return self.__idc_fibonacci(start=start, end=end)
-
-        source = source.split('/')
-        if (len(source) != 2 or source[0] == '' or 
-            source[1] == '' or not source[0] in ('Close', 'Open', 'High', 'Low')
-            or not source[1] in ('Close', 'Open', 'High', 'Low')): 
-
-            raise ValueError(utils.text_fix(#
-                            'source' it has to be in this format: 's/s' where 
-                             's' is each source.
-                            Values supported in source: 
-                              ('Close', 'Open', 'High', 'Low')
-                             #, newline_exclude=True))
-        data_start = self.__data[source[1]]; data_end = self.__data[source[0]]
+        """
 
         # Fibonacci calc.
         return flx.DataWrapper(
-            self.__idc_fibonacci(
-            start=data_start.iloc[len(data_start)-start-1 
-                                  if start != None and 
-                                  start < len(data_start) else 0], 
-            end=data_end.iloc[len(data_end)-end-1 
-                              if end != None and end < len(data_end) else 0]))
+            self.__idc_fibonacci(lv0=lv0, lv1=lv1))
 
-    def __idc_fibonacci(self, start:int = 10, end:int = 1) -> pd.DataFrame:
-        #
+    @__store_decorator
+    def __idc_fibonacci(self, lv0:int = 10, lv1:int = 1) -> pd.DataFrame:
+        """
         Calculate Fibonacci retracement levels.
 
         This function calculates the Fibonacci retracement levels.
@@ -704,14 +629,13 @@ class StrategyClass(ABC):
         Columns:
             - 'Level'
             - 'Value'
-        #
+        """
 
         fibo_levels = np.array([0, 0.236, 0.382, 0.5, 0.618, 
                                 0.786, 1, 1.618, 2.618, 3.618, 4.236])
 
         return pd.DataFrame({'Level':fibo_levels,
-                             'Value':(start + (end - start) * fibo_levels)})
-    """
+                             'Value':lv0 - (lv0 - lv1) * fibo_levels})
 
     def idc_ema(self, length:int = any, 
                 source:str = 'Close', last:int = None) -> flx.DataWrapper:
