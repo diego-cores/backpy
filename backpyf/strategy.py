@@ -19,30 +19,39 @@ import pandas as pd
 import numpy as np
 
 from abc import ABC, abstractmethod
-from inspect import signature
 from functools import wraps
+from typing import Callable
 
 from . import _commons as _cm
 from . import flexdata as flx
 from . import exception
 from . import utils
 
-def idc_decorator(func:callable) -> callable:
+def idc_decorator(func:callable) -> Callable[..., flx.DataWrapper]:
     """
     Indicator decorator
 
     Create your own indicator.
 
-    Decorate a function with this to give it
-        the attribute: '_uidc' and have it decorated with '__uidc'.
+    Decorate a function with this to mark it as an indicator. The function:
+        - It must be defined in the class that inherits StrategyClass.
+        - Must accept at least one argument (usually 'data').
+        - Will be called automatically with the full dataset.
+        - Will not receive 'self' (it's treated as a static method).
+        - Must return a value accepted by 'DataWrapper'.
+        - The returned sequence must match the length of 'data'.
 
-    Info:
-        Call it from next using self.
-        The indicator must accept a data argument. 
-        You must create the indicator inside the class with this decorator.
-        The instance will not be passed to it.
-        The indicator will be calculated only once 
-            by passing all the data and saving it within 'StrategyClass'.
+    Usage:
+        @idc_decorator
+        def idc_test(data):
+            ema = data['Close'].ewm(span=20, adjust=False).mean()
+            return ema # Will be wrapped in a DataWrapper automatically
+
+    Important:
+        - The indicator will be calculated **only once**, and stored.
+        - Access it from `next()` using `self.idc_test`.
+        - You are responsible for ensuring the indicator logic does not use future data.
+        (e.g. avoid calculating max of all data at step 1, which would invalidate the backtest).
 
     Args:
         func (callable): Function.
@@ -170,6 +179,7 @@ class StrategyClass(ABC):
         __func_idg: Generates an id for a function call.
         __store_decorator: Give '_store' attribute to a function.
         __data_store: Save the function return and, if already saved, return it from storage.
+        __uidc_cut: Slices data for the user based on the current index.
         __data_cut: Slices data for the user based on the current index.
         __data_updater: Updates all data with the provided DataFrame.
         __act_close: Closes an existing trade.
@@ -320,17 +330,17 @@ class StrategyClass(ABC):
             func (callable): Function.
 
         Return:
-            callable: Function.
+            callable: Wrapper function.
         """
 
-        def __wr_func(*args, **kwargs) -> callable:
+        def __wr_func(*args, **kwargs) -> pd.DataFrame:
             """
             Wrapper function
 
             Save the function return and, if already saved, return it from storage.
 
             Return:
-                callable: Function.
+                pd.DataFrame: Function result.
             """
 
             id, arguments = StrategyClass.__func_idg(func, *args, **kwargs)
@@ -362,12 +372,13 @@ class StrategyClass(ABC):
             func (callable): Function.
 
         Return:
-            callable: Function.
+            callable: Wrapper function.
         """
 
         func = staticmethod(func).__func__
 
-        def __wr_func(*args, **kwargs) -> callable:
+        @wraps(func)
+        def __wr_func(*args, **kwargs) -> flx.DataWrapper:
             """
             Wrapper function
 
@@ -376,20 +387,18 @@ class StrategyClass(ABC):
             Sends '__data_all' to the 'data' argument.
 
             Return:
-                callable: Function.
+                DataWrapper: Function result.
             """
 
             id = StrategyClass.__func_idg(func, *args, **kwargs)[0]
 
             if id in self.__idc_data.keys():
-                #return self.__idc_data[id]
-                return self.__data_cut(self.__idc_data[id])
+                return self.__uidc_cut(self.__idc_data[id])
 
-            result = func.__func__(self.__data_all, *args, **kwargs)
+            result = flx.DataWrapper(func.__func__(self.__data_all, *args, **kwargs))
             self.__idc_data[id] = result
 
-            #return result
-            return self.__data_cut(result)
+            return self.__uidc_cut(result)
         return __wr_func
 
     def __func_idg(func:callable, *args, **kwargs) -> tuple:
@@ -421,6 +430,27 @@ class StrategyClass(ABC):
 
         return func.__name__ + ':' + '-'.join(map(str, args_wo.values())), arguments
 
+    def __uidc_cut(self, data:flx.DataWrapper) -> flx.DataWrapper:
+        """
+        User indicator cut
+
+        Slices data for the user based on the current index.
+
+        Args:
+            data (flx.DataWrapper): Data to cut.
+
+        Return:
+            flx.DataWrapper: Data cut.
+        """
+
+        if len(data) != len(self.__data_all):
+            raise exception.UidcError('Length different from data.')
+
+        result = flx.DataWrapper(data[:self.__data_index], data._columns)
+        result._index = data._index
+
+        return result
+
     def __data_cut(self, data:pd.DataFrame, last:int = None) -> pd.DataFrame:
         """
         Data cut
@@ -434,9 +464,6 @@ class StrategyClass(ABC):
         Return:
             pd.DataFrame: Data cut.
         """
-
-        if len(data) != len(self.__data_all):
-            raise exception.UidcError('Length different from data.')
 
         limit = self.__data_index
         return (data.iloc[limit-last:limit] 
