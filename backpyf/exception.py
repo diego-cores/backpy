@@ -23,3 +23,5 @@ class ActionError(Exception):pass
 class ConvWrapperError(Exception):pass
 
 class CostValueError(Exception):pass
+
+class UidcError(Exception):pass

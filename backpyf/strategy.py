@@ -333,19 +333,21 @@ class StrategyClass(ABC):
                 callable: Function.
             """
 
-            id, bound = StrategyClass.__func_idg(*args, func=func, **kwargs)
-
-            if id in self.__idc_data.keys():
-                if bound.arguments.get('cut', False):
-                    return self.__data_cut(self.__idc_data[id], bound.arguments.get('last', None))
+            id, arguments = StrategyClass.__func_idg(func, *args, **kwargs)
+  
+            if id in self.__idc_data:
+                if arguments.get('cut', False):
+                    return self.__data_cut(self.__idc_data[id],
+                                           arguments.get('last', None))
 
                 return self.__idc_data[id]
 
             result = func(*args, **kwargs)
             self.__idc_data[id] = result
 
-            if bound.arguments.get('cut', False):
-                return self.__data_cut(result, bound.arguments.get('last', None))
+            if arguments.get('cut', False):
+                return self.__data_cut(result, 
+                                       arguments.get('last', None))
 
             return result
         return __wr_func
@@ -377,7 +379,7 @@ class StrategyClass(ABC):
                 callable: Function.
             """
 
-            id, bound = StrategyClass.__func_idg(*args, func=func, **kwargs)
+            id = StrategyClass.__func_idg(func, *args, **kwargs)[0]
 
             if id in self.__idc_data.keys():
                 #return self.__idc_data[id]
@@ -394,19 +396,30 @@ class StrategyClass(ABC):
         """
         Function id generator
 
-        Generates an id for a function call.
+        Generates an id for a function call 
+            and returns all arguments with defaults.
 
         Args:
             func (callable): Function.
 
         Return:
-            tuple: Generated id and 'Signature' object.
+            tuple: Generated id and arguments.
         """
 
-        bound = signature(func).bind_partial(*args, **kwargs)
-        bound.apply_defaults()
+        df = func.__defaults__ or () 
+        code = func.__code__
 
-        return f"{func.__name__}:{bound.arguments}", bound
+        name_df = code.co_varnames[code.co_argcount-len(df):code.co_argcount]
+
+        arguments = dict(zip(name_df, df))
+
+        arguments.update({k: kwargs[k] for k in name_df if k in kwargs})
+        arguments.update(zip(name_df, args))
+
+        args_wo = arguments.copy()
+        args_wo.pop('cut', None); args_wo.pop('last', None)
+
+        return func.__name__ + ':' + '-'.join(map(str, args_wo.values())), arguments
 
     def __data_cut(self, data:pd.DataFrame, last:int = None) -> pd.DataFrame:
         """
@@ -422,9 +435,13 @@ class StrategyClass(ABC):
             pd.DataFrame: Data cut.
         """
 
-        data = data.iloc[:self.__data_index]
-        return data.iloc[len(data)-last 
-                        if last != None and last < len(data) else 0:]
+        if len(data) != len(self.__data_all):
+            raise exception.UidcError('Length different from data.')
+
+        limit = self.__data_index
+        return (data.iloc[limit-last:limit] 
+                if last is not None and last < limit
+                else data.iloc[:limit])
 
     def __data_updater(self, index:int) -> None:
         """
