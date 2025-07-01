@@ -436,17 +436,17 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
                             if x['Type'] != 1 else None, axis=1),
                c=color_stop, s=30, marker='v', alpha=alpha_arrow)
 
-def _loop_data(function:any, bpoint:any, init:int, timeout:float) -> pd.DataFrame:
+def _loop_data(function:callable, bpoint:callable, init:int, timeout:float) -> pd.DataFrame:
     """
     Data loop.
 
     Runs a loop to extract data from an API with a data per second limit.
 
     Args:
-        function (Callable): A callable function that retrieves data from an API or another source. 
+        function (callable): A callable function that retrieves data from an API or another source. 
             The function must accept an integer (`init`) as its argument and 
             return data in a format that can be converted to a pandas DataFrame.
-        bpoint (Callable): A callable function used as a breaking point checker or updater. 
+        bpoint (callable): A callable function used as a breaking point checker or updater. 
             It should accept the current DataFrame and optionally an integer `init`. 
             If provided with `init`, it should return `True` if the loop should stop. 
             If called without `init`, it should return the updated `init` value.

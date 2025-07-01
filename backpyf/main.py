@@ -9,6 +9,8 @@ Functions:
     load_binance_data_futures: Loads data using the binance-futures-connector module.
     load_yfinance_data: Loads data using the yfinance module.
     load_data: Loads user-provided data.
+    load_data_bpd: Load data from a '.bpd' file and save it to the module.
+    save_data_bpd: Saves 'data' to a '.bpd' file.
     run: Executes the backtesting process.
     plot: Plots your data, highlighting the trades made.
     plot_strategy: Plots statistics for your strategy.
@@ -26,10 +28,11 @@ from datetime import datetime
 import matplotlib.pyplot
 import matplotlib as mpl
 
+import pickle as pk
 import pandas as pd
 import numpy as np
 
-from time import time, gmtime
+from time import time
 
 from . import _commons as _cm
 from . import flexdata as flx
@@ -301,7 +304,7 @@ def load_yfinance_data(tickers:str = any,
         _cm.__data_width = data_width
         _cm.__data_icon = tickers.strip()
         _cm.__data_interval = interval.strip()
-        _cm.__data_width_day = days_op
+        _cm.__data_year_days = days_op
         _cm.__data_width_day = utils.calc_day(interval, data_width)
 
     except ModuleNotFoundError: 
@@ -361,10 +364,116 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
 
     _cm.__data_icon = icon.strip()
     _cm.__data_interval = interval.strip()
-    _cm.__data_width_day = days_op
+    _cm.__data_year_days = days_op
     _cm.__data_width_day = utils.calc_day(interval, _cm.__data_width)
 
     if statistics: stats_icon(prnt=True)
+
+def load_data_bpd(path:str = 'data.bpd', start:int = None, 
+                  end:int = None, days_op:int = None, 
+                  statistics:bool = True, progress:bool = True, 
+                  data_extract:bool = False) -> None:
+    """
+    Load data from .bpd file
+
+    Load data from a '.bpd' file and save it to the module.
+
+    Info:
+        To save a .pbd file use 'save_data_bpd'.
+
+    Args:
+        path (str, optional): Path address to the file to be loaded (.bpd).
+        start (int, optional): Cut the saved data [start:end].
+        end (int, optional): Cut the saved data [start:end].
+        days_op (int, optional): Number of operable days in 1 year. This will be 
+            stored to calculate some statistics. Normal values: 365, 252.
+            If you want to use the one saved just leave it as 'None'
+        statistics (bool): If True, prints statistics of the loaded data.
+        progress (bool, optional): If True, shows a progress bar and timer.
+        data_extract (bool, optional): If True, the data will be returned and 
+            the module variables will not be assigned with them.
+    """
+
+    if (start and end 
+        and ((start > 0 and start < end) 
+        or (start < 0 and start > end))):
+
+        raise exception.DataError(
+            "The resulting 'data' is empty. Bad: 'start' and 'end'.")
+
+    if progress:
+        utils.load_bar(size=1, step=0)
+        t = time()
+
+    with open(path, "rb") as file:
+        data, icon, interval, days_op_load = pk.load(file)
+
+    days_op = days_op or days_op_load
+    days_op = int(days_op)
+
+    if (not isinstance(data, pd.DataFrame)
+        or not all(
+        col in data.columns.to_list() 
+            for col in ['Open', 'High', 'Low', 'Close'])): 
+
+        raise exception.DataError("Bad data: 'data'.")
+    elif not isinstance(icon, str): 
+        raise exception.DataError("Bad data: 'icon'.")
+    elif not isinstance(interval, str): 
+        raise exception.DataError("Bad data: 'interval'.")
+    elif days_op > 365 or days_op < 1:
+        raise exception.DataError("Bad data: 'days_op'.")
+
+    if progress: 
+        utils.load_bar(size=1, step=1, 
+                       text=f'| DataTimer: {utils.num_align(round(time()-t,2))}')
+
+    data = data.iloc[start:end]
+
+    if statistics: 
+        stats_icon(prnt=True, 
+                    data=data, 
+                    data_icon=icon,
+                    data_interval=interval)
+
+    if data_extract:
+        return data, utils.calc_width(data.index)
+
+    _cm.__data = data
+    _cm.__data_width = utils.calc_width(_cm.__data.index)
+    _cm.__data_icon = icon 
+    _cm.__data_interval = interval
+    _cm.__data_year_days = days_op
+    _cm.__data_width_day = utils.calc_day(interval, _cm.__data_width)
+
+def save_data_bpd(file_name:str = 'data') -> None:
+    """
+    Save data on .bpd file
+
+    Saves 'data' to a '.bpd' file.
+
+    Info:
+        To load a .pbd file use 'load_data_bpd'.
+
+    Args:
+        file_name (str, optional): The name or address and name 
+            that the file will have (without extension).
+    """
+
+    if _cm.__data is None: 
+        raise exception.RunError('Data not loaded.')
+    elif _cm.__data_icon is None:
+        raise exception.RunError('Icon not loaded.')
+    elif _cm.__data_interval is None:
+        raise exception.RunError('Interval not loaded.')
+    elif _cm.__data_year_days is None:
+        raise exception.RunError('Year days not loaded.')
+
+    with open(f"{file_name}.bpd", "wb") as file:
+        pk.dump((_cm.__data, 
+                _cm.__data_icon, 
+                _cm.__data_interval, 
+                _cm.__data_year_days), file)
 
 def run(cls:type, initial_funds:int = 10000, commission:tuple = 0, 
         spread:tuple = 0, slippage:tuple = 0,
