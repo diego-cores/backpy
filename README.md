@@ -7,6 +7,9 @@
 **BackPy** is a Python library for backtesting strategies in financial markets.  
 You can provide your own historical data or use the built-in integration with the `yfinance` or `binance-connector` modules.
 
+With **BackPy-binance-connector** you can connect your strategy to the real market using Binance.
+Official repository: https://github.com/diego-cores/BackPy-binance-connector.
+
 ## ⚠️ Important Notices
 
 Please make sure to read the following before using this software:
