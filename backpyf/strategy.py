@@ -12,7 +12,6 @@ Functions:
 
 Hidden Functions:
     _data_info: Gathers information about the dataset.
-    __app_decorator: Apply an decorator with instance to the instance.
 """
 
 import pandas as pd
@@ -78,45 +77,6 @@ def _data_info() -> tuple:
 
     return _cm.__data_interval, _cm.__data_icon, _cm.__data_width
 
-def __app_decorator(cls):
-    """
-    Apply decorator
-
-    Apply an decorator with instance to the instance.
-
-    Causes functions with attribute: 
-        '_store' to be decorated with '__data_store' and
-        '_uidc' to be decorated with '__uidc'.
-
-    Args:
-        cls (cls): Instance.
-
-    Returns:
-        type: The instance.
-    """
-
-    init = cls.__init__
-
-    @wraps(init)
-    def apply(self, *args, **kwargs):
-        init(self, *args, **kwargs)
-
-        for name in dir(self):
-            attr = getattr(self, name)
-
-            if not callable(attr):
-                continue
-            elif getattr(attr, '_store', False):
-                decorator = self._StrategyClass__data_store(attr)
-                setattr(self, name, decorator)
-            elif getattr(attr, '_uidc', False):
-                decorator = self._StrategyClass__uidc(attr)
-                setattr(self, name, decorator)
-
-    cls.__init__ = apply
-    return cls
-
-@__app_decorator
 class StrategyClass(ABC):
     """
     StrategyClass
@@ -145,7 +105,10 @@ class StrategyClass(ABC):
         __trade: DataFrame for new trades.
         __trades_ac: DataFrame for open trades.
         __trades_cl: DataFrame for closed trades.
-        __data: DataFrame containing all data.
+        __data: DataFrame containing cuted data.
+        __data_all: DataFrame containing all data.
+        __data_index: Index to cut data.
+        __idc_data: Saved data from the indicators.
 
     Methods:
         get_spread: Get __spread_pct.
@@ -248,6 +211,18 @@ class StrategyClass(ABC):
         self.__trade = pd.DataFrame()
         self.__trades_ac = trades_ac
         self.__trades_cl = trades_cl
+
+        for name in dir(self):
+            attr = getattr(self, name)
+
+            if not callable(attr):
+                continue
+            elif getattr(attr, '_store', False):
+                decorator = self._StrategyClass__data_store(attr)
+                setattr(self, name, decorator)
+            elif getattr(attr, '_uidc', False):
+                decorator = self._StrategyClass__uidc(attr)
+                setattr(self, name, decorator)
 
     @abstractmethod
     def next(self) -> None: ...
