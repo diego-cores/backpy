@@ -425,8 +425,8 @@ def load_data_bpd(path:str = 'data.bpd', start:int = None,
         raise exception.DataError("Bad data: 'days_op'.")
 
     if progress: 
-        utils.load_bar(size=1, step=1, 
-                       text=f'| DataTimer: {utils.num_align(round(time()-t,2))}')
+        utils.load_bar(size=1, step=1)
+        print('| DataTimer:',utils.num_align(round(time()-t,2)))
 
     data = data.iloc[start:end]
 
@@ -576,8 +576,8 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
             f'RunTimer: {utils.num_align(time()-t)}'
             if _cm.run_timer and not progress else '') 
 
-    act_trades = instance._StrategyClass__trades_ac
-    _cm.__trades = instance._StrategyClass__trades_cl
+    act_trades = instance._StrategyClass__positions
+    _cm.__trades = instance._StrategyClass__pos_record
     
     if not act_trades.empty: _cm.__trades = pd.concat([
         _cm.__trades, act_trades.dropna(axis=1, how='all')
@@ -723,7 +723,7 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
     # Exceptions.
     if _cm.__trades.empty: 
         return 'Trades not loaded.'
-    elif not 'Profit' in _cm.__trades.columns:  
+    elif not 'profit' in _cm.__trades.columns:  
         return 'No data to see.'
     elif len(view) > 4 or len(view) < 1: 
         raise exception.StatsError(utils.text_fix(f"""
@@ -740,7 +740,7 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
     loc = [(0,0), (3,0), (3,1), (0,1)]; ax = None
 
     init_data = {col: 0 for col in _cm.__trades.columns}
-    init_data['PositionDate'] = _cm.__data.index[0]
+    init_data['positionDate'] = _cm.__data.index[0]
     init_p = pd.DataFrame([init_data])
 
     trades = pd.concat([
@@ -770,23 +770,23 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
 
         match v:
             case 'p':
-                ax.plot(trades['PositionDate'],trades['Profit'].cumsum(), 
+                ax.plot(trades['positionDate'],trades['profit'].cumsum(), 
                         c='black', label='Profit.', ds='steps-post')
                 
                 if log: ax.set_yscale('symlog')
             case 'w':
-                ax.plot(trades['PositionDate'],
-                        (trades['ProfitPer'].apply(
+                ax.plot(trades['positionDate'],
+                        (trades['profitPer'].apply(
                             lambda row: 1 if row>0 else -1)).cumsum(), 
                         c='black', label='Winnings.', ds='steps-post')
             case 'e':
-                ax.plot(trades['PositionDate'], 
-                        np.cumprod(1 + trades['ProfitPer'] / 100), 
+                ax.plot(trades['positionDate'], 
+                        np.cumprod(1 + trades['profitPer'] / 100), 
                         c='black', label='Equity.', ds='steps-post')
 
                 if log: ax.set_yscale('symlog')
             case 'r':
-                ax.plot(trades['PositionDate'],trades['ProfitPer'].cumsum(), 
+                ax.plot(trades['positionDate'],trades['profitPer'].cumsum(), 
                         c='black', label='Return.', ds='steps-post')
 
                 if log: ax.set_yscale('symlog')
@@ -1069,11 +1069,11 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
                 _cm.__COLORS['GREEN'] if float(_profit) > 0 else _cm.__COLORS['RED'],],
 
         'Gross earnings':[utils.round_r((_cm.__trades['Profit'][_cm.__trades['Profit']>0].sum()
-                           if not pd.isna(_cm.__trades['Profit']).all() else 0), 2),
+                           if not pd.isna(_cm.__trades['Profit']).all() else 0), 4),
                         _cm.__COLORS['GREEN']],
 
         'Gross losses':[utils.round_r(abs(_cm.__trades['Profit'][_cm.__trades['Profit']<=0].sum())
-                           if not pd.isna(_cm.__trades['Profit']).all() else 0, 2),
+                           if not pd.isna(_cm.__trades['Profit']).all() else 0, 4),
                         _cm.__COLORS['RED']],
 
         'Max return':[str(utils.round_r((
@@ -1114,7 +1114,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         'Average profit':[str(utils.round_r(_cm.__trades['Profit'].mean(),2))+'%',
                     _cm.__COLORS['YELLOW'],],
 
-        'Profit fact':[_profit_fact:=utils.round_r(stats.profit_fact(_cm.__trades['Profit']), 2),
+        'Profit fact':[_profit_fact:=utils.round_r(stats.profit_fact(_cm.__trades['Profit']), 3),
                 _cm.__COLORS['GREEN'] if float(_profit_fact) > 1 else _cm.__COLORS['RED'],],
 
         'Return diary std':[(_return_std:=utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1), 2)),

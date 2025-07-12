@@ -20,6 +20,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from functools import wraps
 from typing import Callable
+from time import time
 
 from . import _commons as _cm
 from . import flexdata as flx
@@ -208,9 +209,11 @@ class StrategyClass(ABC):
         self.__commission = commission
         self.__init_funds = init_funds
 
-        self.__trade = pd.DataFrame()
-        self.__trades_ac = trades_ac
-        self.__trades_cl = trades_cl
+        self.__orders = pd.DataFrame()
+        self.__positions = pd.DataFrame()
+
+        self.__pos_record = pd.DataFrame()
+        self.__ord_record = pd.DataFrame()
 
         for name in dir(self):
             attr = getattr(self, name)
@@ -467,9 +470,8 @@ class StrategyClass(ABC):
 
         self.__data = data
         self.__data_index = index
-        self.__trade = self.__trade.iloc[0:0]
 
-    def __before(self, index:int):
+    def __before(self, index:int) -> None:
         """
         Before.
 
@@ -481,27 +483,20 @@ class StrategyClass(ABC):
 
         self.__data_updater(index=index)
 
-        # Check if a trade needs to be closed.
-        if not self.__trades_ac.empty:
-            self.__trades_ac.apply(lambda row: self.__act_close(index=row.name) 
-                                if (not row['Type'] and 
-                                (self.__data["Low"].iloc[-1] <= row['TakeProfit'] 
-                                or self.__data["High"].iloc[-1] >= row['StopLoss']))
-                                or (row['Type'] and 
-                                (self.__data["High"].iloc[-1] >= row['TakeProfit'] 
-                                or self.__data["Low"].iloc[-1] <= row['StopLoss'])) 
-                                else None, axis=1)
+        # Check operations
+        def wrap_or(row):
+
+            if (
+                self.__data['High'].iloc[-1]*(self.__spread_pct.get_taker()/100/2+1) >= row['orderPrice']
+                and self.__data['Low'].iloc[-1]*(1-self.__spread_pct.get_taker()/100/2) <= row['orderPrice']
+                ):
+
+                self.__order_execute(row)
+                self.__orders = self.__orders.drop(row.name)
+
+        self.__orders.apply(wrap_or, axis=1)
 
         self.next()
-
-        # Concat new trade.
-        if not self.__trade.empty: 
-            self.__trades_ac = pd.concat([self.__trades_ac, self.__trade], 
-                                         ignore_index=True)
-
-        self.__trades_ac.reset_index(drop=True, inplace=True)
-
-        return self.__trades_ac, self.__trades_cl
 
     def prev(self, label:str = None, last:int = None) -> flx.DataWrapper:
         """
@@ -653,7 +648,7 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper containing the data from active trades.
         """
 
-        __trades_ac = self.__trades_ac
+        __trades_ac = self.__positions
         if label == 'index': 
             return flx.DataWrapper(__trades_ac.index, columns='index')
         elif __trades_ac.empty: 
@@ -2124,9 +2119,182 @@ class StrategyClass(ABC):
 
         return tr
 
+    def act_taker(self, buy:bool = True, amount:float = np.nan):
+        buy = int(bool(buy))
+
+        union_id = hash(time())
+        taker_order = pd.DataFrame({'order':'op',
+                                    'date':self.__data.index[-1],
+                                    'orderPrice':self.__data["Close"].iloc[-1],
+                                    'amount':amount,
+                                    'typeSide':buy,
+                                    'unionId':union_id,
+                                    }, index=[1])
+
+        self.__order_execute(taker_order)
+
+    def act_limit(self, price:float, buy:bool = True, amount:float = np.nan):
+        buy = int(bool(buy))
+
+        union_id = hash(time())
+        maker_order = pd.DataFrame({'order':'op',
+                                    'date':self.__data.index[-1],
+                                    'orderPrice':price,
+                                    'amount':amount,
+                                    'typeSide':buy,
+                                    'unionId':union_id,
+                                    }, index=[1])
+
+        self.__orders = pd.concat([self.__orders, maker_order], ignore_index=True) 
+
+    def act_close(self, index):
+        self.__act_reduce(index, self.__data['Close'].iloc[-1], mode='taker')
+
+    def __act_reduce(self, index, price, amount = None, mode = 'taker'):
+
+        position = self.__positions.iloc[[index]] ## invalid literal for int() with base 10: 'date' 
+        rec_pos = position.copy()
+
+        if not amount:
+            amount = position['amount'].iloc[0]
+
+        position_close = price
+
+        if mode == 'maker':
+
+            commission = self.__commission.get_maker()
+            position_close_spread = price
+        elif mode == 'taker':
+
+            commission = self.__commission.get_taker()
+            spread = price*(self.__spread_pct.get_taker()/100/2)
+            slippage = price*(self.__slippage_pct.get_taker()/100)
+
+            position_close_spread = (position_close-spread-slippage 
+                                    if position['typeSide'].iloc[0] else position_close+spread+slippage)
+        else:
+            return
+
+        # Fill data.
+        rec_pos['positionCloseNoS'] = position_close
+        rec_pos['positionClose'] = position_close_spread
+        rec_pos['positionDate'] = self.__data.index[-1]
+        open = rec_pos['positionOpen'].iloc[0]
+
+        rec_pos['profitPer'] = ((position_close_spread-open)/open*100 
+                            if rec_pos['typeSide'].iloc[0]
+                            else (open-position_close_spread)/open*100)
+
+        if rec_pos['amount'].iloc[0] > amount:
+
+            rec_pos['amount'].iloc[0] = amount
+            position['amount'].iloc[0] -= amount
+        else:
+            self.__positions = self.__positions.drop(position.index)
+
+        rec_pos['profit'] = (rec_pos['amount'].iloc[0]*rec_pos['profitPer'].iloc[0]/100-
+                        rec_pos['amount'].iloc[0]*(commission/100)-
+                        (rec_pos['amount'].iloc[0]*rec_pos['profitPer'].iloc[0]/100+
+                            rec_pos['amount'].iloc[0])*
+                            (rec_pos['commission']/100)
+                            if not np.isnan(position['amount'].iloc[0]) else np.nan)
+
+        rec_pos['commission'] += commission
+
+        self.__pos_record = pd.concat([self.__pos_record, rec_pos], 
+                                     ignore_index=True) 
+
+    def __put_op(self, order):
+
+        position_price = order['orderPrice']
+
+        if (
+            position_price >= self.__data['High'].loc[order['date']]*(self.__spread_pct.get_taker()/100/2+1)
+            or position_price <= self.__data['Low'].loc[order['date']]*(1-self.__spread_pct.get_taker()/100/2)
+            ):
+
+            position_open = position_price
+            commission = self.__commission.get_maker()
+        else:
+            position_price = self.__data['Close'].loc[order['date']]
+
+            commission = self.__commission.get_taker()
+            slippage = position_price*(self.__slippage_pct.get_taker()/100)
+            spread = position_price*(self.__spread_pct.get_taker()/100/2)
+
+            position_open = (position_price+spread+slippage
+                            if order['typeSide'] else position_price-spread-slippage)
+
+        position = pd.DataFrame({'date':self.__data.index[-1],
+                                'positionOpen':position_open,
+                                'commission':commission,
+                                'amount':order['amount'],
+                                'typeSide':order['typeSide'],
+                                'unionId':order['unionId'],
+                                },index=[1])
+
+        self.__positions = pd.concat([self.__positions, position], ignore_index=True) 
+
+    def __order_execute(self, order):
+# ♡
+        match order['order']:
+            case 'op':
+
+                self.__put_op(order)
+            case 'takeProfit' | 'stopLoss':
+
+                union_pos = self.__positions[self.__positions['unionId'] == order['unionId']]
+                if not union_pos.empty:
+                    index = union_pos.iloc[0].index
+                else:
+                    raise ValueError('Orden sin coincidencias')
+
+                self.__act_reduce(index, order['orderPrice'], amount=order['amount'])
+            case 'takeLimit' | 'stopLimit':
+                pass
+
+    def ord_put(self, order_type:str, price:float, 
+                amount:float = None, buy:bool = True, union_id:bool = None):
+
+        if not self.__positions.empty:
+            last_data = self.__positions.iloc[-1]
+        elif not self.__orders.empty:
+            last_data = self.__orders.iloc[-1]
+        elif not self.__pos_record.empty:
+            last_data = self.__pos_record.iloc[-1]
+        elif not self.__ord_record.empty:
+            last_data = self.__ord_record.iloc[-1]
+        else:
+            union_id = union_id or 0
+            amount = amount or np.nan
+
+        union_id = union_id or last_data['unionId']
+        amount = amount or last_data['amount']
+
+        self.__ord_put(order_type, price, amount, buy, union_id)
+
+    def __ord_put(self, order_type, price, amount, buy, union_id):
+
+        order = pd.DataFrame({'order':order_type,
+                            'date':self.__data.index[-1],
+                            'orderPrice':price,
+                            'amount':amount,
+                            'typeSide':buy,
+                            'unionId':union_id,
+                            }, index=[1])
+
+        self.__orders = pd.concat([self.__orders, order], ignore_index=True) 
+
+    def ord_rmv():
+        pass
+
+    def ord_mod():
+        pass
+
+"""
     def act_open(self, type_:bool = True, stop_loss:int = np.nan, 
                  take_profit:int = np.nan, amount:int = np.nan) -> None:
-        """
+        #
         Opens an action for trading.
 
         This function opens a long or short position. 
@@ -2143,7 +2311,7 @@ class StrategyClass(ABC):
             take_profit (int): Price for take profit. If np.nan or None, no take 
                               profit will be set.
             amount (int): Amount of points for the trade.
-        """
+        #
 
         # Convert to boolean.
         type_ = int(bool(type_))
@@ -2164,10 +2332,10 @@ class StrategyClass(ABC):
                            self.__data["Close"].iloc[-1] <= take_profit))): 
 
             raise exception.ActionError(
-                utils.text_fix("""
+                utils.text_fix(#
                                'stop_loss' or 'take_profit' 
                                incorrectly configured for the position type_.
-                               """, newline_exclude=True))
+                               #, newline_exclude=True))
 
         # Costs calc.
         commission = self.__commission.get_taker()
@@ -2196,12 +2364,12 @@ class StrategyClass(ABC):
                                      'Commission':commission},index=[1])
 
     def act_close(self, index:int = 0) -> None:
-        """
+        #
         Close an active trade.
 
         Args:
             index (int, optional): The index of the active trade you want to close.
-        """
+        #
 
         # Check exceptions.
         if self.__trades_ac.empty: 
@@ -2212,13 +2380,13 @@ class StrategyClass(ABC):
         return self.__act_close(index=index)
 
     def __act_close(self, index:int = 0) -> None:
-        """
+        #
         Close an active trade.
 
         Note:
             This is a hidden function intended to prevent user modification.
             It does not include exception handling.
-        """
+        #
 
         # Get trade to close.
         trade = self.__trades_ac.iloc[lambda x: x.index==index].copy()
@@ -2268,7 +2436,7 @@ class StrategyClass(ABC):
 
     def act_mod(self, index:int = 0, new_stop:int = None, 
                 new_take:int = None) -> None:
-        """
+        #
         Modify an active trade.
 
         Alerts:
@@ -2281,7 +2449,7 @@ class StrategyClass(ABC):
                 not be modified. If np.nan, stop loss will be removed.
             new_take (int, optional): New take profit price. If None, take profit 
                 will not be modified. If np.nan, take profit will be removed.
-        """
+        #
         
         # Check exceptions.
         if self.__trades_ac.empty: 
@@ -2302,3 +2470,4 @@ class StrategyClass(ABC):
                                                  new_take < self.close) or 
                                                  np.isnan(new_take)): 
             self.__trades_ac.loc[index,'TakeProfit'] = new_take
+"""

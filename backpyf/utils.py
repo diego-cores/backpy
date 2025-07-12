@@ -395,46 +395,46 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
             ax.add_patch(stop)
 
         # Draw route of the operation.
-        if 'PositionDate' in row.index and not np.isnan(row['PositionDate']):
+        if 'positionDate' in row.index and not np.isnan(row['positionDate']):
             if operation_route and all:
-                cl = ('green' if (row['PositionOpen'] < row['PositionClose'] and 
-                                  row['Type'] == 1) or 
-                                  (row['PositionOpen'] > row['PositionClose'] and 
-                                  row['Type'] == 0) else 'red')
+                cl = ('green' if (row['positionOpen'] < row['positionClose'] and 
+                                  row['typeSide'] == 1) or 
+                                  (row['positionOpen'] > row['positionClose'] and 
+                                  row['typeSide'] == 0) else 'red')
 
-                route  = Rectangle(xy=(row['Date'], row['PositionOpen']), 
-                                width=row['PositionDate']-row['Date'], 
-                                height=row['PositionCloseNoS']-row['PositionOpen'], 
+                route  = Rectangle(xy=(row['date'], row['positionOpen']), 
+                                width=row['positionDate']-row['date'], 
+                                height=row['positionCloseNoS']-row['positionOpen'], 
                                 facecolor=cl, edgecolor=cl)
             
                 route.set_alpha(alpha)
                 ax.add_patch(route)
       
             # Arrow drawing.
-            ax.arrow(row['Date'], row['PositionOpen'], 
-                    row['PositionDate']-row['Date'], 
-                    row['PositionClose']-row['PositionOpen'], 
-                    linestyle='-', color='grey', alpha=alpha_arrow, 
-                    width=abs(trades['High'].max()-trades['Low'].min())/(10**10))
+            #ax.arrow(row['date'], row['positionOpen'], 
+            #        row['positionDate']-row['date'], 
+            #        row['positionClose']-row['positionOpen'], 
+            #        linestyle='-', color='grey', alpha=alpha_arrow, 
+            #        width=abs(trades['High'].max()-trades['Low'].min())/(10**10))
 
     trades.apply(draw, axis=1)
 
     # Drawing of the closing marker of the operation.
-    if ('PositionDate' in trades.columns and 
-        'PositionClose' in trades.columns):
-        ax.scatter(trades['PositionDate'], trades['PositionClose'], 
+    if ('positionDate' in trades.columns and 
+        'positionClose' in trades.columns):
+        ax.scatter(trades['positionDate'], trades['positionClose'], 
                   c=color_close, s=30, marker='x', alpha=alpha_arrow)
 
     # Drawing of the position type marker.
-    ax.scatter(trades['Date'], 
-               trades.apply(lambda x: x['Low'] - (x['High'] - x['Low']) / 2 
-                            if x['Type'] == 1 else None, axis=1), 
-               c=color_take, s=30, marker='^', alpha=alpha_arrow)
+    #ax.scatter(trades['date'], 
+    #           trades.apply(lambda x: x['Low'] - (x['High'] - x['Low']) / 2 
+    #                        if x['typeSide'] == 1 else None, axis=1), 
+    #           c=color_take, s=30, marker='^', alpha=alpha_arrow)
     
-    ax.scatter(trades['Date'], 
-               trades.apply(lambda x: x['High'] + (x['High'] - x['Low']) / 2 
-                            if x['Type'] != 1 else None, axis=1),
-               c=color_stop, s=30, marker='v', alpha=alpha_arrow)
+    #ax.scatter(trades['date'], 
+    #           trades.apply(lambda x: x['High'] + (x['High'] - x['Low']) / 2 
+    #                        if x['typeSide'] != 1 else None, axis=1),
+    #           c=color_stop, s=30, marker='v', alpha=alpha_arrow)
 
 def _loop_data(function:callable, bpoint:callable, init:int, timeout:float) -> pd.DataFrame:
     """

@@ -201,7 +201,7 @@ def expectation(profits:pd.Series) -> float:
     Calculate the expectation based on payoff.
 
     Args:
-        profits (pd.Series): Returns on each operation..
+        profits (pd.Series): Returns on each operation.
 
     Returns:
         float: Expectation.
