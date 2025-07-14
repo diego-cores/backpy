@@ -491,7 +491,8 @@ class StrategyClass(ABC):
             self.__orders = self.__orders.sort_values('order')
 
             def wrap_or(row):
-                if 'wh' == row['unionId'].split('/')[0]:
+                # uiiai uiiiai
+                if row['unionId']['ui'].split('/')[0] == 'w':
                     return
 
                 if (
@@ -2213,32 +2214,18 @@ class StrategyClass(ABC):
         return tr
 
     def act_taker(self, buy:bool = True, amount:float = np.nan):
+
         buy = int(bool(buy))
 
-        union_id = str(hash(time()))
-        taker_order = pd.DataFrame({'order':'op',
-                                    'date':self.__data.index[-1],
-                                    'orderPrice':self.__data["Close"].iloc[-1],
-                                    'amount':amount,
-                                    'typeSide':buy,
-                                    'unionId':union_id,
-                                    }, index=[1])
-
-        self.__order_execute(taker_order)
+        self.__ord_put('op', price=self.__data["Close"].iloc[-1], amount=amount, 
+                            buy=buy, wait=False, union_id=str(hash(time())))
 
     def act_limit(self, price:float, buy:bool = True, amount:float = np.nan):
+
         buy = int(bool(buy))
 
-        union_id = str(hash(time()))
-        maker_order = pd.DataFrame({'order':'op',
-                                    'date':self.__data.index[-1],
-                                    'orderPrice':price,
-                                    'amount':amount,
-                                    'typeSide':buy,
-                                    'unionId':union_id,
-                                    }, index=[1])
-
-        self.__orders = pd.concat([self.__orders, maker_order], ignore_index=True) 
+        self.__ord_put('op', price=price, amount=amount, 
+                       buy=buy, wait=False, union_id=str(hash(time())))
 
     def act_close(self, index):
         self.__act_reduce(index, self.__data['Close'].iloc[-1], mode='taker')
@@ -2248,7 +2235,7 @@ class StrategyClass(ABC):
         position = self.__positions.iloc[[index]] 
         rec_pos = position.copy()
 
-        if not amount:
+        if np.isnan(amount):
             amount = position['amount'].iloc[0]
 
         position_close = price
@@ -2284,7 +2271,9 @@ class StrategyClass(ABC):
             position['amount'].iloc[0] -= amount
         else:
             self.__positions = self.__positions.drop(position.index)
-            self.__orders = self.__orders[self.__orders['unionId'].str.split('/').str[-1] != position['unionId'].iloc[0]]
+            self.__orders = self.__orders[(self.__orders.apply(
+                lambda r: position['unionId'].iloc[0] != r['unionId']['ui'].split('/')[-1] and position['unionId'].iloc[0] != r['unionId']['ci']
+            , axis=1))]
 
         rec_pos['profit'] = (rec_pos['amount'].iloc[0]*rec_pos['profitPer'].iloc[0]/100-
                         rec_pos['amount'].iloc[0]*(commission/100)-
@@ -2298,7 +2287,7 @@ class StrategyClass(ABC):
         self.__pos_record = pd.concat([self.__pos_record, rec_pos], 
                                      ignore_index=True) 
 
-    def __put_op(self, order):
+    def __put_op(self, order:pd.Series):
 
         position_price = order['orderPrice']
 
@@ -2324,7 +2313,7 @@ class StrategyClass(ABC):
                                 'commission':commission,
                                 'amount':order['amount'],
                                 'typeSide':order['typeSide'],
-                                'unionId':order['unionId'],
+                                'unionId':order['unionId']['ui'],
                                 },index=[1])
 
         self.__positions = pd.concat([self.__positions, position], ignore_index=True) 
@@ -2336,8 +2325,10 @@ class StrategyClass(ABC):
 
                 self.__put_op(order)
             case 'takeProfit' | 'stopLoss':
+                if order['unionId']['ui'] == '':
+                    return
 
-                union_pos = self.__positions['unionId'][self.__positions['unionId'] == order['unionId']]
+                union_pos = self.__positions['unionId'][self.__positions['unionId'] == order['unionId']['ui']]
                 if not union_pos.empty:
                     index = union_pos.index[0]
                 else:
@@ -2347,12 +2338,21 @@ class StrategyClass(ABC):
             case 'takeLimit' | 'stopLimit':
                 pass
 
-        # Exectute wh
-        self.__orders.loc[self.__orders['unionId'] == f'wh/{order["unionId"]}', 'unionId'] = order['unionId']
+        # Exectute w
+        self.__orders['unionId'] = self.__orders['unionId'].apply(
+            lambda d: (
+                d.update({'ui': d['ui'].replace('w/', '')}) or d
+            ) if d['ui'].split('/')[-1] == order["unionId"]['id'] else d
+        )
 
     def ord_put(self, order_type:str, price:float, 
-                amount:float = None, buy:bool = True, union_id:int = None):
+                amount:float = None, buy:bool = True, 
+                union_id:int = None, open_id:int = None):
+        if not order_type in (
+            'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit'):
+            raise ValueError('Bad op type')
 
+        last_data = None
         if not self.__positions.empty:
             last_data = self.__positions.iloc[-1]
         elif not self.__orders.empty:
@@ -2361,23 +2361,31 @@ class StrategyClass(ABC):
             last_data = self.__pos_record.iloc[-1]
         elif not self.__ord_record.empty:
             last_data = self.__ord_record.iloc[-1]
+
+        open_id = open_id 
+
+        if last_data is not None:
+            union_id = union_id or last_data['unionId']['ui'].split('/')[-1]
         else:
             union_id = union_id or 0
-            amount = amount or np.nan
 
-        union_id = union_id or last_data['unionId'].split('/')[-1]
-        amount = amount or last_data['amount']
+        self.__ord_put(order_type, price=price, amount=amount, buy=buy, union_id=union_id)
 
-        self.__ord_put(order_type, price, amount, buy, union_id)
+    def __ord_put(self, order_type:str, price:float, 
+                  amount:float = None, buy:bool = True, wait:bool = True,
+                  union_id:int = None, close_id:int = None):
 
-    def __ord_put(self, order_type, price, amount, buy, union_id):
+        amount = amount or np.nan
+
+        close_id = f'{close_id}' if close_id else ''
+        union_id = f'{"w/" if wait else ""}{union_id}' if union_id else ''
 
         order = pd.DataFrame({'order':order_type,
                             'date':self.__data.index[-1],
                             'orderPrice':price,
                             'amount':amount,
                             'typeSide':buy,
-                            'unionId':f'wh/{union_id}',
+                            'unionId':[{'id':str(hash(time())), 'ui':union_id, 'ci':close_id}],
                             }, index=[1])
 
         self.__orders = pd.concat([self.__orders, order], ignore_index=True) 
