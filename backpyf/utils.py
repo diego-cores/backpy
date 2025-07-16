@@ -333,7 +333,7 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
 
 def plot_position(trades:pd.DataFrame, ax:Axes, 
                   color_take:str = 'green', color_stop:str = 'red', 
-                  color_close:str = 'gold', all:bool = True,
+                  color_takec:str = 'gold', color_stopc:str = 'blueviolet',
                   alpha:float = 1, alpha_arrow:float = 1, 
                   operation_route:bool = True, 
                   width_exit:any = lambda x: 9) -> None:
@@ -347,8 +347,10 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
         ax (Axes): Axes where it is drawn.
         color_take (str, optional): Color for positive positions. Default is 'green'.
         color_stop (str, optional): Color for negative positions. Default is 'red'.
-        color_close (str, optional): Color of the close marker. Default is 'gold'.
-        all (bool, optional): If True, draws all elements. If False, only draws points. Default is True.
+        color_takec (str, optional): Color of the close marker for positive positions. 
+            Default is 'gold'.
+        color_stopc (str, optional): Color of the close marker for negative positions. 
+            Default is 'blueviolet'.
         alpha (float, optional): Opacity of the elements. Default is 1.
         alpha_arrow (float, optional): Opacity of arrow, type marker, and close marker. Default is 1.
         operation_route (bool, optional): If True, traces the route of the operation. Default is True.
@@ -364,77 +366,60 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
     """
 
     def draw(row):
-        # Drawing of the 'TakeProfit' shape.
-        if ('TakeProfit' in row.index and
-            not np.isnan(row['TakeProfit']) and 
-            all): 
-            take = Rectangle(xy=(row['Date'], row['PositionOpen']), 
-                          width=(width_exit(row) 
-                                if ('PositionDate' not in row.index or 
-                                    np.isnan(row['PositionDate'])) 
-                                else row['PositionDate']-row['Date']), 
-                          height=row['TakeProfit']-row['PositionOpen'], 
-                          facecolor=color_take, edgecolor=color_take)
-            
-            take.set_alpha(alpha)
-            ax.add_patch(take)
+        if 'positionDate' not in row.index:
+            return
 
-        # Drawing of the 'StopLoss' shape.
-        if ('StopLoss' in row.index and
-            not np.isnan(row['StopLoss']) and 
-            all): 
-            stop = Rectangle(xy=(row['Date'], row['PositionOpen']), 
-                          width=(width_exit(row) 
-                                if ('PositionDate' not in row.index or 
-                                    np.isnan(row['PositionDate'])) 
-                                else row['PositionDate']-row['Date']), 
-                          height=row['StopLoss']-row['PositionOpen'], 
-                          facecolor=color_stop, edgecolor=color_stop)
-            
-            stop.set_alpha(alpha)
-            ax.add_patch(stop)
+        row['positionDate'] = (width_exit(row) 
+                                if np.isnan(row['positionDate']) 
+                                else row['positionDate']-row['date'])
+        row['positionClose'] = (row['positionOpen'] 
+                                if np.isnan(row['positionClose']) 
+                                else row['positionClose'])
 
         # Draw route of the operation.
-        if 'positionDate' in row.index and not np.isnan(row['positionDate']):
-            if operation_route and all:
-                cl = ('green' if (row['positionOpen'] < row['positionClose'] and 
-                                  row['typeSide'] == 1) or 
-                                  (row['positionOpen'] > row['positionClose'] and 
-                                  row['typeSide'] == 0) else 'red')
+        if operation_route:
+            cl = ('green' if (row['positionOpen'] < row['positionClose'] and 
+                                row['typeSide'] == 1) or 
+                                (row['positionOpen'] > row['positionClose'] and 
+                                row['typeSide'] == 0) else 'red')
 
-                route  = Rectangle(xy=(row['date'], row['positionOpen']), 
-                                width=row['positionDate']-row['date'], 
-                                height=row['positionCloseNoS']-row['positionOpen'], 
-                                facecolor=cl, edgecolor=cl)
-            
-                route.set_alpha(alpha)
-                ax.add_patch(route)
-      
-            # Arrow drawing.
-            #ax.arrow(row['date'], row['positionOpen'], 
-            #        row['positionDate']-row['date'], 
-            #        row['positionClose']-row['positionOpen'], 
-            #        linestyle='-', color='grey', alpha=alpha_arrow, 
-            #        width=abs(trades['High'].max()-trades['Low'].min())/(10**10))
+            route  = Rectangle(xy=(row['date'], row['positionOpen']), 
+                            width=row['positionDate'], 
+                            height=row['positionClose']-row['positionOpen'],
+                            facecolor=cl, edgecolor=cl)
+
+            route.set_alpha(alpha)
+            ax.add_patch(route)
+
+        # Arrow drawing.
+        ax.arrow(
+            row['date'], row['positionOpen'], 
+            row['positionDate'], 
+            row['positionClose']-row['positionOpen'] , 
+            linestyle='-', color='grey', alpha=alpha_arrow, 
+        )
 
     trades.apply(draw, axis=1)
 
     # Drawing of the closing marker of the operation.
     if ('positionDate' in trades.columns and 
         'positionClose' in trades.columns):
+
+        color_close = trades.apply(
+            lambda x: color_takec if x['profitPer'] >= 0 else color_stopc, axis=1).to_list()
         ax.scatter(trades['positionDate'], trades['positionClose'], 
                   c=color_close, s=30, marker='x', alpha=alpha_arrow)
 
     # Drawing of the position type marker.
-    #ax.scatter(trades['date'], 
-    #           trades.apply(lambda x: x['Low'] - (x['High'] - x['Low']) / 2 
-    #                        if x['typeSide'] == 1 else None, axis=1), 
-    #           c=color_take, s=30, marker='^', alpha=alpha_arrow)
-    
-    #ax.scatter(trades['date'], 
-    #           trades.apply(lambda x: x['High'] + (x['High'] - x['Low']) / 2 
-    #                        if x['typeSide'] != 1 else None, axis=1),
-    #           c=color_stop, s=30, marker='v', alpha=alpha_arrow)
+    ax.scatter(trades['date'], 
+               trades.apply(lambda x: x['positionOpen'] 
+                            if x['typeSide'] == 1 else None, axis=1), 
+               c=color_take, s=30, marker='^', alpha=alpha_arrow)
+
+    ax.scatter(trades['date'], 
+               trades.apply(lambda x: x['positionOpen']
+                            if x['typeSide'] != 1 else None, axis=1),
+               c=color_stop, s=30, marker='v', alpha=alpha_arrow)
 
 def _loop_data(function:callable, bpoint:callable, init:int, timeout:float) -> pd.DataFrame:
     """

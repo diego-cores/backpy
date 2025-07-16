@@ -32,28 +32,19 @@ def average_ratio(trades:pd.DataFrame) -> float:
     """
     Average ratio.
 
-    Based on the take profit and stop loss 
-        positions, it calculates an average ratio.
-
-    If the 'TakeProfit' or 'StopLoss' columns are 
-        not present, 0 will be returned.
+    Based on the profit, it calculates an average ratio.
 
     Args:
-        trades (pd.DataFrame): A dataframe with these columns: 
-            'TakeProfit','StopLoss','Close'.
+        trades (pd.DataFrame): A dataframe with 'profit' column.
 
     Returns:
         float: Average ratio.
     """
 
-    if (
-        'TakeProfit' in trades.columns and 'StopLoss' in trades.columns
-        and not trades['TakeProfit'].apply(lambda x: x is None or x <= 0).all() 
-        and not trades['StopLoss'].apply(lambda x: x is None or x <= 0).all()
-        ):
+    if 'profit' in trades.columns:
 
-        return ((abs(trades['PositionOpen']-trades['TakeProfit']) 
-                / abs(trades['PositionOpen']-trades['StopLoss'])).mean())
+        return ((trades['profit'][trades['profit'] > 0].mean()
+                / abs(trades['profit'][trades['profit'] < 0]).mean()))
     return 0
 
 def profit_fact(profits:pd.Series) -> float:
@@ -103,8 +94,7 @@ def math_hope_relative(trades:pd.DataFrame, profits:pd.Series) -> float:
         expectation based on the average_ratio and the profits.
 
     Args:
-        trades (pd.DataFrame): A dataframe with these columns: 
-            'TakeProfit','StopLoss','Close'.
+        trades (pd.DataFrame): A dataframe with 'profit' column.
         profits (pd.Series): Returns on each operation.
 
     Returns:
@@ -120,7 +110,7 @@ def winnings(profits:pd.Series) -> float:
     Calculate the percentage of positive numbers in the series.
 
     Args:
-        profits (pd.Series): Returns on each operation..
+        profits (pd.Series): Returns on each operation.
 
     Returns:
         float: Winnings percentage.

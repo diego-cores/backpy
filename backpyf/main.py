@@ -629,12 +629,13 @@ def plot(log:bool = False, progress:bool = True,
         utils.load_bar(size=4, step=0, text=text)
 
     mpl.pyplot.style.use('ggplot')
+
     fig = mpl.pyplot.figure(figsize=(16,8))
     ax1 = mpl.pyplot.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
     ax2 = mpl.pyplot.subplot2grid((6,1), (5,0), rowspan=1, 
                                   colspan=1, sharex=ax1)
     ax2.set_yticks([])
-    
+
     if log: 
         ax1.semilogy(_cm.__data['Close'], alpha=0); ax2.semilogy(alpha=0)
 
@@ -656,9 +657,9 @@ def plot(log:bool = False, progress:bool = True,
 
     if position and position.lower() != 'none' and not _cm.__trades.empty:
         utils.plot_position(_cm.__trades, ax1, 
-                          all=True if position.lower() == 'complex' else False,
+                          operation_route=True if position.lower() == 'complex' else False,
                           alpha=0.3, alpha_arrow=0.8, 
-                          width_exit=lambda x: _cm.__data.index[-1]-x['Date'])
+                          width_exit=lambda x: _cm.__data.index[-1]-x['date'])
 
     if progress: 
         text = f'| PlotTimer: {utils.num_align(time()-t)} '
@@ -1008,37 +1009,37 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
     # Exceptions.
     if _cm.__trades.empty: 
         raise exception.StatsError('Trades not loaded.')
-    elif not 'ProfitPer' in _cm.__trades.columns:  
+    elif not 'profitPer' in _cm.__trades.columns:  
         raise exception.StatsError('There is no data to see.')
-    elif np.isnan(_cm.__trades['ProfitPer'].mean()): 
+    elif np.isnan(_cm.__trades['profitPer'].mean()): 
         raise exception.StatsError('There is no data to see.') 
 
     # Number of years operated.
     op_years = abs(
-        (_cm.__trades['Date'].iloc[-1] - _cm.__trades['Date'].iloc[0])/
+        (_cm.__trades['date'].iloc[-1] - _cm.__trades['date'].iloc[0])/
         (_cm.__data_width_day*_cm.__data_year_days))
 
     # Annualized trades calc.
     trades_calc = _cm.__trades.copy()
-    trades_calc['Year'] = ((trades_calc['Date'] - trades_calc['Date'].iloc[0]) / 
-                  (trades_calc['Date'].iloc[-1] - trades_calc['Date'].iloc[0]) * 
+    trades_calc['year'] = ((trades_calc['date'] - trades_calc['date'].iloc[0]) / 
+                  (trades_calc['date'].iloc[-1] - trades_calc['date'].iloc[0]) * 
                   op_years).astype(int)
 
-    trades_calc['Diary'] = ((trades_calc['Date'] - trades_calc['Date'].iloc[0]) / 
-                (trades_calc['Date'].iloc[-1] - trades_calc['Date'].iloc[0]) * 
+    trades_calc['diary'] = ((trades_calc['date'] - trades_calc['date'].iloc[0]) / 
+                (trades_calc['date'].iloc[-1] - trades_calc['date'].iloc[0]) * 
                 op_years*_cm.__data_year_days).astype(int)
 
-    trades_calc['Duration'] = (trades_calc['PositionDate']-trades_calc['Date'])/_cm.__data_width_day
-    trades_calc['Multiplier'] = 1 + trades_calc['ProfitPer'] / 100
+    trades_calc['duration'] = (trades_calc['positionDate']-trades_calc['date'])/_cm.__data_width_day
+    trades_calc['multiplier'] = 1 + trades_calc['profitPer'] / 100
 
-    ann_return = trades_calc.groupby('Year')['Multiplier'].prod()
-    ann_profit = trades_calc.groupby('Year')['Profit'].sum()
+    ann_return = trades_calc.groupby('year')['multiplier'].prod()
+    ann_profit = trades_calc.groupby('year')['profit'].sum()
 
-    diary_return = trades_calc.groupby('Diary')['Multiplier'].prod()
-    diary_profit = trades_calc.groupby('Diary')['Profit'].sum()
+    diary_return = trades_calc.groupby('diary')['multiplier'].prod()
+    diary_profit = trades_calc.groupby('diary')['profit'].sum()
 
     # Consecutive trades calc.
-    trades_count_cs = _cm.__trades['Profit'].apply(
+    trades_count_cs = _cm.__trades['profit'].apply(
         lambda x: 1 if x > 0 else (-1 if x < 0 else 0)
         )
     trades_count_cs = pd.concat(
@@ -1062,31 +1063,31 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
 
         'Op years':[utils.round_r(op_years, 2), _cm.__COLORS['CYAN']],
 
-        'Return':[str(_return:=utils.round_r((trades_calc['Multiplier'].prod()-1)*100,2))+'%',
+        'Return':[str(_return:=utils.round_r((trades_calc['multiplier'].prod()-1)*100,2))+'%',
                   _cm.__COLORS['GREEN'] if float(_return) > 0 else _cm.__COLORS['RED'],],
 
-        'Profit':[str(_profit:=utils.round_r(_cm.__trades['Profit'].sum(),2)),
+        'Profit':[str(_profit:=utils.round_r(_cm.__trades['profit'].sum(),2)),
                 _cm.__COLORS['GREEN'] if float(_profit) > 0 else _cm.__COLORS['RED'],],
 
-        'Gross earnings':[utils.round_r((_cm.__trades['Profit'][_cm.__trades['Profit']>0].sum()
-                           if not pd.isna(_cm.__trades['Profit']).all() else 0), 4),
+        'Gross earnings':[utils.round_r((_cm.__trades['profit'][_cm.__trades['profit']>0].sum()
+                           if not pd.isna(_cm.__trades['profit']).all() else 0), 4),
                         _cm.__COLORS['GREEN']],
 
-        'Gross losses':[utils.round_r(abs(_cm.__trades['Profit'][_cm.__trades['Profit']<=0].sum())
-                           if not pd.isna(_cm.__trades['Profit']).all() else 0, 4),
+        'Gross losses':[utils.round_r(abs(_cm.__trades['profit'][_cm.__trades['profit']<=0].sum())
+                           if not pd.isna(_cm.__trades['profit']).all() else 0, 4),
                         _cm.__COLORS['RED']],
 
         'Max return':[str(utils.round_r((
-            np.cumprod(trades_calc['Multiplier'].dropna()).max()-1)*100,2))+'%'],
+            np.cumprod(trades_calc['multiplier'].dropna()).max()-1)*100,2))+'%'],
 
         'Return from max':[str(utils.round_r(
-            -((np.cumprod(trades_calc['Multiplier'].dropna()).max()-1)
-            - (trades_calc['Multiplier'].prod()-1))*100,2))+'%'],
+            -((np.cumprod(trades_calc['multiplier'].dropna()).max()-1)
+            - (trades_calc['multiplier'].prod()-1))*100,2))+'%'],
 
         'Days from max':[str(utils.round_r(
-            (trades_calc['Date'].dropna().iloc[-1]
-                - trades_calc['Date'].dropna().loc[
-                np.argmax(np.cumprod(trades_calc['Multiplier'].dropna()))])
+            (trades_calc['date'].dropna().iloc[-1]
+                - trades_calc['date'].dropna().loc[
+                np.argmax(np.cumprod(trades_calc['multiplier'].dropna()))])
             / _cm.__data_width_day, 2)),
             _cm.__COLORS['CYAN']],
 
@@ -1108,13 +1109,13 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
                         _cm.__COLORS['YELLOW'],],
 
         'Average return':[str(utils.round_r((
-                trades_calc['Multiplier'].dropna().mean()-1)*100,2))+'%',
+                trades_calc['multiplier'].dropna().mean()-1)*100,2))+'%',
             _cm.__COLORS['YELLOW'],],
 
-        'Average profit':[str(utils.round_r(_cm.__trades['Profit'].mean(),2))+'%',
+        'Average profit':[str(utils.round_r(_cm.__trades['profit'].mean(),2))+'%',
                     _cm.__COLORS['YELLOW'],],
 
-        'Profit fact':[_profit_fact:=utils.round_r(stats.profit_fact(_cm.__trades['Profit']), 3),
+        'Profit fact':[_profit_fact:=utils.round_r(stats.profit_fact(_cm.__trades['profit']), 3),
                 _cm.__COLORS['GREEN'] if float(_profit_fact) > 1 else _cm.__COLORS['RED'],],
 
         'Return diary std':[(_return_std:=utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1), 2)),
@@ -1123,18 +1124,18 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         'Profit diary std':[(_profit_std:=utils.round_r(np.std(diary_profit.dropna(),ddof=1), 2)),
                       _cm.__COLORS['YELLOW'] if float(_profit_std) > 1 else _cm.__COLORS['GREEN'],],
 
-        'Math hope':[_math_hope:=utils.round_r(stats.math_hope(_cm.__trades['Profit']), 2),
+        'Math hope':[_math_hope:=utils.round_r(stats.math_hope(_cm.__trades['profit']), 2),
             _cm.__COLORS['GREEN'] if float(_math_hope) > 0 else _cm.__COLORS['RED'],],
 
         'Math hope r':[_math_hope_r:=utils.round_r(
-                stats.math_hope_relative(_cm.__trades, _cm.__trades['ProfitPer']), 2),
+                stats.math_hope_relative(_cm.__trades, _cm.__trades['profitPer']), 2),
             _cm.__COLORS['GREEN'] if float(_math_hope_r) > 0 else _cm.__COLORS['RED'],],
 
-        'Historical var':[0 if _cm.__trades['Profit'].dropna().empty else utils.round_r(
-                            stats.var_historical(_cm.__trades['Profit'].dropna()), 2)],
+        'Historical var':[0 if _cm.__trades['profit'].dropna().empty else utils.round_r(
+                            stats.var_historical(_cm.__trades['profit'].dropna()), 2)],
 
-        'Parametric var':[0 if _cm.__trades['Profit'].dropna().empty else utils.round_r(
-                            stats.var_parametric(_cm.__trades['Profit'].dropna()), 2)],
+        'Parametric var':[0 if _cm.__trades['profit'].dropna().empty else utils.round_r(
+                            stats.var_parametric(_cm.__trades['profit'].dropna()), 2)],
 
         'Sharpe ratio':[utils.round_r(stats.sharpe_ratio(
             (ann_return.prod()**(1/op_years)-1)*100,
@@ -1157,31 +1158,31 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
             diary_profit), 2)],
 
         'Duration ratio':[utils.round_r(
-            trades_calc['Duration'].sum()/len(_cm.__trades.index), 2),
+            trades_calc['duration'].sum()/len(_cm.__trades.index), 2),
             _cm.__COLORS['CYAN']],
 
-        'Payoff ratio':[utils.round_r(stats.payoff_ratio(_cm.__trades['ProfitPer']))],
+        'Payoff ratio':[utils.round_r(stats.payoff_ratio(_cm.__trades['profitPer']))],
 
-        'Expectation':[utils.round_r(stats.expectation(_cm.__trades['ProfitPer']))],
+        'Expectation':[utils.round_r(stats.expectation(_cm.__trades['profitPer']))],
 
         'Skewness':[utils.round_r((diary_return.dropna()-1).skew(), 2)],
 
         'Kurtosis':[utils.round_r((diary_return.dropna()-1).kurt(), 2)],
 
-        'Average winning op':[str(utils.round_r(_cm.__trades['ProfitPer'][
-                _cm.__trades['ProfitPer'] > 0].dropna().mean(), 2))+'%',
+        'Average winning op':[str(utils.round_r(_cm.__trades['profitPer'][
+                _cm.__trades['profitPer'] > 0].dropna().mean(), 2))+'%',
             _cm.__COLORS['GREEN']],
 
-        'Average losing op':[str(utils.round_r(_cm.__trades['ProfitPer'][
-                _cm.__trades['ProfitPer'] < 0].dropna().mean(), 2))+'%',
+        'Average losing op':[str(utils.round_r(_cm.__trades['profitPer'][
+                _cm.__trades['profitPer'] < 0].dropna().mean(), 2))+'%',
             _cm.__COLORS['RED']],
 
-        'Average duration winn':[str(utils.round_r(trades_calc['Duration'][
-                trades_calc['ProfitPer'] > 0].dropna().mean()))+'d',
+        'Average duration winn':[str(utils.round_r(trades_calc['duration'][
+                trades_calc['profitPer'] > 0].dropna().mean()))+'d',
                 _cm.__COLORS['CYAN']],
 
-        'Average duration loss':[str(utils.round_r(trades_calc['Duration'][
-                trades_calc['ProfitPer'] < 0].dropna().mean()))+'d',
+        'Average duration loss':[str(utils.round_r(trades_calc['duration'][
+                trades_calc['profitPer'] < 0].dropna().mean()))+'d',
                 _cm.__COLORS['CYAN']],
 
         'Daily frequency op':[utils.round_r(
@@ -1198,25 +1199,25 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
 
         'Max drawdown':[str(round(
             stats.max_drawdown(np.cumprod(
-                trades_calc['Multiplier'].dropna()))*100,1)) + '%'],
+                trades_calc['multiplier'].dropna()))*100,1)) + '%'],
 
         'Average drawdown':[str(-round(np.mean(
             stats.get_drawdowns(np.cumprod(
-                trades_calc['Multiplier'].dropna())))*100, 1)) + '%'],
+                trades_calc['multiplier'].dropna())))*100, 1)) + '%'],
 
         'Max drawdown$':[str(round(
-            stats.max_drawdown(_cm.__trades['Profit'].dropna().cumsum()+
+            stats.max_drawdown(_cm.__trades['profit'].dropna().cumsum()+
                                _cm._init_funds)*100,1)) + '%'],
 
         'Average drawdown$':[str(-round(np.mean(
-            stats.get_drawdowns(_cm.__trades['Profit'].dropna().cumsum()+
+            stats.get_drawdowns(_cm.__trades['profit'].dropna().cumsum()+
                                 _cm._init_funds))*100, 1)) + '%'],
 
         'Long exposure':[str(round(
-            stats.long_exposure(_cm.__trades['Type'])*100)) + '%',
+            stats.long_exposure(_cm.__trades['typeSide'])*100)) + '%',
             _cm.__COLORS['GREEN']],
 
-        'Winnings':[str(round(stats.winnings(_cm.__trades['ProfitPer'])*100)) + '%'],
+        'Winnings':[str(round(stats.winnings(_cm.__trades['profitPer'])*100)) + '%'],
 
     }, "---Statistics of strategy---")
 
