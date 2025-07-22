@@ -17,6 +17,7 @@ Functions:
         if it has not been calculated already.
     calc_day: Function to calculate the width of the index that each day has.
     text_fix: Function to fix or adjust text.
+    plot_volume: Function to plot volume on a give `Axes`.
     plot_candles: Function to plot candles on a given `Axes`.
     plot_position: Function to plot a trading position.
 
@@ -24,6 +25,7 @@ Hidden Functions:
     _loop_data: Function to extract data from an API with a data per second limit.
 """
 
+from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle 
 from matplotlib.axes._axes import Axes
 from time import sleep
@@ -293,6 +295,30 @@ def text_fix(text:str, newline_exclude:bool = True) -> str:
     return ''.join(line.lstrip() + ('\n' if not newline_exclude else '')  
                         for line in text.split('\n'))
 
+def plot_volume(ax:Axes, data:pd.Series, 
+                 width:float = 1, color:str = 'tab:orange', 
+                 alpha:float = 1) -> None:
+    """
+    Volume draw.
+
+    Plots volume on the provided `ax`.
+
+    Args:
+        ax (Axes): The `Axes` object where the volume will be drawn.
+        data (pd.Series): Data to draw the volume.
+        width (float, optional): Width of each bar. Defaults to 1.
+        color (str, optional): Color of the volume. Defaults to 'tab:orange'.
+        alpha (float, optional): Opacity of the volume. Defaults to 1.
+    """
+
+    x = data.index.to_numpy() - width / 2
+    volume = data.to_numpy()
+
+    patches = [Rectangle((xi, 0), width, vol) for xi, vol in zip(x, volume)]
+
+    ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0))
+    ax.set_ylim(None, data.max()*1.1)
+
 def plot_candles(ax:Axes, data:pd.DataFrame, 
                  width:float = 1, color_up:str = 'g', 
                  color_down:str = 'r', color_n:str = 'k',
@@ -323,12 +349,14 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     # Drawing vertical lines.
     ax.vlines(data.index, data['Low'], data['High'], color=color, alpha=alpha)
 
+    x = data.index.to_numpy() - width / 2
+    y = np.minimum(data['Open'].to_numpy(), data['Close'].to_numpy())
+    height = np.abs(data['Close'].to_numpy() - data['Open'].to_numpy())
+
     # Bar drawing.
-    hgh = abs(data['Close']-data['Open'])
-    ax.bar(data.index, hgh.where(hgh > 0, data['Close'].diff().mean()), width,
-           bottom=data.apply(lambda x: min(x['Open'], x['Close']), axis=1), 
-           color=color, alpha=alpha)
-    
+    patches = [Rectangle((xi, yi), width, hi) for xi, yi, hi in zip(x, y, height)]
+    ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0))
+
     ax.set_ylim(data['Low'].min()*0.98+1, data['High'].max()*1.02+1)
 
 def plot_position(trades:pd.DataFrame, ax:Axes, 

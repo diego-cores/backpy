@@ -652,8 +652,7 @@ def plot(log:bool = False, progress:bool = True,
         utils.load_bar(size=4, step=2, text=text)
 
     if _cm.__data['Volume'].max() > 0:
-      ax2.fill_between(_cm.__data.index, _cm.__data['Volume'], step='mid')
-      ax2.set_ylim(None, _cm.__data['Volume'].max()*1.5)
+        utils.plot_volume(ax2, _cm.__data['Volume'], _cm.__data_width)
 
     if position and position.lower() != 'none' and not _cm.__trades.empty:
         utils.plot_position(_cm.__trades, ax1, 
