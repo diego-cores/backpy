@@ -34,8 +34,9 @@ import numpy as np
 
 from time import time
 
+from . import custom_plt as cpl
+from . import flex_data as flx
 from . import _commons as _cm
-from . import flexdata as flx
 from . import exception
 from . import strategy
 from . import utils
@@ -651,12 +652,11 @@ def plot(log:bool = False, progress:bool = True,
         text = f'| PlotTimer: {utils.num_align(time()-t)} '
         utils.load_bar(size=4, step=2, text=text)
 
-    if _cm.__data['Volume'].max() > 0:
-        utils.plot_volume(ax2, _cm.__data['Volume'], _cm.__data_width)
+    utils.plot_volume(ax2, _cm.__data['Volume'], _cm.__data_width)
 
     if position and position.lower() != 'none' and not _cm.__trades.empty:
         utils.plot_position(_cm.__trades, ax1, 
-                          operation_route=True if position.lower() == 'complex' else False,
+                          operation_route=position.lower() == 'complex',
                           alpha=0.3, alpha_arrow=0.8, 
                           width_exit=lambda x: _cm.__data.index[-1]-x['date'])
 
@@ -677,15 +677,15 @@ def plot(log:bool = False, progress:bool = True,
     e_date = ".".join(str(val) for val in 
                     [ix_date[-1].day, ix_date[-1].month, 
                     ix_date[-1].year])
-    
-    mpl.pyplot.gcf().canvas.manager.set_window_title(
-        f"Back testing: '{_cm.__data_icon}' {s_date}~{e_date}")
 
     if progress: 
         text = f'| PlotTimer: {utils.num_align(time()-t)} \n'
         utils.load_bar(size=4, step=4, text=text)
 
-    mpl.pyplot.show(block=block)
+    app = cpl.App(f"Back testing: '{_cm.__data_icon}' {s_date}~{e_date}")
+    mpl_canvas = app.mpl_canvas(fig=fig)
+    app.mpl_toolbar(mpl_canvas=mpl_canvas)
+    app.show(block=block)
 
 def plot_strategy(log:bool = False, view:str = 'p/w/r/e', 
                   custom_graph:dict = {}, block:bool = True) -> None:

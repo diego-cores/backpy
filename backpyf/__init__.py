@@ -46,7 +46,7 @@ from ._commons import (
     dots,
 )
 
-from .flexdata import (
+from .flex_data import (
     DataWrapper,
     CostsValue,
 )

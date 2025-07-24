@@ -23,8 +23,8 @@ from typing import Callable
 from uuid import uuid4
 from time import time
 
+from . import flex_data as flx
 from . import _commons as _cm
-from . import flexdata as flx
 from . import exception
 from . import utils
 

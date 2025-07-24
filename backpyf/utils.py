@@ -347,7 +347,7 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
                axis=1)
 
     # Drawing vertical lines.
-    ax.vlines(data.index, data['Low'], data['High'], color=color, alpha=alpha)
+    ax.vlines(data.index, data['Low'], data['High'], color=color, alpha=alpha, zorder=1)
 
     x = data.index.to_numpy() - width / 2
     y = np.minimum(data['Open'].to_numpy(), data['Close'].to_numpy())
@@ -414,7 +414,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
             route  = Rectangle(xy=(row['date'], row['positionOpen']), 
                             width=row['positionDate'], 
                             height=row['positionClose']-row['positionOpen'],
-                            facecolor=cl, edgecolor=cl)
+                            facecolor=cl, edgecolor=cl, zorder=0.8)
 
             route.set_alpha(alpha)
             ax.add_patch(route)
@@ -424,7 +424,8 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
             row['date'], row['positionOpen'], 
             row['positionDate'], 
             row['positionClose']-row['positionOpen'] , 
-            linestyle='-', color='grey', alpha=alpha_arrow, 
+            linestyle='-', color='grey', 
+            alpha=alpha_arrow, zorder=0.9
         )
 
     trades.apply(draw, axis=1)
