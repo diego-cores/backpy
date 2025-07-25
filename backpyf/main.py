@@ -589,7 +589,8 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
     except: pass
     
 def plot(log:bool = False, progress:bool = True, 
-         position:str = 'complex', block:bool = True) -> None:
+         position:str = 'complex', style:str = None, 
+         block:bool = True) -> None:
     """
     Plot Graph with Trades.
 
@@ -600,6 +601,12 @@ def plot(log:bool = False, progress:bool = True,
         - Green, '^' = Buy position.
         - Red, 'v' = Sell position.
 
+    All color styles:
+        'lightmode', 'darkmode', 'sunrise', 'mintfresh', 'skyday', 
+        'lavenderblush', 'peachpuff', 'sunrise_dusk', 'embernight',
+        'obsidian', 'neonforge', 'carbonfire', 'datamatrix', 
+        'terminalblood', 'plasmacore'.
+
     Args:
         log (bool, optional): If True, plots data using a logarithmic scale. 
             Default is False.
@@ -609,6 +616,7 @@ def plot(log:bool = False, progress:bool = True,
             are 'complex' or 'simple'. If None or 'none', positions will not 
             be drawn. Default is 'complex'. The "complex" option may take longer 
             to process.
+        style (str, optional): Color style.
         block (bool, optional): If True, pauses script execution until all 
             figure windows are closed. If False, the script continues running 
             after displaying the figures. Default is True.
@@ -620,42 +628,52 @@ def plot(log:bool = False, progress:bool = True,
     elif position and not position.lower() in ('complex', 'simple', 'none'):
         raise exception.PlotError(
             f"'{position}' Not a valid option for: 'position'.")
+    elif not style is None and not style in _cm.__plt_styles.keys():
+        raise exception.PlotError(f"'{style}' Not a style.")
+
     # Corrections.
     _cm.__data.index = utils.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index, True)
-    
+
+    style = list(_cm.__plt_styles.keys())[0] if style is None else style
+    plt_colors = _cm.__plt_styles[style]
+
     if progress: 
         t = time()
         text = f'| PlotTimer: {utils.num_align(0)} '
         utils.load_bar(size=4, step=0, text=text)
 
-    mpl.pyplot.style.use('ggplot')
-
     fig = mpl.pyplot.figure(figsize=(16,8))
     ax1 = mpl.pyplot.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
     ax2 = mpl.pyplot.subplot2grid((6,1), (5,0), rowspan=1, 
                                   colspan=1, sharex=ax1)
-    ax2.set_yticks([])
+
+    cpl.custom_ax(ax1, plt_colors['bg'])
+    cpl.custom_ax(ax2, plt_colors['bg'])
 
     if log: 
-        ax1.semilogy(_cm.__data['Close'], alpha=0); ax2.semilogy(alpha=0)
-
-    fig.tight_layout(); fig.subplots_adjust(hspace=0)
+        ax1.semilogy(); ax2.semilogy()
 
     if progress: 
         text = f'| PlotTimer: {utils.num_align(time()-t)} '
         utils.load_bar(size=4, step=1, text=text)
 
-    utils.plot_candles(ax1, _cm.__data, _cm.__data_width*0.9)
+    market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
+    utils.plot_candles(ax1, _cm.__data, _cm.__data_width*0.9,
+                       color_up=market_colors.get('u', 'g'),
+                       color_down=market_colors.get('d', 'r'))
 
     if progress: 
         text = f'| PlotTimer: {utils.num_align(time()-t)} '
         utils.load_bar(size=4, step=2, text=text)
 
-    utils.plot_volume(ax2, _cm.__data['Volume'], _cm.__data_width)
+    utils.plot_volume(ax2, _cm.__data['Volume'], _cm.__data_width, 
+                      color=plt_colors.get('vol', 'tab:orange'))
 
     if position and position.lower() != 'none' and not _cm.__trades.empty:
         utils.plot_position(_cm.__trades, ax1, 
+                          color_take=market_colors.get('u', 'green'),
+                          color_stop=market_colors.get('d', 'red'),
                           operation_route=position.lower() == 'complex',
                           alpha=0.3, alpha_arrow=0.8, 
                           width_exit=lambda x: _cm.__data.index[-1]-x['date'])
@@ -665,8 +683,19 @@ def plot(log:bool = False, progress:bool = True,
         utils.load_bar(size=4, step=3, text=text)
 
     date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
+
+    ax2.yaxis.set_major_formatter(lambda y, _: y.real)
+    ax1.yaxis.set_major_formatter(lambda y, _: y.real)
     ax1.xaxis.set_major_formatter(date_format)
+
+    ax1.tick_params(axis='x', labelbottom=False)
+    ax1.tick_params(axis='y', labelleft=False)
+
+    ax2.tick_params(axis='x', labelbottom=False)
+    ax2.tick_params(axis='y', labelleft=False)
+
     fig.autofmt_xdate()
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0, hspace=0)
 
     ix_date = mpl.dates.num2date(_cm.__data.index)
 
@@ -682,10 +711,15 @@ def plot(log:bool = False, progress:bool = True,
         text = f'| PlotTimer: {utils.num_align(time()-t)} \n'
         utils.load_bar(size=4, step=4, text=text)
 
-    app = cpl.App(f"Back testing: '{_cm.__data_icon}' {s_date}~{e_date}")
-    mpl_canvas = app.mpl_canvas(fig=fig)
-    app.mpl_toolbar(mpl_canvas=mpl_canvas)
-    app.show(block=block)
+    window = cpl.CustomWin(
+        f"Back testing: '{_cm.__data_icon}' {s_date}~{e_date} - {style}",
+        frame_color=plt_colors['fr'],
+        buttons_color=plt_colors['btn'],
+        button_act=plt_colors.get('btna', '#333333'))
+    mpl_canvas = window.mpl_canvas(fig=fig)
+    window.mpl_toolbar(mpl_canvas=mpl_canvas)
+
+    window.show(block=block)
 
 def plot_strategy(log:bool = False, view:str = 'p/w/r/e', 
                   custom_graph:dict = {}, block:bool = True) -> None:

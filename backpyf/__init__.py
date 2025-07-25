@@ -44,6 +44,7 @@ from ._commons import (
     run_timer,
     alert,
     dots,
+    lift,
 )
 
 from .flex_data import (
@@ -129,6 +130,7 @@ __all__ = [
     'utils',
     'alert',
     'plot',
+    'lift',
     'dots',
     'run',
 ]

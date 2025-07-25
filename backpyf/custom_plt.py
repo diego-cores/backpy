@@ -1,26 +1,42 @@
+"""
+Custom plot module
+
+Contains matplotlib embedding logic and colors.
+"""
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from PIL import Image, ImageTk, ImageOps
+import matplotlib.colors
 import matplotlib as mpl
 import tkinter as tk
 import os
 
-class App:
-    def __init__(self, title):
-        self.root = tk.Tk()
-        self.root.protocol("WM_DELETE_WINDOW", self._quit)
-        self.root.geometry("1200x600")
+from . import _commons as _cm
 
-        self.color_bg = '#ffffff' # '#1e1e1e'
-        self.color_frame = "#ffffff" # '#161616'
-        self.color_buttons = '#000000' # '#ffffff'
+class CustomWin:
+
+    def __init__(self, title, frame_color='SystemButtonFace', buttons_color='#000000', button_act = '#333333', geometry='1200x600'):
+        self.root = tk.Tk()
+        self.root.protocol('WM_DELETE_WINDOW', self._quit)
+        self.root.geometry(geometry)
+
+        if _cm.lift: self.root.lift()
+
+        self._after_id = None
+
+        self.color_frame = frame_color
+        self.color_buttons = buttons_color
+        self.color_button_act = button_act
 
         self.root.title(title)
-        self.root.configure(bg=self.color_bg)
 
     def _quit(self):
-        self.root.quit()
-        self.root.destroy() 
+        if self._after_id:
+            self.root.after_cancel(self._after_id)
+            self._after_id = None
+
+        if self.root.winfo_exists():
+            self.root.destroy()
 
     def mpl_canvas(self, fig):
         frame = tk.Frame(self.root, bg=self.color_frame)
@@ -37,16 +53,18 @@ class App:
         frame.place(relx=0, rely=0.95, relwidth=1, relheight=0.05)
 
         toolbar = CustomToolbar(mpl_canvas, frame, color_btn=self.color_buttons, 
-                                color_bg=self.color_frame)
+                                color_bg=self.color_frame, color_act=self.color_button_act)
         toolbar.config(background=self.color_frame)
         toolbar.pack(expand=True)
 
     def show(self, block=True):
+        if not self.root.winfo_exists():
+            return
+
         if block:
             self.root.mainloop()
         else:
-            self.root.update()
-            self.root.after(50, lambda: self.show(block=False))
+            self._after_id = self.root.after(50, lambda: self.show(block=False))
 
 class CustomToolbar(NavigationToolbar2Tk):
 
@@ -60,52 +78,79 @@ class CustomToolbar(NavigationToolbar2Tk):
         ('Save', 'Save the figure', 'filesave', 'save_figure'),
     )
 
+    icon_map = {
+        'Home': 'home.png',
+        'Back': 'back.png',
+        'Forward': 'forward.png',
+        'Zoom': 'zoom_to_rect.png',
+        'Pan': 'move.png',
+        'Save': 'filesave.png'
+    }
+
     def __init__(self, canvas, window, color_btn = '#000000', 
-                 color_bg = '#ffffff', color_act = '#333333'):
+                 color_bg = 'SystemButtonFace', color_act = '#333333'):
         super().__init__(canvas, window)
 
-        icon_dir = os.path.join(mpl.get_data_path(), "images")
+        self.window = window
+        self.color_act = color_act
+        self.color_btn = color_btn
+        self.color_bg = color_bg
 
-        icon_map = {
-            'Home': 'home.png',
-            'Back': 'back.png',
-            'Forward': 'forward.png',
-            'Zoom': 'zoom_to_rect.png',
-            'Pan': 'move.png',
-            'Save': 'filesave.png'
-        }
+        self.icon_dir = os.path.join(mpl.get_data_path(), "images")
 
         self.custom_img = {}
-        for key, filename in icon_map.items():
+        self.config_colors()
 
-            path = os.path.join(icon_dir, filename)
+    def config_colors(self):
+        for key, filename in self.icon_map.items():
+
+            path = os.path.join(self.icon_dir, filename)
             img = Image.open(path).convert("RGBA")
 
             gray = ImageOps.grayscale(img)
-            colorized = ImageOps.colorize(gray, black=color_btn, white="#000000")
+            colorized = ImageOps.colorize(gray, black=self.color_btn, white="#000000")
 
             colorized.putalpha(img.split()[-1])
-            img_tk = ImageTk.PhotoImage(colorized, master=window)
+            img_tk = ImageTk.PhotoImage(colorized, master=self.window)
             self.custom_img[key] = img_tk
 
             btn = self._buttons.get(key)
 
-            def select_personalizated(btn, img):
-                btn.var.set(0)
-                btn.config(image=img, bg=color_act, offrelief="sunken", overrelief="groove")
-                return
-
-            def deselect_personalizated(btn):
-                btn.var.set(0)
-                btn.config(bg=color_bg, offrelief="flat", overrelief="flat")
-                return
-
             if isinstance(btn, tk.Button):
-                btn.config(activebackground=color_act)
+                btn.config(activebackground=self.color_act)
             elif isinstance(btn, tk.Checkbutton):
-                btn.select = lambda btn=btn, img=img_tk: select_personalizated(btn, img)
-                btn.deselect = lambda btn=btn: deselect_personalizated(btn)
-                btn.config(activebackground=color_act, selectcolor=color_act)
-            btn.config(image=img_tk, bg=color_bg)
+                btn.select = lambda btn=btn, img=img_tk: self.select(btn, img)
+                btn.deselect = lambda btn=btn: self.deselect(btn)
+                btn.config(activebackground=self.color_act, selectcolor=self.color_act)
+            btn.config(image=img_tk, bg=self.color_bg)
 
-        list(map(lambda x: x.config(bg=color_bg, fg=color_btn), self.winfo_children()[-2:]))
+        list(map(lambda x: x.config(bg=self.color_bg, fg=self.color_btn), self.winfo_children()[-2:]))
+
+    def select(self, btn, img):
+        btn.var.set(0)
+        btn.config(image=img, bg=self.color_act, offrelief="sunken", overrelief="groove")
+        return
+
+    def deselect(self, btn):
+        btn.var.set(0)
+        btn.config(bg=self.color_bg, offrelief="flat", overrelief="flat")
+        return
+
+def custom_ax(ax, bg='#e5e5e5'):
+    ax.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5) 
+
+    ax.set_facecolor(bg)
+    ax.tick_params(colors='white')
+    ax.spines['bottom'].set_color('white')
+    ax.spines['left'].set_color('white')
+    ax.spines['top'].set_color('white')
+    ax.spines['right'].set_color('white')
+    ax.title.set_color('white')
+    ax.xaxis.label.set_color('white')
+    ax.yaxis.label.set_color('white')
+    ax.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
+
+    semi_transparent_white = mpl.colors.to_rgba('white', alpha=0.3)
+    for spine in ax.spines.values():
+        spine.set_color(semi_transparent_white)
+        spine.set_linewidth(1.2)
