@@ -100,7 +100,7 @@ __plt_styles = {
     },
 
     # dark
-    'sunrise_dusk': {
+    'sunrisedusk': {
         'bg': '#2B1B12', 'fr': '#3A2618', 'btn': '#FF8C42', 'btna': '#CC6E34',
         'vol': '#A0522D', 'mk': {'u': '#FFA94D', 'd': '#8B3E1D'},
     },

@@ -15,12 +15,12 @@ from . import _commons as _cm
 
 class CustomWin:
 
-    def __init__(self, title, frame_color='SystemButtonFace', buttons_color='#000000', button_act = '#333333', geometry='1200x600'):
+    def __init__(self, title, frame_color='SystemButtonFace', 
+                 buttons_color='#000000', button_act = '#333333', 
+                 geometry='1200x600'):
         self.root = tk.Tk()
         self.root.protocol('WM_DELETE_WINDOW', self._quit)
         self.root.geometry(geometry)
-
-        if _cm.lift: self.root.lift()
 
         self._after_id = None
 
@@ -29,6 +29,17 @@ class CustomWin:
         self.color_button_act = button_act
 
         self.root.title(title)
+        self.root.after(100, self.lift)
+
+    def lift(self):
+        if not _cm.lift:
+            return
+
+        self.root.iconify()
+        self.root.update()
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
 
     def _quit(self):
         if self._after_id:
@@ -134,6 +145,9 @@ class CustomToolbar(NavigationToolbar2Tk):
     def deselect(self, btn):
         btn.var.set(0)
         btn.config(bg=self.color_bg, offrelief="flat", overrelief="flat")
+        return
+
+    def set_history_buttons(self):
         return
 
 def custom_ax(ax, bg='#e5e5e5'):

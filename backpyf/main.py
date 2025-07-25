@@ -603,7 +603,7 @@ def plot(log:bool = False, progress:bool = True,
 
     All color styles:
         'lightmode', 'darkmode', 'sunrise', 'mintfresh', 'skyday', 
-        'lavenderblush', 'peachpuff', 'sunrise_dusk', 'embernight',
+        'lavenderblush', 'peachpuff', 'sunrisedusk', 'embernight',
         'obsidian', 'neonforge', 'carbonfire', 'datamatrix', 
         'terminalblood', 'plasmacore'.
 
