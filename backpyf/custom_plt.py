@@ -2,22 +2,74 @@
 Custom plot module
 
 Contains matplotlib embedding logic and colors.
+
+Classes:
+    CustomWin: Create a custom window with BackPy using 'tkinter' and 'matplotlib'.
+    CustomToolbar: Inherits from the 'NavigationToolbar2Tk' class to 
+        modify the toolbar buttons and change colors.
+
+Functions:
+    def_style: Define a new style to plot your graphics.
+    gradient_ax: Create a diagonal background gradient on the 'ax' with 'ax.imshow'.
+    custom_ax: Aesthetically configures an axis.
 """
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from PIL import Image, ImageTk, ImageOps
+from sys import platform
 import matplotlib.colors
 import matplotlib as mpl
 import tkinter as tk
+import numpy as np
 import os
 
 from . import _commons as _cm
+from . import exception
 
 class CustomWin:
+    """
+    Custom window.
 
-    def __init__(self, title, frame_color='SystemButtonFace', 
-                 buttons_color='#000000', button_act = '#333333', 
-                 geometry='1200x600'):
+    Create a custom window with BackPy using 'tkinter' and 'matplotlib'.
+
+    Attributes:
+        root: Tkinter window.
+        color_frame: Frames color.
+        color_buttons: Buttons color.
+        color_button_act: Color of the sunken buttons.
+
+    Private Attributes:
+        _after_id: 'root.after' id used to avoid errors by not blocking the process.
+
+    Methods:
+        config_icon: Put the icon on the application and change its color.
+        lift: Focus on the window and jump over the others.
+        mpl_canvas: Put your matplotlib figure inside the window.
+        mpl_toolbar: Put the matplotlib toolbar in the window.
+        show: Show the window.
+
+    Private Methods:
+        _quit: Closes the window without errors.
+    """
+
+    def __init__(self, title:str = 'BackPy interface', 
+                 frame_color:str = 'SystemButtonFace', 
+                 buttons_color:str = '#000000', 
+                 button_act:str = '#333333', 
+                 geometry:str = '1200x600') -> None:
+        """
+        __init__
+
+        Builder for initializing the class.
+
+        Args:
+            title (str, optional): Window title.
+            frame_color (str, optional): Color of the toolbar and other frames.
+            buttons_color (str, optional): Button color.
+            button_act (str, optional): Color of the sunken buttons.
+            geometry (str, optional): Window geometry.
+        """
+
         self.root = tk.Tk()
         self.root.protocol('WM_DELETE_WINDOW', self._quit)
         self.root.geometry(geometry)
@@ -28,10 +80,38 @@ class CustomWin:
         self.color_buttons = buttons_color
         self.color_button_act = button_act
 
+        self.config_icon()
         self.root.title(title)
         self.root.after(100, self.lift)
 
-    def lift(self):
+    def config_icon(self) -> None:
+        """
+        Configure icon.
+
+        Put the icon on the application and change its color.
+        If the application already has an icon, another one will not be generated.
+        """
+
+        if _cm._icon: 
+            return
+
+        img = Image.open('images/icon128x.png').convert("RGBA")
+
+        gray = ImageOps.grayscale(img)
+        colorized = ImageOps.colorize(gray, black=self.color_buttons, 
+                                      white="#000000")
+        colorized.putalpha(img.split()[-1])
+
+        _cm._icon = ImageTk.PhotoImage(colorized)
+        self.root.iconphoto(True, _cm._icon)
+
+    def lift(self) -> None:
+        """
+        Lift.
+
+        Focus on the window and jump over the others.
+        """
+
         if not _cm.lift:
             return
 
@@ -41,7 +121,13 @@ class CustomWin:
         self.root.lift()
         self.root.focus_force()
 
-    def _quit(self):
+    def _quit(self) -> None:
+        """
+        Quit.
+
+        Closes the window without errors.
+        """
+
         if self._after_id:
             self.root.after_cancel(self._after_id)
             self._after_id = None
@@ -49,7 +135,19 @@ class CustomWin:
         if self.root.winfo_exists():
             self.root.destroy()
 
-    def mpl_canvas(self, fig):
+    def mpl_canvas(self, fig) -> FigureCanvasTkAgg:
+        """
+        Matplotlib canvas.
+
+        Put your matplotlib figure inside the window.
+
+        Args:
+            fig (mpl.figure.Figure): Figure from matplotlib.
+
+        Return:
+            FigureCanvasTkAgg: Resulting canvas figure.
+        """
+
         frame = tk.Frame(self.root, bg=self.color_frame)
         frame.place(relx=0, rely=0, relwidth=1, relheight=0.95)
 
@@ -59,7 +157,16 @@ class CustomWin:
 
         return canvas
 
-    def mpl_toolbar(self, mpl_canvas):
+    def mpl_toolbar(self, mpl_canvas:FigureCanvasTkAgg) -> None:
+        """
+        Matplotlib toolbar.
+
+        Put the matplotlib toolbar in the window.
+
+        Args:
+            mpl_canvas (FigureCanvasTkAgg): Canvas figure.
+        """
+
         frame = tk.Frame(self.root, bg=self.color_frame)
         frame.place(relx=0, rely=0.95, relwidth=1, relheight=0.05)
 
@@ -68,7 +175,16 @@ class CustomWin:
         toolbar.config(background=self.color_frame)
         toolbar.pack(expand=True)
 
-    def show(self, block=True):
+    def show(self, block:bool = True) -> None:
+        """
+        Show.
+
+        Show the window.
+
+        Args:
+            block (bool, optional): Blocks the process.
+        """
+
         if not self.root.winfo_exists():
             return
 
@@ -78,6 +194,27 @@ class CustomWin:
             self._after_id = self.root.after(50, lambda: self.show(block=False))
 
 class CustomToolbar(NavigationToolbar2Tk):
+    """
+    Custom Toolbar.
+
+    Inherits from the 'NavigationToolbar2Tk' class to 
+        modify the toolbar buttons and change colors.
+
+    Attributes:
+        toolitems: Buttons list.
+        icon_map: Dictionary of the file name of each button logo.
+        window: Window root.
+        color_act: Color of the sunken buttons.
+        color_btn: Color of buttons and icons.
+        color_bg: Frame color.
+        icon_dir: Directions to matplotlib icons.
+        custom_img: Custom icons saved.
+
+    Methods:
+        config_colors: Configure the colors of the buttons and frame.
+        select: Changes the style of the button when selected.
+        deselect: Changes the style of the button when deselect.
+    """
 
     toolitems = (
         ('Home', 'Reset original view', 'home', 'home'),
@@ -99,7 +236,20 @@ class CustomToolbar(NavigationToolbar2Tk):
     }
 
     def __init__(self, canvas, window, color_btn = '#000000', 
-                 color_bg = 'SystemButtonFace', color_act = '#333333'):
+                 color_bg = 'SystemButtonFace', color_act = '#333333') -> None:
+        """
+        __init__
+
+        Builder for initializing the class.
+
+        Args:
+            canvas (str, optional): Canvas containing the matplotlib figure.
+            window (str, optional): Window root.
+            color_btn (str, optional): Button color.
+            color_bg (str, optional): Frame color.
+            color_act (str, optional): Color of the sunken buttons.
+        """
+
         super().__init__(canvas, window)
 
         self.window = window
@@ -112,7 +262,13 @@ class CustomToolbar(NavigationToolbar2Tk):
         self.custom_img = {}
         self.config_colors()
 
-    def config_colors(self):
+    def config_colors(self) -> None:
+        """
+        Config colors
+
+        Configure the colors of the buttons and frame.
+        """
+
         for key, filename in self.icon_map.items():
 
             path = os.path.join(self.icon_dir, filename)
@@ -137,23 +293,145 @@ class CustomToolbar(NavigationToolbar2Tk):
 
         list(map(lambda x: x.config(bg=self.color_bg, fg=self.color_btn), self.winfo_children()[-2:]))
 
-    def select(self, btn, img):
+    def select(self, btn:tk.Button, img:ImageTk.PhotoImage) -> None:
+        """
+        Select
+
+        Changes the style of the button when selected.
+
+        Args:
+            btn (tk.Button): Button.
+            img (PIL.ImageTk.PhotoImage): Button icon.
+        """
+
         btn.var.set(0)
         btn.config(image=img, bg=self.color_act, offrelief="sunken", overrelief="groove")
-        return
 
-    def deselect(self, btn):
+    def deselect(self, btn:tk.Button) -> None:
+        """
+        Deselect
+
+        Changes the style of the button when deselect.
+
+        Args:
+            btn (tk.Button): Button.
+        """
+
         btn.var.set(0)
         btn.config(bg=self.color_bg, offrelief="flat", overrelief="flat")
+
+    def set_history_buttons(self) -> None:
+        """
+        Set history buttons.
+
+        This disables this function so the 'next' and 'back' buttons are not disabled.
+        """
+
         return
 
-    def set_history_buttons(self):
-        return
+def def_style(name:str, background:tuple = '#e5e5e5', 
+              frames:str = 'SystemButtonFace', 
+              buttons:str = '#000000', button_act:str = None, 
+              gardient_dir:bool = True, volume:str = None, 
+              up:str = None, down:str = None) -> None:
+    """
+    Def style.
 
-def custom_ax(ax, bg='#e5e5e5'):
+    Define a new style to plot your graphics.
+    Only valid colors for tkinter.
+
+    Dict format:
+        name:
+            'bg': background, 
+            'gdir': gardient_dir,
+            'fr': frames, 
+            'btn': buttons, 
+            'btna': buttons_act,
+            'vol': volume, 
+            'mk': {
+            'u': up, 
+            'd': down}
+
+    Args:
+        name (str): Name of the new style by which you will call it later.
+        background (tuple, optional): Background color of the axes.
+            It can be a gradient of at least 2 colors using a tuple or list.
+        frames (str, optional): Background color of the frames.
+        buttons (str, optional): Button color.
+        button_act (str, optional): Color of buttons when selected or sunken.
+        gardient_dir (bool, optional): The gradient direction will always 
+            be top to bottom and diagonal, but you can choose whether 
+            it starts from the right or left, true = right.
+        volume (str, optional): Volume color.
+        up (str, optional): Color when the price rises, this influences 
+            the color of the candle and the bullish position indicator.
+        down (str, optional): Color of when the price rises this influences 
+            the color of the candle and the bearish position indicator.
+    """
+    if name in _cm.__plt_styles.keys():
+        raise exception.StyleError(f"Name already in use. '{name}'")
+
+    _cm.__plt_styles.update({
+        name: {
+            'bg':background or '#e5e5e5', 
+            'gdir':gardient_dir, 
+            'fr':frames or 'SystemButtonFace',
+            'btn':buttons or '#000000', 
+            'btna':button_act or '#333333', 
+            'vol': volume or 'tab:orange',
+            'mk': {
+                'u':up or 'green',
+                'd':down or 'red',
+    }}})
+
+def gradient_ax(ax:matplotlib.axes._axes.Axes, colors:list, right:bool=False) -> None:
+    """
+    Gradient axes.
+
+    Create a diagonal background gradient on the 'ax' with 'ax.imshow'.
+
+    Args:
+        ax (matplotlib.axes._axes.Axes): Axes to draw.
+        colors (list): List of the colors of the garden in order.
+        right (bool, optional): Corner from which the gradient 
+            starts if False starts from the top left.
+    """
+
+    if len(colors) < 1:
+        colors = ['white']
+
+    gradient = (np.linspace(0, 1, 256).reshape(-1, 1) 
+                + (np.linspace(0, 1, 256) 
+                   if right else -np.linspace(0, 1, 256)))
+
+    im = ax.imshow(gradient, aspect='auto', 
+                   cmap=mpl.colors.LinearSegmentedColormap.from_list("custom_gradient", colors), 
+                extent=[0, 1, 0, 1], transform=ax.transAxes, zorder=-1)
+    im.get_cursor_data = lambda event: None
+
+def custom_ax(ax, bg = '#e5e5e5', edge:bool = False) -> None:
+    """
+    Custom axes.
+
+    Aesthetically configures an axis.
+
+    Note:
+        The gradient can change the 'x' limits.
+
+    Args:
+        bg (str, optional): Background color of the axis, 
+            if it is a list or tuple a gradient will be created.
+        edge (bool, optional): If the background is a gradient, this 
+            determines which corner you launch from, false left, true right.
+    """
+
     ax.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5) 
 
-    ax.set_facecolor(bg)
+    if (isinstance(bg, tuple) or isinstance(bg, list)) and len(bg) > 1:
+        gradient_ax(ax, bg, right=edge)
+    else:
+        ax.set_facecolor(bg)
+
     ax.tick_params(colors='white')
     ax.spines['bottom'].set_color('white')
     ax.spines['left'].set_color('white')

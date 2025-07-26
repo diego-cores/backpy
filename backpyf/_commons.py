@@ -13,6 +13,7 @@ Variables:
         to jump over everything else when running.
 
 Hidden Variables:
+    _icon: Icon currently used by the application (hidden variable).
     _init_funds: Initial capital for the backtesting (hidden variable).
     __data_year_days: Number of operable days in 1 year (hidden variable).
     __data_width_day: Width of the day (hidden variable).
@@ -47,6 +48,7 @@ __data = None
 __trades = pd.DataFrame()
 _init_funds = 0
 
+_icon = None
 __custom_plot = {}
 
 __binance_timeout = 0.08
@@ -68,18 +70,27 @@ __COLORS = {
     'UNDERLINE': "\033[4m",
     'RESET': "\033[0m",
 }
-
 __plt_styles = {
     # 'bg','fr','btn' are required for each style.
-    'lightmode':{'bg':'#e5e5e5', 'fr':'SystemButtonFace', 'btn':'#000000',
-                 'btna':'#333333'},
-    'darkmode':{'bg':'#1e1e1e', 'fr':'#161616', 'btn':'#ffffff', 
-                'btna':'#333333', 'vol':'gray'},
-    # All properties are: 'bg', 'fr', 'btn', 'btna', 'vol', 'mk'.
+    'lightmode':{
+        'bg': '#e5e5e5', 
+        'fr': 'SystemButtonFace', 
+        'btn': '#000000',
+        'btna': '#333333'
+    },
+    'darkmode':{
+        'bg': '#1e1e1e', 
+        'fr': '#161616', 
+        'btn': '#ffffff', 
+        'btna': '#333333', 
+        'vol': 'gray'
+    },
 
+    # All properties are: 'bg', 'gdir', 'fr', 'btn', 'btna', 'vol', 'mk'.
     # light
     'sunrise': {
-        'bg': '#FFF7E6', 'fr': '#FFF1D6', 'btn': '#FF8C42', 'btna': '#CC6E34', 
+        'bg': ('#FFF7E6', '#FFDAB9'), 'gdir': True,
+        'fr': '#FFF1D6', 'btn': '#FF8C42', 'btna': '#CC6E34',
         'vol': '#FFDAB9', 'mk': {'u': '#FFA94D', 'd': '#CC5C2B'},
     },
     'mintfresh': {
@@ -87,7 +98,8 @@ __plt_styles = {
         'vol': '#A8E6CF', 'mk': {'u': '#3AB795', 'd': '#2A7766'},
     },
     'skyday': {
-        'bg': '#D6F0FF', 'fr': '#BEE7FF', 'btn': '#1E90FF', 'btna': '#166ECC',
+        'bg': ('#D6F0FF', '#AEE4FF'), 'gdir': False,
+        'fr': '#BEE7FF', 'btn': '#1E90FF', 'btna': '#166ECC',
         'vol': '#87CEFA', 'mk': {'u': '#1E90FF', 'd': '#104E8B'},
     },
     'lavenderblush': {
@@ -95,17 +107,19 @@ __plt_styles = {
         'vol': '#D8BFD8', 'mk': {'u': '#A555FF', 'd': '#6B2D99'},
     },
     'peachpuff': {
-        'bg': '#FFF0E6', 'fr': '#FFE6D6', 'btn': '#FF7043', 'btna': '#E35B33',
+        'bg': ("#FFF1E6", "#FFD3B6", "#FFB085"), 'gdir': True,
+        'fr': '#FFE6D6', 'btn': '#FF7043', 'btna': '#E35B33',
         'vol': '#FFA07A', 'mk': {'u': '#FF7043', 'd': '#CC4F2D'},
     },
 
     # dark
     'sunrisedusk': {
         'bg': '#2B1B12', 'fr': '#3A2618', 'btn': '#FF8C42', 'btna': '#CC6E34',
-        'vol': '#A0522D', 'mk': {'u': '#FFA94D', 'd': '#8B3E1D'},
+        'vol': "#B65426", 'mk': {'u': '#FFA94D', 'd': '#8B3E1D'},
     },
     'embernight': {
-        'bg': '#000000', 'fr': '#0A0A0A', 'btn': '#E20000', 'btna': '#990000',
+        'bg': ('#000000', '#1A0000', '#330000'), 'gdir': False,
+        'fr': '#0A0A0A', 'btn': '#E20000', 'btna': '#990000',
         'vol': '#8B0000', 'mk': {'u': '#FF6347', 'd': '#8B0000'},
     },
     'obsidian': {
@@ -113,7 +127,8 @@ __plt_styles = {
         'vol': '#7B68EE', 'mk': {'u': '#b748fc', 'd': '#5A1E7C'},
     },
     'neonforge': {
-        'bg': '#000912', 'fr': '#001B2D', 'btn': '#00FFF7', 'btna': '#00BBAF',
+        'bg': ('#000912', '#001B2D', '#003347'), 'gdir': True,
+        'fr': '#001B2D', 'btn': '#00FFF7', 'btna': '#00BBAF',
         'vol': '#00CED1', 'mk': {'u': '#00FFF7', 'd': '#009E9A'},
     },
     'carbonfire': {
@@ -121,7 +136,8 @@ __plt_styles = {
         'vol': '#CD5C5C', 'mk': {'u': '#FF6347', 'd': '#8B0000'},
     },
     'datamatrix': {
-        'bg': '#000A00', 'fr': '#001500', 'btn': '#00FF00', 'btna': '#00CC00',
+        'bg': ('#000A00', '#002200'), 'gdir': False,
+        'fr': '#001500', 'btn': '#00FF00', 'btna': '#00CC00',
         'vol': '#32CD32', 'mk': {'u': '#00FF00', 'd': '#006400'},
     },
     'terminalblood': {
@@ -129,7 +145,8 @@ __plt_styles = {
         'vol': '#B22222', 'mk': {'u': '#ff3b3f', 'd': '#800000'},
     },
     'plasmacore': {
-        'bg': '#170028', 'fr': '#250040', 'btn': '#E84FFF', 'btna': '#C23AD9',
+        'bg': ('#170028', '#2B0040', '#3C0066'), 'gdir': True,
+        'fr': '#250040', 'btn': '#E84FFF', 'btna': '#C23AD9',
         'vol': '#DA70D6', 'mk': {'u': '#E84FFF', 'd': '#9400D3'},
     }
 }

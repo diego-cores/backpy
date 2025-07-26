@@ -318,6 +318,7 @@ def plot_volume(ax:Axes, data:pd.Series,
 
     ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0))
     ax.set_ylim(None, data.max()*1.1)
+    ax.set_xlim(data.index[0]-(width*len(data.index)/10), data.index[-1]+(width*len(data.index)/10))
 
 def plot_candles(ax:Axes, data:pd.DataFrame, 
                  width:float = 1, color_up:str = 'g', 
@@ -358,6 +359,7 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0))
 
     ax.set_ylim(data['Low'].min()*0.98+1, data['High'].max()*1.02+1)
+    ax.set_xlim(data.index[0]-(width*len(data.index)/10), data.index[-1]+(width*len(data.index)/10))
 
 def plot_position(trades:pd.DataFrame, ax:Axes, 
                   color_take:str = 'green', color_stop:str = 'red', 

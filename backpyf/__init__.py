@@ -47,6 +47,10 @@ from ._commons import (
     lift,
 )
 
+from .custom_plt import (
+    def_style
+)
+
 from .flex_data import (
     DataWrapper,
     CostsValue,
@@ -127,6 +131,7 @@ __all__ = [
     'CostsValue',
     'load_data',
     'run_timer',
+    'def_style',
     'utils',
     'alert',
     'plot',

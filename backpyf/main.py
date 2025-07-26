@@ -587,10 +587,10 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
     try: 
         return stats_trades(prnt=prnt)
     except: pass
-    
+
 def plot(log:bool = False, progress:bool = True, 
-         position:str = 'complex', style:str = None, 
-         block:bool = True) -> None:
+         position:str = 'complex', style:str = None,
+         style_c:dict = None, block:bool = True) -> None:
     """
     Plot Graph with Trades.
 
@@ -617,6 +617,9 @@ def plot(log:bool = False, progress:bool = True,
             be drawn. Default is 'complex'. The "complex" option may take longer 
             to process.
         style (str, optional): Color style.
+        style_c (dict, optional): Customize the defined style by 
+            modifying the dictionary. To know what to modify, 
+            read the docstring of 'def_style'.
         block (bool, optional): If True, pauses script execution until all 
             figure windows are closed. If False, the script continues running 
             after displaying the figures. Default is True.
@@ -638,6 +641,9 @@ def plot(log:bool = False, progress:bool = True,
     style = list(_cm.__plt_styles.keys())[0] if style is None else style
     plt_colors = _cm.__plt_styles[style]
 
+    if isinstance(style_c, dict):
+        plt_colors.update(style_c)
+
     if progress: 
         t = time()
         text = f'| PlotTimer: {utils.num_align(0)} '
@@ -648,8 +654,9 @@ def plot(log:bool = False, progress:bool = True,
     ax2 = mpl.pyplot.subplot2grid((6,1), (5,0), rowspan=1, 
                                   colspan=1, sharex=ax1)
 
-    cpl.custom_ax(ax1, plt_colors['bg'])
-    cpl.custom_ax(ax2, plt_colors['bg'])
+    gdir = plt_colors.get('gdir', False)
+    cpl.custom_ax(ax1, plt_colors['bg'], edge=gdir)
+    cpl.custom_ax(ax2, plt_colors['bg'], edge=gdir)
 
     if log: 
         ax1.semilogy(); ax2.semilogy()
