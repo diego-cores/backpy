@@ -490,10 +490,13 @@ class StrategyClass(ABC):
         # Check operations
         if not self.__orders.empty:
             self.__orders = self.__orders.sort_values('order')
-    
+
             def wrap_or(row):
                 """
                 """
+
+                if not row.name in self.__orders.index:
+                    return
 
                 # ui == (position id)
                 if not self.__positions.empty:
@@ -507,11 +510,20 @@ class StrategyClass(ABC):
                 if row['unionId']['ui'].split('/')[0] == 'w':
                     return
 
+                limit = (row['limit'] and self.__data['High'].iloc[-1]*(
+                    self.__spread_pct.get_taker()/100/2+1) >= row['orderPrice']
+                and self.__data['Low'].iloc[-1]*(
+                    1-self.__spread_pct.get_taker()/100/2) <= row['orderPrice'])
+                
+                cond_buy = (not row['limit'] and self.__data['High'].iloc[-1]*(
+                    self.__spread_pct.get_taker()/100/2+1) >= row['orderPrice'] 
+                and row['typeSide'])
+                cond_sell = (not row['limit'] and self.__data['Low'].iloc[-1]*(
+                    self.__spread_pct.get_taker()/100/2+1) <= row['orderPrice'] 
+                and not row['typeSide'])
+
                 if (
-                    self.__data['High'].iloc[-1]*(
-                        self.__spread_pct.get_taker()/100/2+1) >= row['orderPrice']
-                    and self.__data['Low'].iloc[-1]*(
-                        1-self.__spread_pct.get_taker()/100/2) <= row['orderPrice']
+                    limit or (cond_buy or cond_sell)
                     ):
 
                     self.__order_execute(row)
@@ -532,14 +544,21 @@ class StrategyClass(ABC):
 
         buy = int(bool(buy))
 
-        return self.__ord_put(
-            'op', 
-            price=self.__data["Close"].iloc[-1], 
-            amount=amount, 
-            buy=buy, 
-            wait=False, 
-            union_id=StrategyClass.unique_id()
-        )
+        ui = StrategyClass.unique_id()
+        self.__ord_put(
+                    'op', 
+                    price=self.__data["Close"].iloc[-1], 
+                    amount=amount, 
+                    buy=buy, 
+                    wait=False, 
+                    union_id=ui,
+                    limit=False,
+        ) 
+
+        self.__put_op(self.__orders.iloc[-1])
+        self.__orders = self.__orders.drop(self.__orders.iloc[-1].name)
+
+        return ui
 
     def act_limit(self, price:float, buy:bool = True, amount:float = np.nan):
 
@@ -551,7 +570,8 @@ class StrategyClass(ABC):
             amount=amount, 
             buy=buy, 
             wait=False, 
-            union_id=StrategyClass.unique_id()
+            union_id=StrategyClass.unique_id(),
+            limit=True,
         )
 
     def act_close(self, index):
@@ -653,7 +673,6 @@ class StrategyClass(ABC):
         # Hello world
         match order['order']:
             case 'op':
-
                 self.__put_op(order)
             case 'takeProfit' | 'stopLoss':
                 if order['unionId']['ui'] == '':
@@ -665,7 +684,8 @@ class StrategyClass(ABC):
                     return 
 
                 self.__act_reduce(
-                    self.__positions.index.get_loc(union_pos.index[0]), order['orderPrice'], amount=order['amount'])
+                    self.__positions.index.get_loc(union_pos.index[0]), 
+                        order['orderPrice'], amount=order['amount'])
             case 'takeLimit' | 'stopLimit':
                 pass
 
@@ -681,18 +701,18 @@ class StrategyClass(ABC):
             'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit'):
             raise ValueError('Bad op type')
 
-        last_data = None
+        last_ui = None
         if not self.__positions.empty:
-            last_data = self.__positions.iloc[-1]
+            last_ui = self.__positions.iloc[-1]['unionId']
         elif not self.__orders.empty:
-            last_data = self.__orders.iloc[-1]
+            last_ui = self.__orders.iloc[-1]['unionId']['ui']
         elif not self.__pos_record.empty:
-            last_data = self.__pos_record.iloc[-1]
+            last_ui = self.__pos_record.iloc[-1]['unionId']
         elif not self.__ord_record.empty:
-            last_data = self.__ord_record.iloc[-1]
+            last_ui = self.__ord_record.iloc[-1]['unionId']['ui']
 
-        if last_data is not None:
-            union_id = union_id or last_data['unionId']['ui'].split('/')[-1]
+        if last_ui is not None:
+            union_id = union_id or last_ui.split('/')[-1]
         else:
             union_id = union_id or 0
 
@@ -703,16 +723,27 @@ class StrategyClass(ABC):
             buy=buy, 
             union_id=union_id,
             close_id=close_id,
+            limit=True if order_type in ('stopLimit', 'takeLimit') else False,
         )
 
     def __ord_put(self, order_type:str, price:float, 
                   amount:float = None, buy:bool = True, wait:bool = True,
-                  union_id:int = None, close_id:int = None):
+                  union_id:int = None, close_id:int = None, limit:bool = False):
 
         amount = amount or np.nan
 
         close_id = str(close_id) if close_id else ''
         union_id = f'{"w/" if wait else ""}{union_id}' if union_id else ''
+
+        match order_type:
+            case 'op':
+                buy = buy
+            case 'stopLoss' | 'stopLimit':
+                buy = False
+            case 'takeProfit' | 'takeLimit':
+                buy = True
+            case _:
+                raise exception.OrderError('Invalid order type.')
 
         order = pd.DataFrame({'order':order_type,
                             'date':self.__data.index[-1],
@@ -720,6 +751,7 @@ class StrategyClass(ABC):
                             'amount':amount,
                             'typeSide':buy,
                             'unionId':[{'id':StrategyClass.unique_id(), 'ui':union_id, 'ci':close_id}],
+                            'limit':limit
                             }, index=[1])
 
         self.__orders = pd.concat([self.__orders, order], ignore_index=True) 

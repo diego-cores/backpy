@@ -27,3 +27,5 @@ class CostValueError(Exception):pass
 class UidcError(Exception):pass
 
 class StyleError(Exception):pass
+
+class OrderError(Exception):pass

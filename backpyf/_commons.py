@@ -91,7 +91,7 @@ __plt_styles = {
     'sunrise': {
         'bg': ('#FFF7E6', '#FFDAB9'), 'gdir': True,
         'fr': '#FFF1D6', 'btn': '#FF8C42', 'btna': '#CC6E34',
-        'vol': '#FFDAB9', 'mk': {'u': '#FFA94D', 'd': '#CC5C2B'},
+        'vol': "#FFC898", 'mk': {'u': '#FFA94D', 'd': '#CC5C2B'},
     },
     'mintfresh': {
         'bg': '#E6FFF7', 'fr': '#D6FFF1', 'btn': '#3AB795', 'btna': '#2E9C7A',

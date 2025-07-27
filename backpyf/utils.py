@@ -359,7 +359,6 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0))
 
     ax.set_ylim(data['Low'].min()*0.98+1, data['High'].max()*1.02+1)
-    ax.set_xlim(data.index[0]-(width*len(data.index)/10), data.index[-1]+(width*len(data.index)/10))
 
 def plot_position(trades:pd.DataFrame, ax:Axes, 
                   color_take:str = 'green', color_stop:str = 'red', 
@@ -399,7 +398,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
         if 'positionDate' not in row.index:
             return
 
-        row['positionDate'] = (width_exit(row) 
+        row['positionDate_date'] = (width_exit(row) 
                                 if np.isnan(row['positionDate']) 
                                 else row['positionDate']-row['date'])
         row['positionClose'] = (row['positionOpen'] 
@@ -414,7 +413,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
                                 row['typeSide'] == 0) else 'red')
 
             route  = Rectangle(xy=(row['date'], row['positionOpen']), 
-                            width=row['positionDate'], 
+                            width=row['positionDate_date'], 
                             height=row['positionClose']-row['positionOpen'],
                             facecolor=cl, edgecolor=cl, zorder=0.8)
 
@@ -422,13 +421,16 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
             ax.add_patch(route)
 
         # Arrow drawing.
-        ax.arrow(
-            row['date'], row['positionOpen'], 
-            row['positionDate'], 
-            row['positionClose']-row['positionOpen'] , 
-            linestyle='-', color='grey', 
-            alpha=alpha_arrow, zorder=0.9
-        )
+        ax.annotate(
+            '', xy=(row['positionDate'], row['positionClose']),
+            xytext=(row['date'], row['positionOpen']),
+            arrowprops=dict(
+                arrowstyle='->',
+                linestyle=(0, (5, 5)),
+                color='grey',
+                alpha=alpha_arrow
+            ),
+            zorder=0.9)
 
     trades.apply(draw, axis=1)
 

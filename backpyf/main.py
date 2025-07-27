@@ -547,7 +547,7 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
 
     skip = max(1, _cm.__data.shape[0] // _cm.max_bar_updates)
 
-    for f in range(1, _cm.__data.shape[0]+2):
+    for f in range(1, _cm.__data.shape[0]+1):
         if (progress and (f % skip == 0 or f >= _cm.__data.shape[0]) 
             and _cm.__data.shape[0] >= f):
 
@@ -579,7 +579,7 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
 
     act_trades = instance._StrategyClass__positions
     _cm.__trades = instance._StrategyClass__pos_record
-    
+
     if not act_trades.empty: _cm.__trades = pd.concat([
         _cm.__trades, act_trades.dropna(axis=1, how='all')
         ], ignore_index=True)
