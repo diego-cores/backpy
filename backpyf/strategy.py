@@ -169,8 +169,6 @@ class StrategyClass(ABC):
     """
 
     def __init__(self, data:pd.DataFrame = pd.DataFrame(), 
-                 trades_cl:pd.DataFrame = pd.DataFrame(), 
-                 trades_ac:pd.DataFrame = pd.DataFrame(),
                  spread_pct:flx.CostsValue = 0, 
                  commission:flx.CostsValue = 0, 
                  slippage_pct:flx.CostsValue = 0, 
@@ -482,7 +480,7 @@ class StrategyClass(ABC):
         This function is used to run trades and other operations.
 
         Args:
-            data (pd.DataFrame, optional): Data from the current and previous steps.
+            index (int): Current data index.
         """
 
         self.__data_updater(index=index)
@@ -500,14 +498,15 @@ class StrategyClass(ABC):
 
                 # ui == (position id)
                 if not self.__positions.empty:
-                    self.__orders['unionId'] = self.__orders['unionId'].apply(
-                        lambda d: (
-                            d.update({'ui': d['ui'].replace('w/', '')}) or d
-                            if d['ui'].split('/')[-1] in self.__positions['unionId'].values and d['ui'].split('/')[0] == 'w'
-                            else d)
+
+                    mask = (
+                        self.__orders['unionId'].str.split('/').str[-1].isin(self.__positions['unionId'].values) &
+                        (self.__orders['unionId'].str.split('/').str[0] == 'w')
                     )
 
-                if row['unionId']['ui'].split('/')[0] == 'w':
+                    self.__orders.loc[mask, 'unionId'] = self.__orders.loc[mask, 'unionId'].str.replace('w/', '')
+
+                if row['unionId'].split('/')[0] == 'w':
                     return
 
                 limit = (row['limit'] and self.__data['High'].iloc[-1]*(
@@ -541,6 +540,8 @@ class StrategyClass(ABC):
         return str(uuid4().int)
 
     def act_taker(self, buy:bool = True, amount:float = np.nan):
+        """
+        """
 
         buy = int(bool(buy))
 
@@ -561,6 +562,8 @@ class StrategyClass(ABC):
         return ui
 
     def act_limit(self, price:float, buy:bool = True, amount:float = np.nan):
+        """
+        """
 
         buy = int(bool(buy))
 
@@ -575,9 +578,14 @@ class StrategyClass(ABC):
         )
 
     def act_close(self, index):
+        """
+        """
+
         self.__act_reduce(index, self.__data['Close'].iloc[-1], mode='taker')
 
     def __act_reduce(self, index, price, amount = None, mode = 'taker'):
+        """
+        """
 
         position = self.__positions.iloc[[index]] 
 
@@ -616,10 +624,10 @@ class StrategyClass(ABC):
             position['amount'] = amount
         else:
             self.__positions = self.__positions.drop(position.index)
-            self.__orders = self.__orders[(self.__orders.apply(
-                (lambda r: position['unionId'].iloc[0] != r['unionId']['ui'].split('/')[-1] 
-                 and position['unionId'].iloc[0] != r['unionId']['ci'])
-            , axis=1))]
+
+            self.__orders = self.__orders[
+                (position['unionId'].iloc[0] != self.__orders['unionId'].str.split('/').str[-1])
+                & (position['unionId'].iloc[0] != self.__orders['closeId'])]
 
         position['profit'] = (position['amount'].iloc[0]*position['profitPer'].iloc[0]/100-
                         position['amount'].iloc[0]*(commission/100)-
@@ -634,6 +642,8 @@ class StrategyClass(ABC):
                                      ignore_index=True) 
 
     def __put_op(self, order:pd.Series):
+        """
+        """
 
         position_price = order['orderPrice']
 
@@ -661,7 +671,7 @@ class StrategyClass(ABC):
                                 'commission':commission,
                                 'amount':order['amount'],
                                 'typeSide':order['typeSide'],
-                                'unionId':order['unionId']['ui'],
+                                'unionId':order['unionId'],
                                 },index=[1])
 
         self.__positions = pd.concat([self.__positions, position], ignore_index=True) 
@@ -675,11 +685,11 @@ class StrategyClass(ABC):
             case 'op':
                 self.__put_op(order)
             case 'takeProfit' | 'stopLoss':
-                if order['unionId']['ui'] == '':
+                if pd.isna(order['unionId']):
                     return
 
                 union_pos = self.__positions['unionId'][
-                    self.__positions['unionId'] == order['unionId']['ui']]
+                    self.__positions['unionId'] == order['unionId']]
                 if union_pos.empty:
                     return 
 
@@ -689,14 +699,18 @@ class StrategyClass(ABC):
             case 'takeLimit' | 'stopLimit':
                 pass
 
-        self.__orders = self.__orders[self.__orders.apply(
-            lambda d: d['unionId']['ci'] != order['unionId']['id'] 
-            and (d['unionId']['ci'] != order['unionId']['ci'] 
-                 if order['unionId']['ci'] != '' else True), axis=1)]
+        self.__orders = self.__orders[
+            (self.__orders['closeId'] != order['id']) &
+            (self.__orders['closeId'] != order['closeId'] 
+             if pd.isna(order['closeId']) else True)
+        ]
 
     def ord_put(self, order_type:str, price:float, 
                 amount:float = None, buy:bool = True, 
                 union_id:int = None, close_id:int = None):
+        """
+        """
+
         if not order_type in (
             'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit'):
             raise ValueError('Bad op type')
@@ -726,14 +740,41 @@ class StrategyClass(ABC):
             limit=True if order_type in ('stopLimit', 'takeLimit') else False,
         )
 
+    def __price_check(self, price, union_id, type_side):
+        """
+        """
+
+        if pd.isna(union_id):
+            return
+
+        func = np.max if type_side else np.min
+
+        union_ord = (func(self.__orders['orderPrice'][
+            self.__orders['unionId'] == union_id])
+            if not self.__positions.empty else np.nan)
+
+        union_pos = (func(self.__positions['positionOpen'][
+            self.__positions['unionId'] == union_id])
+            if not self.__positions.empty else np.nan)
+
+        union_ord = union_ord if not np.isnan(union_ord) else price
+        union_pos = union_pos if not np.isnan(union_pos) else price
+
+        if type_side:
+
+            return price >= func([union_pos, union_ord])
+        return price <= func([union_pos, union_ord])
+
     def __ord_put(self, order_type:str, price:float, 
                   amount:float = None, buy:bool = True, wait:bool = True,
                   union_id:int = None, close_id:int = None, limit:bool = False):
+        """
+        """
 
         amount = amount or np.nan
 
-        close_id = str(close_id) if close_id else ''
-        union_id = f'{"w/" if wait else ""}{union_id}' if union_id else ''
+        close_id = str(close_id) if close_id else np.nan
+        union_id = f'{"w/" if wait else ""}{union_id}' if union_id else np.nan
 
         match order_type:
             case 'op':
@@ -745,50 +786,50 @@ class StrategyClass(ABC):
             case _:
                 raise exception.OrderError('Invalid order type.')
 
+        if (~self.__price_check(price=price, union_id=union_id, type_side=buy) 
+            and order_type != 'op'):
+            raise exception.OrderError("Invalid 'price' for order type.")
+
         order = pd.DataFrame({'order':order_type,
                             'date':self.__data.index[-1],
                             'orderPrice':price,
                             'amount':amount,
                             'typeSide':buy,
-                            'unionId':[{'id':StrategyClass.unique_id(), 'ui':union_id, 'ci':close_id}],
+                            'id':StrategyClass.unique_id(),
+                            'unionId':union_id,
+                            'closeId':close_id,
                             'limit':limit
                             }, index=[1])
 
         self.__orders = pd.concat([self.__orders, order], ignore_index=True) 
         return order['unionId']
 
-    def ord_rmv(self, or_id:int, id_mode='id'):
+    def ord_rmv(self, index:int):
         """
         """
 
-        id_mode = id_mode.lower()
-        if id_mode not in ('index', 'id', 'ui', 'ci'):
-            raise ValueError()
+        order = self.__orders.iloc[[index]]
+        self.__orders = self.__orders.drop(order.index)
 
-        if id_mode == 'index':
-            order = self.__orders.iloc[or_id] 
-            self.__orders = self.__orders.drop(order.index)
+        self.__orders = self.__orders[
+            (order['id'].iloc[0] != self.__orders['unionId'].str.split('/').str[-1])
+            & (order['id'].iloc[0] != self.__orders['closeId'])]
 
-            self.__orders = self.__orders[(self.__orders.apply(
-                lambda r: (order['unionId']['id'] != r['unionId']['ui'].split('/')[-1] 
-                            and order['unionId']['id'] != r['unionId']['ci'])
-            , axis=1))]
+    def ord_mod(self, index:int, price:float = None, amount:float = None):
+        """
+        """
 
-            return
+        order = self.__orders.iloc[[index]]
 
-        orders = self.__orders.loc[
-            self.__orders['unionId'][id_mode].split('/')[-1] == str(or_id)]
+        union = self.__price_check(
+            price=price, 
+            union_id=order['unionId'].iloc[0], 
+            type_side=order['typeSide'].iloc[0])
 
-        id_todel = orders['unionId'].apply(lambda x: x['id'])
-        self.__orders.drop(orders.index, inplace=True)
-
-        self.__orders = self.__orders[(self.__orders.apply(
-            lambda r: (~id_todel.isin(r['unionId']['ui'].split('/')[-1])
-                        and ~id_todel.isin(r['unionId']['ci']))
-        , axis=1))]
-
-    def ord_mod(self, index):
-        pass
+        if union and not price is None:
+            self.__orders.loc[order.index, 'orderPrice'] = price
+        if not amount is None:
+            self.__orders.loc[order.index, 'amount'] = amount
 
     def prev(self, label:str = None, last:int = None) -> flx.DataWrapper:
         """
@@ -853,10 +894,18 @@ class StrategyClass(ABC):
                 present. If None, data for all times is returned.
 
         Info:
-            `__trades_cl` columns, the same columns you can access with 
-            `prev_trades_ac`.
+            `__pos_record` columns.
 
-            - Date: The step date when the trade began.
+            - date: Creation date.
+            - positionOpen: Opening price.
+            - commission: Position commissions.
+            - amount: Position amount
+            - typeSide: Position type True for buy.
+            - unionId: Id linked to orders.
+            - positionClose: Closing price.
+            - positionDate: Closing date.
+            - profitPer: Profit in percentage with out commissions.
+            - profit: Profit on 'amount' with commissions.
 
         Returns:
             DataWrapper: DataWrapper containing the data from closed trades.
@@ -887,7 +936,7 @@ class StrategyClass(ABC):
         return flx.DataWrapper(data, columns=data_columns)
 
     def prev_ord_rec(self, label:str = None, or_type:str = None, 
-                    union_id:int = None, last:int = None) -> flx.DataWrapper:
+                    union_id:dict = None, last:int = None) -> flx.DataWrapper:
         """
         Prev of active orders.
 
@@ -900,15 +949,25 @@ class StrategyClass(ABC):
             or_type (str, optional): If you want to filter only one type 
                 of operation you can do so with this argument.
                 Current types of orders: 'op', 'takeProfit', 'stopLoss'.
-            union_id (int, optional): This argument is filtered by 'UnionId'
+            union_id (dict, optional): Searches for an order by ID using 
+                a dictionary with <id>:<id to search for>. 
+                Available IDs: 'id', 'unionId', 'closeId'.
             last (int, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
 
         Info:
-            `__orders` columns.
+            `__ord_record` columns.
 
-            - date: date.
-        
+            - order: Order type ('op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit').
+            - date: Creation date.
+            - orderPrice: Execution price.
+            - amount: Amount to be executed.
+            - typeSide: Order type True for buy.
+            - id: Unique order ID.
+            - unionId: Linked id to position.
+            - closeId: Close link.
+            - limit: Indicates execution type to be performed.
+
         Returns:
             DataWrapper: DataWrapper containing the data from active trades.
         """
@@ -922,13 +981,19 @@ class StrategyClass(ABC):
                             Last has to be less than the length of 
                             'data' and greater than 0.
                             """, newline_exclude=True))
+        elif ((not isinstance(union_id, dict) and not union_id is None) 
+            or (isinstance(union_id, dict) 
+            and not set(union_id.keys()).issubset(('id','unionId','closeId')))):
+
+            raise ValueError(utils.text_fix(
+                "'union_id' with bad format or incorrect.", newline_exclude=True))
 
         data_columns = __ord_rec.columns
 
         if or_type != None:
             __ord_rec = __ord_rec.loc[__ord_rec['order'] == or_type]
         if union_id != None:
-            __ord_rec = __ord_rec.loc[__ord_rec['unionId'] == union_id]
+            __ord = __ord[__ord[list(union_id)].isin(union_id).all(axis=1)]
 
         if label == 'index': 
             return flx.DataWrapper(__ord_rec.index, columns='index')
@@ -958,10 +1023,14 @@ class StrategyClass(ABC):
                 present. If None, data for all times is returned.
 
         Info:
-            `__trades_ac` columns, the same columns you can access with 
-            `prev_trades_cl`.
+            `__positions` columns.
 
-            - Date: The step date when the trade began.
+            - date: Creation date.
+            - positionOpen: Opening price.
+            - commission: Position commissions.
+            - amount: Position amount
+            - typeSide: Position type True for buy.
+            - unionId: Id linked to orders.
 
         Returns:
             DataWrapper: DataWrapper containing the data from active trades.
@@ -992,7 +1061,7 @@ class StrategyClass(ABC):
         return flx.DataWrapper(data, columns=data_columns)
 
     def prev_orders(self, label:str = None, or_type:str = None, 
-                    union_id:int = None, last:int = None) -> flx.DataWrapper:
+                    union_id:dict = None, last:int = None) -> flx.DataWrapper:
         """
         Prev of active orders.
 
@@ -1004,16 +1073,24 @@ class StrategyClass(ABC):
                 the `last` parameter.
             or_type (str, optional): If you want to filter only one type 
                 of operation you can do so with this argument.
-                Current types of orders: 'Trade', 'takeProfit', 'stopLoss'.
-            union_id (int, optional): This argument is filtered by 'UnionId'
+                Current types of orders: 'op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit'.
+            union_id (dict, optional): .
             last (int, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
 
         Info:
             `__orders` columns.
 
-            - date: date.
-        
+            - order: Order type ('op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit').
+            - date: Creation date.
+            - orderPrice: Execution price.
+            - amount: Amount to be executed.
+            - typeSide: Order type True for buy.
+            - id: Unique order ID.
+            - unionId: Linked id to position.
+            - closeId: Close link.
+            - limit: Indicates execution type to be performed.
+
         Returns:
             DataWrapper: DataWrapper containing the data from active trades.
         """
@@ -1023,17 +1100,24 @@ class StrategyClass(ABC):
             return flx.DataWrapper()
         elif (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
+
             raise ValueError(utils.text_fix("""
                             Last has to be less than the length of 
                             'data' and greater than 0.
                             """, newline_exclude=True))
+        elif ((not isinstance(union_id, dict) and not union_id is None) 
+            or (isinstance(union_id, dict) 
+            and not set(union_id.keys()).issubset(('id','unionId','closeId')))):
+
+            raise ValueError(utils.text_fix(
+                "'union_id' with bad format or incorrect.", newline_exclude=True))
 
         data_columns = __ord.columns
 
         if or_type != None:
             __ord = __ord.loc[__ord['order'] == or_type]
         if union_id != None:
-            __ord = __ord.loc[__ord['unionId'] == union_id]
+            __ord = __ord[__ord[list(union_id)].isin(union_id).all(axis=1)]
 
         if label == 'index': 
             return flx.DataWrapper(__ord.index, columns='index')

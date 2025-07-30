@@ -128,6 +128,8 @@ class DataWrapper(MutableSequence, Generic[T]):
             return data._index
         elif type(data) is pd.DataFrame or type(data) is pd.Series:
             return data.index.to_numpy()
+        elif type(data) is np.ndarray:
+            return range(len(data))
 
         return None
 
