@@ -113,16 +113,21 @@ class StrategyClass(ABC):
         __idc_data: Saved data from the indicators.
 
     Methods:
+        unique_id: .
+        act_taker: .
+        act_limit: .
+        act_close: .
+        ord_put: .
+        ord_rmv: .
+        ord_mod: .
         get_spread: Get __spread_pct.
         get_slippage: Get __slippage_pct.
         get_commission: Returns the commission per trade.
         get_init_funds: Returns the initial funds for the strategy.
-        act_mod: Modifies an existing trade.
-        act_close: Closes an existing trade.
-        act_open: Opens a new trade.
-        prev_trades_ac: Retrieves previously opened trades.
-        prev_trades_cl: Retrieves previously closed trades.
         prev: Recovers all step data.
+        prev_orders: .
+        prev_positions: .
+        prev_pos_rec: .
         idc_fibonacci: Calculates Fibonacci retracement levels.
         idc_ema: Calculates the Exponential Moving Average (EMA) indicator.
         idc_sma: Calculates the Simple Moving Average (SMA) indicator.
@@ -140,6 +145,11 @@ class StrategyClass(ABC):
         idc_atr: Calculates the Average True Range (ATR).
 
     Private Methods:
+        __act_reduce: .
+        __put_op: .
+        __ord_put: .
+        __order_execute: .
+        __price_check: .
         __uidc: Send data argument to the indicator and wraps it with '__data_store'.
         __func_idg: Generates an id for a function call.
         __store_decorator: Give '_store' attribute to a function.
@@ -147,7 +157,6 @@ class StrategyClass(ABC):
         __uidc_cut: Slices data for the user based on the current index.
         __data_cut: Slices data for the user based on the current index.
         __data_updater: Updates all data with the provided DataFrame.
-        __act_close: Closes an existing trade.
         __idc_fibonacci: Calculates Fibonacci retracement levels.
         __idc_ema: Calculates the Exponential Moving Average (EMA) indicator.
         __idc_sma: Calculates the Simple Moving Average (SMA) indicator.
@@ -215,7 +224,6 @@ class StrategyClass(ABC):
             [], categories=['op', 'stopLoss', 'takeProfit'], ordered=True)
 
         self.__pos_record = pd.DataFrame()
-        self.__ord_record = pd.DataFrame()
 
         for name in dir(self):
             attr = getattr(self, name)
@@ -500,11 +508,13 @@ class StrategyClass(ABC):
                 if not self.__positions.empty:
 
                     mask = (
-                        self.__orders['unionId'].str.split('/').str[-1].isin(self.__positions['unionId'].values) &
+                        self.__orders['unionId'].str.split('/').str[-1].isin(
+                            self.__positions['unionId'].values) &
                         (self.__orders['unionId'].str.split('/').str[0] == 'w')
                     )
 
-                    self.__orders.loc[mask, 'unionId'] = self.__orders.loc[mask, 'unionId'].str.replace('w/', '')
+                    self.__orders.loc[mask, 'unionId'] = self.__orders.loc[
+                        mask, 'unionId'].str.replace('w/', '')
 
                 if row['unionId'].split('/')[0] == 'w':
                     return
@@ -513,16 +523,30 @@ class StrategyClass(ABC):
                     self.__spread_pct.get_taker()/100/2+1) >= row['orderPrice']
                 and self.__data['Low'].iloc[-1]*(
                     1-self.__spread_pct.get_taker()/100/2) <= row['orderPrice'])
-                
-                cond_buy = (not row['limit'] and self.__data['High'].iloc[-1]*(
-                    self.__spread_pct.get_taker()/100/2+1) >= row['orderPrice'] 
-                and row['typeSide'])
-                cond_sell = (not row['limit'] and self.__data['Low'].iloc[-1]*(
-                    self.__spread_pct.get_taker()/100/2+1) <= row['orderPrice'] 
-                and not row['typeSide'])
+
+                def get_union_cn(data, type_side):
+                    """
+                    """
+
+                    leak  = self.__get_union(data, row['unionId'])
+                    if leak is None:
+                        return
+
+                    if leak['typeSide'].iloc[0] == type_side:
+                        #print(leak['typeSide'].iloc[0])
+                        return (not row['limit'] and self.__data['High'].iloc[-1]*(
+                                self.__spread_pct.get_taker()/100/2+1) >= row['orderPrice'])
+
+                    #print(leak['typeSide'].iloc[0], type_side)
+                    return (not row['limit'] and self.__data['Low'].iloc[-1]*(
+                            self.__spread_pct.get_taker()/100/2+1) <= row['orderPrice'])
+
+                ord_cn = get_union_cn(self.__orders, row['typeSide'])
+                pos_cn = get_union_cn(self.__positions, row['typeSide'])
+                cond = ord_cn or pos_cn or False
 
                 if (
-                    limit or (cond_buy or cond_sell)
+                    limit or cond
                     ):
 
                     self.__order_execute(row)
@@ -543,9 +567,10 @@ class StrategyClass(ABC):
         """
         """
 
-        buy = int(bool(buy))
+        buy = bool(buy)
 
         ui = StrategyClass.unique_id()
+
         self.__ord_put(
                     'op', 
                     price=self.__data["Close"].iloc[-1], 
@@ -565,7 +590,7 @@ class StrategyClass(ABC):
         """
         """
 
-        buy = int(bool(buy))
+        buy = bool(buy)
 
         return self.__ord_put(
             'op', 
@@ -715,20 +740,16 @@ class StrategyClass(ABC):
             'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit'):
             raise ValueError('Bad op type')
 
-        last_ui = None
+        last_data = None
         if not self.__positions.empty:
-            last_ui = self.__positions.iloc[-1]['unionId']
+            last_data = self.__positions
         elif not self.__orders.empty:
-            last_ui = self.__orders.iloc[-1]['unionId']['ui']
+            last_data = self.__orders
         elif not self.__pos_record.empty:
-            last_ui = self.__pos_record.iloc[-1]['unionId']
-        elif not self.__ord_record.empty:
-            last_ui = self.__ord_record.iloc[-1]['unionId']['ui']
+            last_data = self.__pos_record
 
-        if last_ui is not None:
-            union_id = union_id or last_ui.split('/')[-1]
-        else:
-            union_id = union_id or 0
+        last_ui = last_data.iloc[-1]['unionId'] if isinstance(last_data, pd.DataFrame) else None
+        union_id = union_id or (last_ui.split('/')[-1] if last_ui else 0)
 
         return self.__ord_put(
             order_type, 
@@ -740,6 +761,19 @@ class StrategyClass(ABC):
             limit=True if order_type in ('stopLimit', 'takeLimit') else False,
         )
 
+    def __get_union(self, data, union_id):
+        """
+        """
+
+        if not data.empty:
+            mask = (data['unionId'] == union_id)
+            if 'order' in data.columns:
+                mask &= (data['order'] == 'op')
+
+            data_leak = data[mask]
+
+            return data_leak if not data_leak.empty else None
+
     def __price_check(self, price, union_id, type_side):
         """
         """
@@ -747,23 +781,29 @@ class StrategyClass(ABC):
         if pd.isna(union_id):
             return
 
+        union_id = union_id.split('/')[-1]
         func = np.max if type_side else np.min
 
-        union_ord = (func(self.__orders['orderPrice'][
-            self.__orders['unionId'] == union_id])
-            if not self.__positions.empty else np.nan)
+        def get_union_price(data, col_name):
+            """
+            """
 
-        union_pos = (func(self.__positions['positionOpen'][
-            self.__positions['unionId'] == union_id])
-            if not self.__positions.empty else np.nan)
+            nonlocal func
+            leak = self.__get_union(data=data, union_id=union_id)
 
-        union_ord = union_ord if not np.isnan(union_ord) else price
-        union_pos = union_pos if not np.isnan(union_pos) else price
+            if not leak is None:
 
-        if type_side:
+                func = np.max if leak['typeSide'].iloc[0] == type_side else np.min
+                return func(leak[col_name])
 
-            return price >= func([union_pos, union_ord])
-        return price <= func([union_pos, union_ord])
+        union_ord = get_union_price(self.__orders, 'orderPrice')
+        union_pos = get_union_price(self.__positions, 'positionOpen')
+
+        union_pos = union_pos or union_ord or price
+        union_ord = union_ord or union_pos
+
+        price_cn = func([union_pos, union_ord])
+        return price >= price_cn if func == np.max else price <= price_cn
 
     def __ord_put(self, order_type:str, price:float, 
                   amount:float = None, buy:bool = True, wait:bool = True,
@@ -786,7 +826,7 @@ class StrategyClass(ABC):
             case _:
                 raise exception.OrderError('Invalid order type.')
 
-        if (~self.__price_check(price=price, union_id=union_id, type_side=buy) 
+        if (~self.__price_check(price=price, union_id=union_id, type_side=buy)
             and order_type != 'op'):
             raise exception.OrderError("Invalid 'price' for order type.")
 
@@ -929,80 +969,6 @@ class StrategyClass(ABC):
         
         if label != None: 
             _loc = __pos_rec.columns.get_loc(label)
-
-            data_columns = data_columns[_loc]
-            data = data[:,_loc]
-
-        return flx.DataWrapper(data, columns=data_columns)
-
-    def prev_ord_rec(self, label:str = None, or_type:str = None, 
-                    union_id:dict = None, last:int = None) -> flx.DataWrapper:
-        """
-        Prev of active orders.
-
-        This function returns the values of `__orders`.
-
-        Args:
-            label (str, optional): Data column to return. If None, all columns 
-                are returned. If 'index', only indexes are returned, ignoring 
-                the `last` parameter.
-            or_type (str, optional): If you want to filter only one type 
-                of operation you can do so with this argument.
-                Current types of orders: 'op', 'takeProfit', 'stopLoss'.
-            union_id (dict, optional): Searches for an order by ID using 
-                a dictionary with <id>:<id to search for>. 
-                Available IDs: 'id', 'unionId', 'closeId'.
-            last (int, optional): Number of steps to return starting from the 
-                present. If None, data for all times is returned.
-
-        Info:
-            `__ord_record` columns.
-
-            - order: Order type ('op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit').
-            - date: Creation date.
-            - orderPrice: Execution price.
-            - amount: Amount to be executed.
-            - typeSide: Order type True for buy.
-            - id: Unique order ID.
-            - unionId: Linked id to position.
-            - closeId: Close link.
-            - limit: Indicates execution type to be performed.
-
-        Returns:
-            DataWrapper: DataWrapper containing the data from active trades.
-        """
-
-        __ord_rec = self.__ord_record
-        if __ord_rec.empty: 
-            return flx.DataWrapper()
-        elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
-            raise ValueError(utils.text_fix("""
-                            Last has to be less than the length of 
-                            'data' and greater than 0.
-                            """, newline_exclude=True))
-        elif ((not isinstance(union_id, dict) and not union_id is None) 
-            or (isinstance(union_id, dict) 
-            and not set(union_id.keys()).issubset(('id','unionId','closeId')))):
-
-            raise ValueError(utils.text_fix(
-                "'union_id' with bad format or incorrect.", newline_exclude=True))
-
-        data_columns = __ord_rec.columns
-
-        if or_type != None:
-            __ord_rec = __ord_rec.loc[__ord_rec['order'] == or_type]
-        if union_id != None:
-            __ord = __ord[__ord[list(union_id)].isin(union_id).all(axis=1)]
-
-        if label == 'index': 
-            return flx.DataWrapper(__ord_rec.index, columns='index')
-
-        data = __ord_rec.values[
-            len(__ord_rec) - last if last is not None and last < len(__ord_rec) else 0:]
-    
-        if label != None: 
-            _loc = __ord_rec.columns.get_loc(label)
 
             data_columns = data_columns[_loc]
             data = data[:,_loc]
