@@ -9,6 +9,7 @@ setup(
     name='backpyf',
     version='0.9.71b4',
     packages=find_packages(),
+    package_data={"backpyf": ["assets/*"]},
     description='''BackPy is a library made in python for back testing in 
     financial markets. Read Risk_notice.txt and LICENSE.''',
     long_description=desc,
@@ -20,6 +21,7 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3',
     ],
+    python_requires=">=3.9",
     install_requires=[
         'pandas>=1.3.0',
         'numpy>=1.16.5',

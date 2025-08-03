@@ -1,4 +1,5 @@
 backpyf/__pycache__/
+*.egg-info/
 .vscode/
 venv/
 yfinance_cache

@@ -16,7 +16,7 @@ Functions:
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from PIL import Image, ImageTk, ImageOps
-from sys import platform
+from importlib import resources
 import matplotlib.colors
 import matplotlib as mpl
 import tkinter as tk
@@ -34,6 +34,7 @@ class CustomWin:
 
     Attributes:
         root: Tkinter window.
+        icon: Window icon.
         color_frame: Frames color.
         color_buttons: Buttons color.
         color_button_act: Color of the sunken buttons.
@@ -71,9 +72,9 @@ class CustomWin:
         """
 
         self.root = tk.Tk()
-        self.root.protocol('WM_DELETE_WINDOW', self._quit)
         self.root.geometry(geometry)
 
+        self.icon = None
         self._after_id = None
 
         self.color_frame = frame_color
@@ -82,28 +83,28 @@ class CustomWin:
 
         self.config_icon()
         self.root.title(title)
-        self.root.after(100, self.lift)
+        self._after_id_lift = self.root.after(100, self.lift)
+
+        self.root.protocol('WM_DELETE_WINDOW', self._quit)
 
     def config_icon(self) -> None:
         """
         Configure icon.
 
         Put the icon on the application and change its color.
-        If the application already has an icon, another one will not be generated.
         """
 
-        if _cm._icon: 
-            return
-
-        img = Image.open('images/icon128x.png').convert("RGBA")
+        with resources.path('backpyf.assets', 'icon128x.png') as icon_path:
+            img = Image.open(icon_path).convert("RGBA")
 
         gray = ImageOps.grayscale(img)
         colorized = ImageOps.colorize(gray, black=self.color_buttons, 
                                       white="#000000")
         colorized.putalpha(img.split()[-1])
 
-        _cm._icon = ImageTk.PhotoImage(colorized)
-        self.root.iconphoto(True, _cm._icon)
+        self.icon = ImageTk.PhotoImage(colorized, master=self.root)
+
+        self.root.tk.call('wm', 'iconphoto', self.root._w, self.icon)
 
     def lift(self) -> None:
         """
@@ -111,6 +112,8 @@ class CustomWin:
 
         Focus on the window and jump over the others.
         """
+
+        self._after_id_lift = None
 
         if not _cm.lift:
             return
@@ -131,6 +134,9 @@ class CustomWin:
         if self._after_id:
             self.root.after_cancel(self._after_id)
             self._after_id = None
+        if self._after_id_lift:
+            self.root.after_cancel(self._after_id)
+            self._after_id_lift = None
 
         if self.root.winfo_exists():
             self.root.destroy()
@@ -185,12 +191,16 @@ class CustomWin:
             block (bool, optional): Blocks the process.
         """
 
-        if not self.root.winfo_exists():
-            return
-
         if block:
-            self.root.mainloop()
+            try: 
+                while self.root.winfo_exists():
+                    self.root.update_idletasks()
+                    self.root.update()
+            except tk.TclError: return
         else:
+            if not self.root.winfo_exists():
+                return
+
             self._after_id = self.root.after(50, lambda: self.show(block=False))
 
 class CustomToolbar(NavigationToolbar2Tk):
@@ -441,6 +451,7 @@ def custom_ax(ax, bg = '#e5e5e5', edge:bool = False) -> None:
     ax.xaxis.label.set_color('white')
     ax.yaxis.label.set_color('white')
     ax.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
+    ax.set_axisbelow(True)
 
     semi_transparent_white = mpl.colors.to_rgba('white', alpha=0.3)
     for spine in ax.spines.values():
