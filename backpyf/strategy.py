@@ -506,7 +506,6 @@ class StrategyClass(ABC):
 
                 # ui == (position id)
                 if not self.__positions.empty:
-
                     mask = (
                         self.__orders['unionId'].str.split('/').str[-1].isin(
                             self.__positions['unionId'].values) &
@@ -515,6 +514,10 @@ class StrategyClass(ABC):
 
                     self.__orders.loc[mask, 'unionId'] = self.__orders.loc[
                         mask, 'unionId'].str.replace('w/', '')
+
+                    if (row['unionId'].split('/')[-1] 
+                        in self.__positions['unionId'].values):
+                        row['unionId'] = row['unionId'].split('/')[-1]
 
                 if row['unionId'].split('/')[0] == 'w':
                     return
@@ -557,7 +560,7 @@ class StrategyClass(ABC):
 
         self.next()
 
-    def unique_id():
+    def unique_id(self = None):
         """
         """
 
@@ -725,10 +728,9 @@ class StrategyClass(ABC):
                 pass
 
         self.__orders = self.__orders[
-            (self.__orders['closeId'] != order['id']) &
-            (self.__orders['closeId'] != order['closeId'] 
-             if pd.isna(order['closeId']) else True)
-        ]
+            (order['id'] != self.__orders['closeId'])
+            & (order['closeId'] != self.__orders['closeId'] 
+               if not pd.isna(order['closeId']) else True)]
 
     def ord_put(self, order_type:str, price:float, 
                 amount:float = None, buy:bool = True, 

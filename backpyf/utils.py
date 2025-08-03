@@ -17,6 +17,7 @@ Functions:
         if it has not been calculated already.
     calc_day: Function to calculate the width of the index that each day has.
     text_fix: Function to fix or adjust text.
+    diff_color: Makes a color darker or lighter.
     plot_volume: Function to plot volume on a give `Axes`.
     plot_candles: Function to plot candles on a given `Axes`.
     plot_position: Function to plot a trading position.
@@ -28,6 +29,7 @@ Hidden Functions:
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle 
 from matplotlib.axes._axes import Axes
+import matplotlib.colors
 from time import sleep
 
 import matplotlib as mpl
@@ -295,6 +297,34 @@ def text_fix(text:str, newline_exclude:bool = True) -> str:
     return ''.join(line.lstrip() + ('\n' if not newline_exclude else '')  
                         for line in text.split('\n'))
 
+def diff_color(color:str, factor:float = 1, line:float = 0.2) -> tuple:
+    """
+    Different color
+
+    Makes a color darker or lighter.
+    Based on 'factor' the color will be modified to be different than 'color'.
+
+    Args:
+        color (str): String allowed by Matplotlib as color.
+        factor (float, optional): Darkening/Lightening Factor. 
+            Each RGB color with a value between 0 and 1 will 
+            be multiplied by this factor.
+        line (float, optional): Lightening barrier from 1 to 0 for the color 
+            if when darkening it darkens less than the 'line' 
+            number the opposite will be done (lightening).
+
+    Returns:
+        tuple: Rgb color.
+    """
+
+    if line > 1 or line < 0:
+        raise ValueError("'line' can only be between 0 and 1 or equal.")
+    elif factor > 1 or factor < 0:
+        raise ValueError("'factor' can only be between 0 and 1 or equal.")
+
+    rgb = mpl.colors.to_rgb(color) 
+    return tuple(min(1, c*(1+factor)) if (dk:=c*(1-factor)) <= line else dk for c in rgb)
+
 def plot_volume(ax:Axes, data:pd.Series, 
                  width:float = 1, color:str = 'tab:orange', 
                  alpha:float = 1) -> None:
@@ -363,8 +393,8 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
 def plot_position(trades:pd.DataFrame, ax:Axes, 
                   color_take:str = 'green', color_stop:str = 'red', 
                   color_takec:str = 'gold', color_stopc:str = 'blueviolet',
-                  alpha:float = 1, alpha_arrow:float = 1, 
-                  operation_route:bool = True, 
+                  alpha:float = 1, alpha_arrow:float = 1,  
+                  arrow_fact:float = 0.2, operation_route:bool = True, 
                   width_exit:any = lambda x: 9) -> None:
     """
     Position Draw.
@@ -383,6 +413,8 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
         alpha (float, optional): Opacity of the elements. Default is 1.
         alpha_arrow (float, optional): Opacity of arrow, type marker, and close marker. Default is 1.
         operation_route (bool, optional): If True, traces the route of the operation. Default is True.
+        arrow_fact (float, optional): Indicates how much the colors of the arrows darken or lighten.
+            If you don't want this to happen, leave it at 0.
         width_exit (any, optional): Function that specifies how many time points the position 
             extends forward if not closed. Default is a lambda function with a width of 9.
 
@@ -447,12 +479,14 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
     ax.scatter(trades['date'], 
                trades.apply(lambda x: x['positionOpen'] 
                             if x['typeSide'] == 1 else None, axis=1), 
-               c=color_take, s=30, marker='^', alpha=alpha_arrow)
+               color=diff_color(color_take, factor=arrow_fact, line=0.2), s=30, 
+               marker='^', alpha=alpha_arrow)
 
     ax.scatter(trades['date'], 
                trades.apply(lambda x: x['positionOpen']
                             if x['typeSide'] != 1 else None, axis=1),
-               c=color_stop, s=30, marker='v', alpha=alpha_arrow)
+               color=diff_color(color_stop, factor=arrow_fact, line=0.2), s=30, 
+               marker='v', alpha=alpha_arrow)
 
 def _loop_data(function:callable, bpoint:callable, init:int, timeout:float) -> pd.DataFrame:
     """
