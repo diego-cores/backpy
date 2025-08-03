@@ -723,6 +723,7 @@ def plot(log:bool = False, progress:bool = True,
         frame_color=plt_colors['fr'],
         buttons_color=plt_colors['btn'],
         button_act=plt_colors.get('btna', '#333333'))
+
     mpl_canvas = window.mpl_canvas(fig=fig)
     window.mpl_toolbar(mpl_canvas=mpl_canvas)
 

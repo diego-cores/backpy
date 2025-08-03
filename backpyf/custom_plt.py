@@ -26,183 +26,6 @@ import os
 from . import _commons as _cm
 from . import exception
 
-class CustomWin:
-    """
-    Custom window.
-
-    Create a custom window with BackPy using 'tkinter' and 'matplotlib'.
-
-    Attributes:
-        root: Tkinter window.
-        icon: Window icon.
-        color_frame: Frames color.
-        color_buttons: Buttons color.
-        color_button_act: Color of the sunken buttons.
-
-    Private Attributes:
-        _after_id: 'root.after' id used to avoid errors by not blocking the process.
-
-    Methods:
-        config_icon: Put the icon on the application and change its color.
-        lift: Focus on the window and jump over the others.
-        mpl_canvas: Put your matplotlib figure inside the window.
-        mpl_toolbar: Put the matplotlib toolbar in the window.
-        show: Show the window.
-
-    Private Methods:
-        _quit: Closes the window without errors.
-    """
-
-    def __init__(self, title:str = 'BackPy interface', 
-                 frame_color:str = 'SystemButtonFace', 
-                 buttons_color:str = '#000000', 
-                 button_act:str = '#333333', 
-                 geometry:str = '1200x600') -> None:
-        """
-        __init__
-
-        Builder for initializing the class.
-
-        Args:
-            title (str, optional): Window title.
-            frame_color (str, optional): Color of the toolbar and other frames.
-            buttons_color (str, optional): Button color.
-            button_act (str, optional): Color of the sunken buttons.
-            geometry (str, optional): Window geometry.
-        """
-
-        self.root = tk.Tk()
-        self.root.geometry(geometry)
-
-        self.icon = None
-        self._after_id = None
-
-        self.color_frame = frame_color
-        self.color_buttons = buttons_color
-        self.color_button_act = button_act
-
-        self.config_icon()
-        self.root.title(title)
-        self._after_id_lift = self.root.after(100, self.lift)
-
-        self.root.protocol('WM_DELETE_WINDOW', self._quit)
-
-    def config_icon(self) -> None:
-        """
-        Configure icon.
-
-        Put the icon on the application and change its color.
-        """
-
-        with resources.path('backpyf.assets', 'icon128x.png') as icon_path:
-            img = Image.open(icon_path).convert("RGBA")
-
-        gray = ImageOps.grayscale(img)
-        colorized = ImageOps.colorize(gray, black=self.color_buttons, 
-                                      white="#000000")
-        colorized.putalpha(img.split()[-1])
-
-        self.icon = ImageTk.PhotoImage(colorized, master=self.root)
-
-        self.root.tk.call('wm', 'iconphoto', self.root._w, self.icon)
-
-    def lift(self) -> None:
-        """
-        Lift.
-
-        Focus on the window and jump over the others.
-        """
-
-        self._after_id_lift = None
-
-        if not _cm.lift:
-            return
-
-        self.root.iconify()
-        self.root.update()
-        self.root.deiconify()
-        self.root.lift()
-        self.root.focus_force()
-
-    def _quit(self) -> None:
-        """
-        Quit.
-
-        Closes the window without errors.
-        """
-
-        if self._after_id:
-            self.root.after_cancel(self._after_id)
-            self._after_id = None
-        if self._after_id_lift:
-            self.root.after_cancel(self._after_id)
-            self._after_id_lift = None
-
-        if self.root.winfo_exists():
-            self.root.destroy()
-
-    def mpl_canvas(self, fig) -> FigureCanvasTkAgg:
-        """
-        Matplotlib canvas.
-
-        Put your matplotlib figure inside the window.
-
-        Args:
-            fig (mpl.figure.Figure): Figure from matplotlib.
-
-        Return:
-            FigureCanvasTkAgg: Resulting canvas figure.
-        """
-
-        frame = tk.Frame(self.root, bg=self.color_frame)
-        frame.place(relx=0, rely=0, relwidth=1, relheight=0.95)
-
-        canvas = FigureCanvasTkAgg(fig, master=frame)
-        canvas.draw()
-        canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-        return canvas
-
-    def mpl_toolbar(self, mpl_canvas:FigureCanvasTkAgg) -> None:
-        """
-        Matplotlib toolbar.
-
-        Put the matplotlib toolbar in the window.
-
-        Args:
-            mpl_canvas (FigureCanvasTkAgg): Canvas figure.
-        """
-
-        frame = tk.Frame(self.root, bg=self.color_frame)
-        frame.place(relx=0, rely=0.95, relwidth=1, relheight=0.05)
-
-        toolbar = CustomToolbar(mpl_canvas, frame, color_btn=self.color_buttons, 
-                                color_bg=self.color_frame, color_act=self.color_button_act)
-        toolbar.config(background=self.color_frame)
-        toolbar.pack(expand=True)
-
-    def show(self, block:bool = True) -> None:
-        """
-        Show.
-
-        Show the window.
-
-        Args:
-            block (bool, optional): Blocks the process.
-        """
-
-        if block:
-            try: 
-                while self.root.winfo_exists():
-                    self.root.update_idletasks()
-                    self.root.update()
-            except tk.TclError: return
-        else:
-            if not self.root.winfo_exists():
-                return
-
-            self._after_id = self.root.after(50, lambda: self.show(block=False))
-
 class CustomToolbar(NavigationToolbar2Tk):
     """
     Custom Toolbar.
@@ -338,6 +161,215 @@ class CustomToolbar(NavigationToolbar2Tk):
         """
 
         return
+
+class CustomWin:
+    """
+    Custom window.
+
+    Create a custom window with BackPy using 'tkinter' and 'matplotlib'.
+
+    Attributes:
+        root: Tkinter window.
+        icon: Window icon.
+        color_frame: Frames color.
+        color_buttons: Buttons color.
+        color_button_act: Color of the sunken buttons.
+
+    Private Attributes:
+        _after_id: 'root.after' id used to avoid errors by not blocking the process.
+
+    Methods:
+        config_icon: Put the icon on the application and change its color.
+        lift: Focus on the window and jump over the others.
+        mpl_canvas: Put your matplotlib figure inside the window.
+        mpl_update: Updates the position of the toolbar and the canvas.
+        mpl_toolbar: Put the matplotlib toolbar in the window.
+        show: Show the window.
+
+    Private Methods:
+        _quit: Closes the window without errors.
+    """
+
+    def __init__(self, title:str = 'BackPy interface', 
+                 frame_color:str = 'SystemButtonFace', 
+                 buttons_color:str = '#000000', 
+                 button_act:str = '#333333', 
+                 geometry:str = '1200x600') -> None:
+        """
+        __init__
+
+        Builder for initializing the class.
+
+        Args:
+            title (str, optional): Window title.
+            frame_color (str, optional): Color of the toolbar and other frames.
+            buttons_color (str, optional): Button color.
+            button_act (str, optional): Color of the sunken buttons.
+            geometry (str, optional): Window geometry.
+        """
+
+        self.root = tk.Tk()
+        self.root.geometry(geometry)
+        self.root.config(bg=frame_color)
+
+        self.icon = None
+        self._after_id = None
+
+        self.color_frame = frame_color
+        self.color_buttons = buttons_color
+        self.color_button_act = button_act
+
+        self.config_icon()
+        self.root.title(title)
+        self._after_id_lift = self.root.after(100, self.lift)
+
+        self.root.protocol('WM_DELETE_WINDOW', self._quit)
+
+    def config_icon(self) -> None:
+        """
+        Configure icon.
+
+        Put the icon on the application and change its color.
+        """
+
+        with resources.path('backpyf.assets', 'icon128x.png') as icon_path:
+            img = Image.open(icon_path).convert("RGBA")
+
+        gray = ImageOps.grayscale(img)
+        colorized = ImageOps.colorize(gray, black=self.color_buttons, 
+                                      white="#000000")
+        colorized.putalpha(img.split()[-1])
+
+        self.icon = ImageTk.PhotoImage(colorized, master=self.root)
+
+        self.root.tk.call('wm', 'iconphoto', self.root._w, self.icon)
+
+    def lift(self) -> None:
+        """
+        Lift.
+
+        Focus on the window and jump over the others.
+        """
+
+        self._after_id_lift = None
+
+        if not _cm.lift:
+            return
+
+        self.root.iconify()
+        self.root.update()
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+    def _quit(self) -> None:
+        """
+        Quit.
+
+        Closes the window without errors.
+        """
+
+        if self._after_id:
+            self.root.after_cancel(self._after_id)
+            self._after_id = None
+        if self._after_id_lift:
+            self.root.after_cancel(self._after_id)
+            self._after_id_lift = None
+
+        if self.root.winfo_exists():
+            self.root.destroy()
+
+    def mpl_canvas(self, fig) -> FigureCanvasTkAgg:
+        """
+        Matplotlib canvas.
+
+        Put your matplotlib figure inside the window.
+
+        Args:
+            fig (mpl.figure.Figure): Figure from matplotlib.
+
+        Return:
+            FigureCanvasTkAgg: Resulting canvas figure.
+        """
+
+        canvas = FigureCanvasTkAgg(fig, master=self.root)
+        canvas.draw()
+        canvas.get_tk_widget().place(relx=0, rely=0, relwidth=1, relheight=1)
+
+        return canvas
+
+    def mpl_update(self, canvas:FigureCanvasTkAgg, toolbar:CustomToolbar, 
+                   height:int = 32, mpl_place:bool = True) -> None:
+        """
+        Matplotlib update.
+
+        Updates the position of the toolbar and the canvas.
+
+        Args:
+            canvas (FigureCanvasTkAgg): Canvas figure.
+            toolbar (CustomToolbar): Toolbar object.
+            height (int, optional): Toolbar height in pixels.
+            mpl_place (bool, optional): If you want 'mpl_canvas' not to change shape, 
+                leave it set to False.
+        """
+
+        final_height = height/self.root.winfo_height()
+        toolbar.place(relx=0, rely=1-final_height, relwidth=1, relheight=final_height)
+
+        if mpl_place:
+            canvas.get_tk_widget().place(relx=0, rely=0, relwidth=1, relheight=1-final_height)
+
+    def mpl_toolbar(self, mpl_canvas:FigureCanvasTkAgg, 
+                    height:int = 32, mpl_place:bool = True) -> CustomToolbar:
+        """
+        Matplotlib toolbar.
+
+        Put the matplotlib toolbar in the window.
+
+        Args:
+            mpl_canvas (FigureCanvasTkAgg): Canvas figure.
+            height (int, optional): Toolbar height in pixels.
+            mpl_place (bool, optional): If you want 'mpl_canvas' not to change shape, 
+                leave it set to False.
+
+        Return:
+            CustomToolbar: Toolbar.
+        """
+
+        toolbar = CustomToolbar(mpl_canvas, self.root, color_btn=self.color_buttons, 
+                                color_bg=self.color_frame, color_act=self.color_button_act)
+        toolbar.config(bg=self.color_frame)
+        self.mpl_update(mpl_canvas, toolbar, height=height, mpl_place=mpl_place)
+
+        self.root.bind("<Configure>", 
+                       lambda x: self.mpl_update(mpl_canvas, 
+                                                toolbar, 
+                                                height=height, 
+                                                mpl_place=mpl_place))
+
+        return toolbar
+
+    def show(self, block:bool = True) -> None:
+        """
+        Show.
+
+        Show the window.
+
+        Args:
+            block (bool, optional): Blocks the process.
+        """
+
+        if block:
+            try: 
+                while self.root.winfo_exists():
+                    self.root.update_idletasks()
+                    self.root.update()
+            except tk.TclError: return
+        else:
+            if not self.root.winfo_exists():
+                return
+
+            self._after_id = self.root.after(50, lambda: self.show(block=False))
 
 def def_style(name:str, background:tuple = '#e5e5e5', 
               frames:str = 'SystemButtonFace', 
