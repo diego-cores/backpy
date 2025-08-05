@@ -217,13 +217,20 @@ class StrategyClass(ABC):
         self.__commission = commission
         self.__init_funds = init_funds
 
-        self.__orders = pd.DataFrame()
-        self.__positions = pd.DataFrame()
+        self.__orders = pd.DataFrame(columns=[
+            'order', 'date', 'orderPrice', 'amount', 'typeSide', 
+            'id', 'unionId', 'closeId', 'limit'])
+        self.__positions = pd.DataFrame(columns=[
+            'date', 'positionOpen', 'commission', 'amount',
+            'typeSide', 'unionId'])
 
         self.__orders['order'] = pd.Categorical(
             [], categories=['op', 'stopLoss', 'takeProfit'], ordered=True)
 
-        self.__pos_record = pd.DataFrame()
+        self.__pos_record = pd.DataFrame(columns=[
+            'date', 'positionOpen', 'commission', 'amount',
+            'typeSide', 'unionId', 'positionClose', 'positionDate',
+            'profitPer', 'profit'])
 
         for name in dir(self):
             attr = getattr(self, name)
@@ -497,6 +504,21 @@ class StrategyClass(ABC):
         if not self.__orders.empty:
             self.__orders = self.__orders.sort_values('order')
 
+            def get_union_cn(row, data):
+                """
+                """
+
+                leak  = self.__get_union(data, row['unionId'])
+                if leak is None:
+                    return
+
+                if leak['typeSide'].values[0] == row['typeSide']:
+                    return (not row['limit'] and self.__data['High'].values[-1]*(
+                            self.__spread_pct.get_taker()/100/2+1) >= row['orderPrice'])
+
+                return (not row['limit'] and self.__data['Low'].values[-1]*(
+                        self.__spread_pct.get_taker()/100/2+1) <= row['orderPrice'])
+
             def wrap_or(row):
                 """
                 """
@@ -506,46 +528,29 @@ class StrategyClass(ABC):
 
                 # ui == (position id)
                 if not self.__positions.empty:
-                    mask = (
-                        self.__orders['unionId'].str.split('/').str[-1].isin(
-                            self.__positions['unionId'].values) &
-                        (self.__orders['unionId'].str.split('/').str[0] == 'w')
-                    )
+                    split_union = self.__orders['unionId'].str.split('/', n=2, expand=True)
 
-                    self.__orders.loc[mask, 'unionId'] = self.__orders.loc[
-                        mask, 'unionId'].str.replace('w/', '')
+                    if len(split_union.columns) == 2:
+                        prefix = split_union[0]
+                        suffix = split_union[1]
 
-                    if (row['unionId'].split('/')[-1] 
-                        in self.__positions['unionId'].values):
-                        row['unionId'] = row['unionId'].split('/')[-1]
+                        mask = (suffix.isin(self.__positions['unionId'].values)) & (prefix == 'w')
+                        self.__orders.loc[mask, 'unionId'] = suffix[mask]
 
-                if row['unionId'].split('/')[0] == 'w':
+                    row_suffix = row['unionId'].split('/')[-1]
+                    if row_suffix in self.__positions['unionId'].values:
+                        row['unionId'] = row_suffix
+
+                if 'w/' in row['unionId']:
                     return
 
-                limit = (row['limit'] and self.__data['High'].iloc[-1]*(
+                limit = (row['limit'] and self.__data['High'].values[-1]*(
                     self.__spread_pct.get_taker()/100/2+1) >= row['orderPrice']
-                and self.__data['Low'].iloc[-1]*(
+                and self.__data['Low'].values[-1]*(
                     1-self.__spread_pct.get_taker()/100/2) <= row['orderPrice'])
 
-                def get_union_cn(data, type_side):
-                    """
-                    """
-
-                    leak  = self.__get_union(data, row['unionId'])
-                    if leak is None:
-                        return
-
-                    if leak['typeSide'].iloc[0] == type_side:
-                        #print(leak['typeSide'].iloc[0])
-                        return (not row['limit'] and self.__data['High'].iloc[-1]*(
-                                self.__spread_pct.get_taker()/100/2+1) >= row['orderPrice'])
-
-                    #print(leak['typeSide'].iloc[0], type_side)
-                    return (not row['limit'] and self.__data['Low'].iloc[-1]*(
-                            self.__spread_pct.get_taker()/100/2+1) <= row['orderPrice'])
-
-                ord_cn = get_union_cn(self.__orders, row['typeSide'])
-                pos_cn = get_union_cn(self.__positions, row['typeSide'])
+                ord_cn = get_union_cn(row, self.__orders)
+                pos_cn = get_union_cn(row, self.__positions)
                 cond = ord_cn or pos_cn or False
 
                 if (
@@ -553,8 +558,7 @@ class StrategyClass(ABC):
                     ):
 
                     self.__order_execute(row)
-                    if row.name in self.__orders.index:
-                        self.__orders = self.__orders.drop(row.name)
+                    self.__orders = self.__orders.drop(row.name, errors='ignore')
 
             self.__orders.apply(wrap_or, axis=1)
 
@@ -615,10 +619,11 @@ class StrategyClass(ABC):
         """
         """
 
-        position = self.__positions.iloc[[index]] 
+        position_serie = self.__positions.iloc[index]
+        pos_amount = position_serie['amount']
 
         if np.isnan(amount):
-            amount = position['amount'].iloc[0]
+            amount = pos_amount
 
         position_close = price
 
@@ -633,41 +638,57 @@ class StrategyClass(ABC):
             slippage = price*(self.__slippage_pct.get_taker()/100)
 
             position_close_spread = (position_close-spread-slippage 
-                                    if position['typeSide'].iloc[0] else position_close+spread+slippage)
+                                    if position_serie['typeSide']
+                                    else position_close+spread+slippage)
         else:
             return
 
         # Fill data.
-        position['positionClose'] = position_close_spread
-        position['positionDate'] = self.__data.index[-1]
-        open = position['positionOpen'].iloc[0]
+        position_serie['positionClose'] = position_close_spread
+        position_serie['positionDate'] = self.__data.index[-1]
+        open = position_serie['positionOpen']
 
-        position['profitPer'] = ((position_close_spread-open)/open*100 
-                            if position['typeSide'].iloc[0]
+        position_serie['profitPer'] = ((position_close_spread-open)/open*100 
+                            if position_serie['typeSide']
                             else (open-position_close_spread)/open*100)
 
-        if position['amount'].iloc[0] > amount:
+        if pos_amount > amount:
 
             self.__positions.iloc[index, self.__positions.columns.get_loc('amount')] -= amount
-            position['amount'] = amount
+            position_serie['amount'] = amount
         else:
-            self.__positions = self.__positions.drop(position.index)
+            self.__positions = self.__positions.drop(position_serie.name)
 
             self.__orders = self.__orders[
-                (position['unionId'].iloc[0] != self.__orders['unionId'].str.split('/').str[-1])
-                & (position['unionId'].iloc[0] != self.__orders['closeId'])]
+                (position_serie['unionId'] != self.__orders['unionId'].str.split('/').str[-1])
+                & (position_serie['unionId'] != self.__orders['closeId'])]
 
-        position['profit'] = (position['amount'].iloc[0]*position['profitPer'].iloc[0]/100-
-                        position['amount'].iloc[0]*(commission/100)-
-                        (position['amount'].iloc[0]*position['profitPer'].iloc[0]/100+
-                            position['amount'].iloc[0])*
-                            (position['commission']/100)
-                            if not np.isnan(position['amount'].iloc[0]) else np.nan)
+        if not np.isnan(pos_amount):
+            profit_per = position_serie['profitPer']
 
-        position['commission'] += commission
+            gross_profit = pos_amount * profit_per / 100
+            broker_fee = pos_amount * (commission / 100)
+            exit_fee = ((gross_profit + pos_amount) 
+                        * (position_serie['commission'] / 100))
 
-        self.__pos_record = pd.concat([self.__pos_record, position], 
-                                     ignore_index=True) 
+            position_serie['profit'] = gross_profit - broker_fee - exit_fee
+        else:
+            position_serie['profit'] = np.nan
+
+        position_serie['commission'] += commission
+
+        self.__pos_record.loc[len(self.__pos_record)] = {
+            'date':position_serie['date'],
+            'positionOpen':position_serie['positionOpen'],
+            'commission':position_serie['commission'],
+            'amount':position_serie['amount'],
+            'typeSide':position_serie['typeSide'],
+            'unionId':position_serie['unionId'],
+            'positionClose':position_serie['positionClose'],
+            'positionDate':position_serie['positionDate'],
+            'profitPer':position_serie['profitPer'],
+            'profit':position_serie['profit'],
+        }
 
     def __put_op(self, order:pd.Series):
         """
@@ -694,15 +715,14 @@ class StrategyClass(ABC):
             position_open = (position_price+spread+slippage
                             if order['typeSide'] else position_price-spread-slippage)
 
-        position = pd.DataFrame({'date':self.__data.index[-1],
-                                'positionOpen':position_open,
-                                'commission':commission,
-                                'amount':order['amount'],
-                                'typeSide':order['typeSide'],
-                                'unionId':order['unionId'],
-                                },index=[1])
-
-        self.__positions = pd.concat([self.__positions, position], ignore_index=True) 
+        self.__positions.loc[len(self.__positions)] = {
+            'date':self.__data.index[-1],
+            'positionOpen':position_open,
+            'commission':commission,
+            'amount':order['amount'],
+            'typeSide':order['typeSide'],
+            'unionId':order['unionId'],
+        }
 
     def __order_execute(self, order):
         """
@@ -712,25 +732,28 @@ class StrategyClass(ABC):
         match order['order']:
             case 'op':
                 self.__put_op(order)
+
             case 'takeProfit' | 'stopLoss':
                 if pd.isna(order['unionId']):
                     return
 
                 union_pos = self.__positions['unionId'][
-                    self.__positions['unionId'] == order['unionId']]
+                    self.__positions['unionId'].values == order['unionId']]
                 if union_pos.empty:
                     return 
 
                 self.__act_reduce(
                     self.__positions.index.get_loc(union_pos.index[0]), 
                         order['orderPrice'], amount=order['amount'])
+
             case 'takeLimit' | 'stopLimit':
                 pass
 
-        self.__orders = self.__orders[
-            (order['id'] != self.__orders['closeId'])
-            & (order['closeId'] != self.__orders['closeId'] 
-               if not pd.isna(order['closeId']) else True)]
+        mask = self.__orders['closeId'] != order['id']
+        if not pd.isna(order['closeId']):
+            mask &= self.__orders['closeId'] != order['closeId']
+
+        self.__orders = self.__orders[mask]
 
     def ord_put(self, order_type:str, price:float, 
                 amount:float = None, buy:bool = True, 
@@ -768,10 +791,9 @@ class StrategyClass(ABC):
         """
 
         if not data.empty:
-            mask = (data['unionId'] == union_id)
+            mask = (data['unionId'].values == union_id)
             if 'order' in data.columns:
-                mask &= (data['order'] == 'op')
-
+                mask &= (data['order'].values == 'op')
             data_leak = data[mask]
 
             return data_leak if not data_leak.empty else None
@@ -832,19 +854,19 @@ class StrategyClass(ABC):
             and order_type != 'op'):
             raise exception.OrderError("Invalid 'price' for order type.")
 
-        order = pd.DataFrame({'order':order_type,
-                            'date':self.__data.index[-1],
-                            'orderPrice':price,
-                            'amount':amount,
-                            'typeSide':buy,
-                            'id':StrategyClass.unique_id(),
-                            'unionId':union_id,
-                            'closeId':close_id,
-                            'limit':limit
-                            }, index=[1])
+        self.__orders.loc[len(self.__orders)] = {
+            'order':order_type,
+            'date':self.__data.index[-1],
+            'orderPrice':price,
+            'amount':amount,
+            'typeSide':buy,
+            'id':StrategyClass.unique_id(),
+            'unionId':union_id,
+            'closeId':close_id,
+            'limit':limit
+        }
 
-        self.__orders = pd.concat([self.__orders, order], ignore_index=True) 
-        return order['unionId']
+        return union_id
 
     def ord_rmv(self, index:int):
         """
@@ -865,8 +887,8 @@ class StrategyClass(ABC):
 
         union = self.__price_check(
             price=price, 
-            union_id=order['unionId'].iloc[0], 
-            type_side=order['typeSide'].iloc[0])
+            union_id=order['unionId'].values[0], 
+            type_side=order['typeSide'].values[0])
 
         if union and not price is None:
             self.__orders.loc[order.index, 'orderPrice'] = price
