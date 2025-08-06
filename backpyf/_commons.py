@@ -15,6 +15,7 @@ Variables:
 Hidden Variables:
     _icon: Icon currently used by the application (hidden variable).
     _init_funds: Initial capital for the backtesting (hidden variable).
+    _debug_: Variable used in debugging (wip)(hidden variable).
     __data_year_days: Number of operable days in 1 year (hidden variable).
     __data_width_day: Width of the day (hidden variable).
     __data_interval: Interval of the loaded data (hidden variable).
@@ -52,6 +53,8 @@ _icon = None
 __custom_plot = {}
 
 __binance_timeout = 0.08
+
+_debug_ = 0
 
 __COLORS = {
     'RED': "\033[91m",
