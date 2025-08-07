@@ -111,6 +111,7 @@ class StrategyClass(ABC):
         __data_all: DataFrame containing all data.
         __data_index: Index to cut data.
         __idc_data: Saved data from the indicators.
+        __buffer: Buffer to concatenate DataFrame.
 
     Methods:
         unique_id: .
@@ -209,6 +210,7 @@ class StrategyClass(ABC):
         self.__data_index = None
 
         self.__idc_data = {}
+        self.__buffer = {'__orders':[]}
 
         self.interval, self.icon, self.width = _data_info()
 
@@ -511,24 +513,17 @@ class StrategyClass(ABC):
 
                 return (not row['limit'] and lower <= row['orderPrice'])
 
-            split_union = self.__orders['unionId'].str.split('/', expand=True)
-            if len(split_union.columns) == 2:
-                prefix = split_union[0]
-                suffix = split_union[1]
-
-                mask = (suffix.isin(self.__positions['unionId'].values)) & (prefix == 'w')
-                self.__orders.loc[mask, 'unionId'] = suffix[mask]
-
             for index, row in self.__orders.iterrows():
                 if not index in self.__orders.index:
-                    return
+                    continue
 
                 row_split = row['unionId'].split('/')
                 if (row_split[0] == 'w' 
                     and row_split[-1] in self.__positions['unionId'].values):
-                    row['unionId'] = row_split[-1]
+
+                    row['unionId'] = self.__orders.loc[index, 'unionId'] = row_split[-1]
                 elif row_split[0] == 'w':
-                    return
+                    continue
 
                 limit = (row['limit'] and higher >= row['orderPrice']
                 and lower <= row['orderPrice'])
@@ -536,12 +531,17 @@ class StrategyClass(ABC):
                 ord_cn = get_union_cn(row, self.__orders)
                 pos_cn = get_union_cn(row, self.__positions)
 
-                if limit or ord_cn or pos_cn:
+                if limit or pos_cn or ord_cn:
                     self.__order_execute(row)
 
                     self.__orders = self.__orders.drop(index, errors='ignore')
 
         self.next()
+
+        if len(self.__buffer['__orders']) > 0:
+            self.__orders = pd.concat([self.__orders, 
+                                    pd.DataFrame(self.__buffer['__orders'])], ignore_index=True) 
+            self.__buffer['__orders'] = list()
 
     def unique_id(self = None):
         """
@@ -761,14 +761,15 @@ class StrategyClass(ABC):
     def __get_union(self, data, union_id):
         """
         """
+        if data.empty:
+            return None
 
-        if not data.empty:
-            mask = (data['unionId'].values == union_id)
-            if 'order' in data.columns:
-                mask &= (data['order'].values == 'op')
-            data_leak = data[mask]
+        mask = data['unionId'].values == union_id
+        if 'order' in data.columns:
+            mask &= data['order'].values == 'op'
+        data_leak = data[mask]
 
-            return data_leak if not data_leak.empty else None
+        return data_leak if not data_leak.empty else None
 
     def __price_check(self, price, union_id, type_side):
         """
@@ -826,7 +827,7 @@ class StrategyClass(ABC):
             and ~self.__price_check(price=price, union_id=union_id, type_side=buy)):
             raise exception.OrderError("Invalid 'price' for order type.")
 
-        order = pd.DataFrame({
+        order = {
             'order':order_type,
             'date':self.__data.index[-1],
             'orderPrice':price,
@@ -836,9 +837,9 @@ class StrategyClass(ABC):
             'unionId':union_id,
             'closeId':close_id,
             'limit':limit
-        }, index=[1])
+        }
 
-        self.__orders = pd.concat([self.__orders, order], ignore_index=True) 
+        self.__buffer['__orders'].append(order)
 
         return union_id
 
@@ -1025,7 +1026,7 @@ class StrategyClass(ABC):
         return flx.DataWrapper(data, columns=data_columns)
 
     def prev_orders(self, label:str = None, or_type:str = None, 
-                    union_id:dict = None, last:int = None) -> flx.DataWrapper:
+                    ids:dict = None, last:int = None) -> flx.DataWrapper:
         """
         Prev of active orders.
 
@@ -1038,7 +1039,7 @@ class StrategyClass(ABC):
             or_type (str, optional): If you want to filter only one type 
                 of operation you can do so with this argument.
                 Current types of orders: 'op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit'.
-            union_id (dict, optional): .
+            ids (dict, optional): Filter by id by making a dictionary with id_name:id.
             last (int, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
 
@@ -1069,9 +1070,9 @@ class StrategyClass(ABC):
                             Last has to be less than the length of 
                             'data' and greater than 0.
                             """, newline_exclude=True))
-        elif ((not isinstance(union_id, dict) and not union_id is None) 
-            or (isinstance(union_id, dict) 
-            and not set(union_id.keys()).issubset(('id','unionId','closeId')))):
+        elif ((not isinstance(ids, dict) and not ids is None) 
+            or (isinstance(ids, dict) 
+            and not set(ids.keys()).issubset(('id','unionId','closeId')))):
 
             raise ValueError(utils.text_fix(
                 "'union_id' with bad format or incorrect.", newline_exclude=True))
@@ -1079,9 +1080,19 @@ class StrategyClass(ABC):
         data_columns = __ord.columns
 
         if or_type != None:
-            __ord = __ord.loc[__ord['order'] == or_type]
-        if union_id != None:
-            __ord = __ord[__ord[list(union_id)].isin(union_id).all(axis=1)]
+            __ord = __ord[__ord['order'].values == or_type]
+        if ids != None:
+            mask = True
+
+            # Optimized code
+            if 'unionId' in ids:
+                mask &= __ord['unionId'].values == ids['unionId']
+            if 'id' in ids:
+                mask &= __ord['id'].values == ids['id']
+            if 'closeId' in ids:
+                mask &= __ord['closeId'].values == ids['closeId']
+
+            __ord = __ord[mask]
 
         if label == 'index': 
             return flx.DataWrapper(__ord.index, columns='index')
