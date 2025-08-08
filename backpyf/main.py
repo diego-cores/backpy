@@ -547,7 +547,9 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
 
     skip = max(1, _cm.__data.shape[0] // _cm.max_bar_updates)
 
-    for f in range(1, _cm.__data.shape[0]+1):
+    for f, _ in enumerate(_cm.__data.index):
+        f += 1
+
         if (progress and (f % skip == 0 or f >= _cm.__data.shape[0]) 
             and _cm.__data.shape[0] >= f):
 

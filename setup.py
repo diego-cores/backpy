@@ -23,8 +23,8 @@ setup(
     ],
     python_requires=">=3.9",
     install_requires=[
-        'pandas>=1.3.0',
-        'numpy>=1.16.5',
+        'pandas>=2.3.0',
+        'numpy>=2.3.2',
         'matplotlib>=3.7.5',
         'pillow>=11.3.0',
     ],
