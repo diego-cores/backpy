@@ -277,7 +277,7 @@ def load_yfinance_data(tickers:str = any,
 
         t = time() if progress else None
 
-        yf.set_tz_cache_location('.\yfinance_cache')
+        yf.set_tz_cache_location('.\\yfinance_cache')
         
         data = yf.download(tickers, start=start, 
                            end=end, interval=interval, 
