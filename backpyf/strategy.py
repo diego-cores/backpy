@@ -663,15 +663,15 @@ class StrategyClass(ABC):
         position_price = price
 
         if (
-            position_price >= self.__data['Close'].loc[date]*(
+            position_price > self.__data['Close'].loc[date]*(
                 self.__spread_pct.get_taker()/100/2+1)
-            or position_price <= self.__data['Close'].loc[date]*(
+            or position_price < self.__data['Close'].loc[date]*(
                 1-self.__spread_pct.get_taker()/100/2)
-            ):
+            ): # Maker
 
             position_open = position_price
             commission = self.__commission.get_maker()
-        else:
+        else: # Taker
             position_price = self.__data['Close'].loc[date]
 
             commission = self.__commission.get_taker()
@@ -728,7 +728,7 @@ class StrategyClass(ABC):
 
                 self.__act_reduce(
                     self.__positions.index.get_loc(union_pos.index[0]), 
-                        order[i('orderPrice')], amount=order[i('amount')])
+                        order[i('orderPrice')], amount=order[i('amount')], mode='taker')
 
             case 'takeLimit' | 'stopLimit':
                 pass
