@@ -511,7 +511,7 @@ class StrategyClass(ABC):
             data = np.hstack((self.__orders.index.values.reshape(-1, 1), 
                               self.__orders.values))
 
-            for row in data: # 0.18
+            for row in data:
                 if not row[i('index')] in self.__orders.index:
                     continue
 
@@ -532,17 +532,17 @@ class StrategyClass(ABC):
                             not row[i('limit')] and lower <= row[i('orderPrice')])
 
                 if limit or pos_cn:
-                    self.__order_execute(row) # 0.16
+                    self.__order_execute(row)
 
                     self.__orders = self.__orders.drop(row[i('index')], errors='ignore')
 
-        self.next() # 0.11
+        self.next()
 
         if '__orders' in self.__buffer and len(self.__buffer['__orders']) > 0:
             self.__orders = pd.concat([self.__orders, 
-                                    pd.DataFrame(self.__buffer['__orders'])], 
+                                    pd.DataFrame(self.__buffer['__orders'].tolist())], 
                                     ignore_index=True) 
-            self.__buffer['__orders'] = list()
+            self.__buffer['__orders'] = self.__buffer['__orders'][:0]
 
     def unique_id(self = None):
         """
@@ -623,21 +623,22 @@ class StrategyClass(ABC):
         position_frame['positionDate'] = self.__data.index[-1]
         open = position_series['positionOpen']
 
-        position_frame['profitPer'] = ((position_close_spread-open)/open*100 
-                            if position_series['typeSide']
-                            else (open-position_close_spread)/open*100)
+        if position_series['typeSide']:
+            profit_per_val = (position_close_spread-open)/open*100 
+        else:
+            profit_per_val = (open-position_close_spread)/open*100
+        position_frame['profitPer'] = profit_per_val
 
         if pos_amount > amount:
-
-            self.__positions.iloc[index, self.__positions.columns.get_loc(
-                'amount')] -= amount
+            self.__positions['amount'].values[index] -= amount
             position_frame['amount'] = amount
+
         else:
             self.__positions = self.__positions.drop(position_series.name)
 
             self.__orders = self.__orders[
-                (position_series['unionId'] != self.__orders['unionId'].str.split('/').str[-1])
-                & (position_series['unionId'] != self.__orders['closeId'])]
+                (position_series['unionId'] != self.__orders['unionId'].str.split('/').str[-1].values)
+                & (position_series['unionId'] != self.__orders['closeId'].values)]
 
         if not np.isnan(pos_amount):
             profit_per = position_frame['profitPer'].values[0]
@@ -808,7 +809,7 @@ class StrategyClass(ABC):
             if len(data) == 0:
                 return None, None
 
-            if type(data) is list:
+            if type(data) is np.ndarray:
                 leak = {k: [d[k] for d in data if d.get('unionId') == union_id and d.get('order') == 'op']
                         for k in data[0].keys()}
                 leak = leak if any(map(bool, leak.values())) else None
@@ -881,8 +882,8 @@ class StrategyClass(ABC):
         }
 
         if not '__orders' in self.__buffer:
-            self.__buffer['__orders'] = []
-        self.__buffer['__orders'].append(order)
+            self.__buffer['__orders'] = np.array([])
+        self.__buffer['__orders'] = np.append(self.__buffer['__orders'], order)
 
         return union_id
 
