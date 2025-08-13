@@ -650,7 +650,9 @@ class StrategyClass(ABC):
             mode (str, optional): Order type ('taker', 'maker').
         """
 
-        position_frame = self.__positions.iloc[[index]]
+        amount = amount or np.nan
+
+        position_frame = self.__positions.iloc[[index]].copy()
         position_series = position_frame.iloc[0]
 
         pos_amount = position_series['amount']
@@ -694,9 +696,10 @@ class StrategyClass(ABC):
             # Close and unionId
             self.__positions = self.__positions.drop(position_series.name)
 
-            self.__orders = self.__orders[
-                (position_series['unionId'] != self.__orders['unionId'].str.split('/').str[-1].values)
-                & (position_series['unionId'] != self.__orders['closeId'].values)]
+            if not self.__orders.empty:
+                self.__orders = self.__orders[
+                    (position_series['unionId'] != self.__orders['unionId'].str.split('/').str[-1].values)
+                    & (position_series['unionId'] != self.__orders['closeId'].values)]
 
         if not np.isnan(pos_amount):
             profit_per = position_frame['profitPer'].values[0]
@@ -894,17 +897,24 @@ class StrategyClass(ABC):
             if type(data) is np.ndarray:
                 leak = {k: [d[k] for d in data if d.get('unionId') == union_id and d.get('order') == 'op']
                         for k in data[0].keys()}
-                leak = leak if any(map(bool, leak.values())) else None
+
+                if any(map(bool, leak.values())):
+                    leak_type_side = leak['typeSide'][0]
+                else:
+                    return None, None
 
             else:
                 leak = self.__get_union(data=data, union_id=union_id)
 
-            if not leak is None:
-                comparision = leak['typeSide'][0] == type_side
+                if not leak is None:
+                    leak_type_side = leak['typeSide'].iloc[0]
+                else:
+                    return None, None
 
-                func = np.max if comparision else np.min
-                return comparision, func(leak[col_name])
-            return None, None
+            comparision = leak_type_side == type_side
+
+            func = np.max if comparision else np.min
+            return comparision, func(leak[col_name])
 
         comp_ord, union_ord = get_union_price(self.__orders, 'orderPrice')
         comp_pos, union_pos = get_union_price(self.__positions, 'positionOpen')
