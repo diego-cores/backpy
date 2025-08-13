@@ -104,31 +104,34 @@ class StrategyClass(ABC):
         __spread_pct: Closing and opening spread.
         __slippage_pct: Closing and opening slippage.
         __commission: Commission per trade.
-        __trade: DataFrame for new trades.
-        __trades_ac: DataFrame for open trades.
-        __trades_cl: DataFrame for closed trades.
+        __orders: Active orders.
+        __positions: Active positions.
+        __pos_record: Position history.
         __data: DataFrame containing cuted data.
         __data_all: DataFrame containing all data.
         __data_index: Index to cut data.
         __idc_data: Saved data from the indicators.
         __buffer: Buffer to concatenate DataFrame.
+        __orders_columns: When '__before' is executed, 
+            the '__orders' columns are saved.
+        __ff: Lambda to find the index of each column in '__orders_columns'.
 
     Methods:
-        unique_id: .
-        act_taker: .
-        act_limit: .
-        act_close: .
-        ord_put: .
-        ord_rmv: .
-        ord_mod: .
+        unique_id: Generates a random id quickly.
+        act_taker: Open a position.
+        act_limit: Open a limit order.
+        act_close: Close an action.
+        ord_put: Place a new order.
+        ord_rmv: Remove the order you want.
+        ord_mod: Modify the order you want.
         get_spread: Get __spread_pct.
         get_slippage: Get __slippage_pct.
         get_commission: Returns the commission per trade.
         get_init_funds: Returns the initial funds for the strategy.
         prev: Recovers all step data.
-        prev_orders: .
-        prev_positions: .
-        prev_pos_rec: .
+        prev_orders: Return '__orders' values.
+        prev_positions: Return '__positions' values.
+        prev_positions_rec: Return '__pos_record' values.
         idc_fibonacci: Calculates Fibonacci retracement levels.
         idc_ema: Calculates the Exponential Moving Average (EMA) indicator.
         idc_sma: Calculates the Simple Moving Average (SMA) indicator.
@@ -146,11 +149,12 @@ class StrategyClass(ABC):
         idc_atr: Calculates the Average True Range (ATR).
 
     Private Methods:
-        __act_reduce: .
-        __put_op: .
-        __ord_put: .
-        __order_execute: .
-        __price_check: .
+        __act_reduce: Reduce a position or close it.
+        __put_pos: Put a position in the simulation.
+        __put_ord: Place a new order.
+        __order_execute: Executes an order based on the order type.
+        __get_union: Find rows with the same 'unionId'.
+        __price_check: Checks if 'price' is a correct value for the position.
         __uidc: Send data argument to the indicator and wraps it with '__data_store'.
         __func_idg: Generates an id for a function call.
         __store_decorator: Give '_store' attribute to a function.
@@ -179,9 +183,9 @@ class StrategyClass(ABC):
     """
 
     def __init__(self, data:pd.DataFrame = pd.DataFrame(), 
-                 spread_pct:flx.CostsValue = 0, 
-                 commission:flx.CostsValue = 0, 
-                 slippage_pct:flx.CostsValue = 0, 
+                 spread_pct:flx.CostsValue = flx.CostsValue(0), 
+                 commission:flx.CostsValue = flx.CostsValue(0), 
+                 slippage_pct:flx.CostsValue = flx.CostsValue(0), 
                  init_funds:int = 0) -> None: 
         """
         __init__
@@ -195,7 +199,7 @@ class StrategyClass(ABC):
             spread_pct (CostsValue, optional): Spread per trade.
             commission (CostsValue, optional): Commission per trade.
             slippage_pct (CostsValue, optional): Slippage per trade.
-            init_founds (int, optional): Initial funds for the strategy.
+            init_funds (int, optional): Initial funds for the strategy.
         """
 
         self.open = None
@@ -211,11 +215,8 @@ class StrategyClass(ABC):
 
         self.__idc_data = {}
         self.__buffer = {}
-        self.__orders_columns = [
-            'index', 'order', 'date', 'orderPrice', 'amount', 'typeSide', 
-            'typeSideOrd', 'id', 'unionId', 'closeId', 'limit'
-        ]
-        self.__ff = lambda n: self.__orders_columns.index(n)
+        self.__orders_columns = []
+        self.__ff = lambda n: np.where(self.__orders_columns == n)[0][0]
 
         self.interval, self.icon, self.width = _data_info()
 
@@ -226,12 +227,12 @@ class StrategyClass(ABC):
 
         self.__orders = pd.DataFrame()
         self.__positions = pd.DataFrame()
+        self.__pos_record = pd.DataFrame()
 
         self.__orders['order'] = pd.Categorical(
             [], categories=['op', 'stopLoss', 'takeProfit'], ordered=True)
 
-        self.__pos_record = pd.DataFrame()
-
+        # Set decorators
         for name in dir(self):
             attr = getattr(self, name)
 
@@ -467,7 +468,7 @@ class StrategyClass(ABC):
 
     def __data_updater(self, index:int) -> None:
         """
-        Data updater.
+        Data updater
 
         Updates all data with the provided DataFrame.
 
@@ -490,14 +491,15 @@ class StrategyClass(ABC):
 
     def __before(self, index:int) -> None:
         """
-        Before.
+        Before
 
-        This function is used to run trades and other operations.
+        This function is used to run estrategy and calculate orders.
 
         Args:
             index (int): Current data index.
         """
 
+        # Updates data to the strategy
         self.__data_updater(index=index)
 
         # Check operations
@@ -508,6 +510,8 @@ class StrategyClass(ABC):
             lower = self.__data['Low'].values[-1]*(1-self.__spread_pct.get_taker()/100/2)
             i = self.__ff
 
+            # Create a ndarray to iterate faster
+            self.__orders_columns = np.append('index', self.__orders.columns.values)
             data = np.hstack((self.__orders.index.values.reshape(-1, 1), 
                               self.__orders.values))
 
@@ -515,6 +519,7 @@ class StrategyClass(ABC):
                 if not row[i('index')] in self.__orders.index:
                     continue
 
+                # If the id contains 'w' it means that it waits for the position with the same id
                 if not isinstance(row[i('unionId')], float):
                     row_split = row[i('unionId')].split('/')
                     if (row_split[0] == 'w' and not self.__positions.empty
@@ -524,40 +529,62 @@ class StrategyClass(ABC):
                     elif row_split[0] == 'w':
                         continue
 
+                # Maker
                 limit = (row[i('limit')] and higher >= row[i('orderPrice')]
                 and lower <= row[i('orderPrice')])
 
+                # Taker
                 pos_cn = (not row[i('limit')] and higher >= row[i('orderPrice')] 
                             if row[i('typeSide')] else
                             not row[i('limit')] and lower <= row[i('orderPrice')])
 
+                # Execute order and delete
                 if limit or pos_cn:
                     self.__order_execute(row)
 
                     self.__orders = self.__orders.drop(row[i('index')], errors='ignore')
 
+        # Execute strategy
         self.next()
 
+        # Concat orders
         if '__orders' in self.__buffer and len(self.__buffer['__orders']) > 0:
             self.__orders = pd.concat([self.__orders, 
                                     pd.DataFrame(self.__buffer['__orders'].tolist())], 
                                     ignore_index=True) 
             self.__buffer['__orders'] = self.__buffer['__orders'][:0]
 
-    def unique_id(self = None):
+    def unique_id(self = None) -> str:
         """
+        Unique id
+
+        Generates a random id quickly.
+
+        Return:
+            str: An unique id.
         """
 
         return str(uuid4().int)
 
-    def act_taker(self, buy:bool = True, amount:float = np.nan):
+    def act_taker(self, buy:bool = True, 
+                  amount:float = np.nan) -> str:
         """
+        Action taker
+
+        Open a position.
+
+        Args:
+            buy (bool, optional): Position type, True = buy.
+            amount (float, optional): Position amount, np.nan equals 0.
+
+        Return:
+            str: unionId integer.
         """
 
         buy = bool(buy)
         ui = self.unique_id()
 
-        self.__put_op(
+        self.__put_pos(
             price=self.__data["Close"].iloc[-1],
             date=self.__data.index[-1],
             amount=amount,
@@ -567,13 +594,26 @@ class StrategyClass(ABC):
 
         return ui
 
-    def act_limit(self, price:float, buy:bool = True, amount:float = np.nan):
+    def act_limit(self, price:float, buy:bool = True, 
+                  amount:float = np.nan) -> str:
         """
+        Action limit
+
+        Open a limit order.
+
+        Args:
+            price (float): Price where to open it, 
+                if it is within the 'spread' it will be 'taker'.
+            buy (bool, optional): Position type, True = buy.
+            amount (float, optional): Position amount, np.nan equals 0.
+
+        Return:
+            str: unionId integer.
         """
 
         buy = bool(buy)
 
-        return self.__ord_put(
+        return self.__put_ord(
             'op', 
             price=price, 
             amount=amount, 
@@ -583,14 +623,31 @@ class StrategyClass(ABC):
             limit=True,
         )
 
-    def act_close(self, index):
+    def act_close(self, index:int) -> None:
         """
+        Action close
+
+        Close an action.
+        Will be applied as a 'taker'.
+
+        Args:
+            index (int): Real index of the position.
         """
 
         self.__act_reduce(index, self.__data['Close'].iloc[-1], mode='taker')
 
-    def __act_reduce(self, index, price, amount = None, mode = 'taker'):
+    def __act_reduce(self, index:int, price:float, 
+                     amount:float = None, mode:str = 'taker') -> None:
         """
+        Action reduce
+
+        Reduce a position or close it.
+
+        Args:
+            index (int): Real index of the position.
+            price (float): Price where to reduce.
+            amount (float, optional): Amount to reduce. None to close it.
+            mode (str, optional): Order type ('taker', 'maker').
         """
 
         position_frame = self.__positions.iloc[[index]]
@@ -602,11 +659,11 @@ class StrategyClass(ABC):
 
         position_close = price
 
-        if mode == 'maker':
+        if mode.lower() == 'maker':
 
             commission = self.__commission.get_maker()
             position_close_spread = price
-        elif mode == 'taker':
+        elif mode.lower() == 'taker':
 
             commission = self.__commission.get_taker()
             spread = price*(self.__spread_pct.get_taker()/100/2)
@@ -634,6 +691,7 @@ class StrategyClass(ABC):
             position_frame['amount'] = amount
 
         else:
+            # Close and unionId
             self.__positions = self.__positions.drop(position_series.name)
 
             self.__orders = self.__orders[
@@ -657,8 +715,19 @@ class StrategyClass(ABC):
         self.__pos_record = pd.concat([self.__pos_record, position_frame], 
                                       ignore_index=True) 
 
-    def __put_op(self, price, date, amount, type_side, union_id):
+    def __put_pos(self, price:float, date:float, 
+                  amount:float, type_side:bool, union_id:str) -> None:
         """
+        Put position
+
+        Put a position in the simulation.
+
+        Args:
+            price (float): Position price.
+            date (float): Date of the order.
+            amount (float): Position amount.
+            type_side (bool): Position type.
+            union_id (str): unionId that will have.
         """
 
         position_price = price
@@ -693,8 +762,16 @@ class StrategyClass(ABC):
 
         self.__positions = pd.concat([self.__positions, position], ignore_index=True) 
 
-    def __order_execute(self, order):
+    def __order_execute(self, order:np.ndarray) -> None:
         """
+        Order execute
+
+        Order execution here each order is executed 
+            according to its type and a mask is applied for 'closeId'.
+
+        Args:
+            order (ndarray): Array with the order.
+                'self.__ff' will be used to filter by words.
         """
 
         i = self.__ff
@@ -702,7 +779,7 @@ class StrategyClass(ABC):
         # Hello world
         match order[i('order')]:
             case 'op':
-                self.__put_op(
+                self.__put_pos(
                     price=order[i('orderPrice')],
                     date=order[i('date')],
                     amount=order[i('amount')],
@@ -719,6 +796,7 @@ class StrategyClass(ABC):
                 if union_pos.empty:
                     return 
 
+                # Gap case
                 min_gap = min(self.__data['Open'].values[-1], 
                               self.__data['Close'].values[-2])
                 max_gap = max(self.__data['Open'].values[-1], 
@@ -731,56 +809,33 @@ class StrategyClass(ABC):
                     self.__positions.index.get_loc(union_pos.index[0]), 
                         order[i('orderPrice')], amount=order[i('amount')], mode='taker')
 
+            # Work in progress
             case 'takeLimit' | 'stopLimit':
                 pass
 
+        # Del closeId orders
         mask = self.__orders['closeId'].values != order[i('id')]
         if not pd.isna(order[i('closeId')]):
             mask &= self.__orders['closeId'].values != order[i('closeId')]
 
         self.__orders = self.__orders[mask]
 
-    def ord_put(self, order_type:str, price:float, 
-                amount:float = None, buy:bool = True, 
-                union_id:int = None, close_id:int = None):
+    def __get_union(self, data:pd.DataFrame, union_id:str) -> pd.DataFrame:
         """
+        Get union
+
+        Get all rows from 'data' that have 'union_id' 
+            and are 'op' if it has an 'order' column.
+
+        Args:
+            data (DataFrame): Data to put the mask. 
+            union_id (str): unionId to filter.
+
+        Return:
+            DataFrame: Resulting dataframe with 
+                the rows that meet the mask.
         """
 
-        if not order_type in (
-            'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit'):
-            raise ValueError('Bad op type')
-
-        last_data = None
-        if not self.__positions.empty:
-            last_data = self.__positions
-        elif '__orders' in self.__buffer and len(self.__buffer['__orders']) > 0:
-            last_data = self.__buffer['__orders'][-1]
-        elif not self.__orders.empty:
-            last_data = self.__orders
-        elif not self.__pos_record.empty:
-            last_data = self.__pos_record
-
-        last_ui = None
-        if isinstance(last_data, dict):
-            last_ui = last_data['unionId']
-        elif isinstance(last_data, pd.DataFrame):
-            last_ui = last_data['unionId'].values[-1]
-
-        union_id = union_id or (last_ui.split('/')[-1] if last_ui else 0)
-
-        return self.__ord_put(
-            order_type, 
-            price=price, 
-            amount=amount, 
-            buy=buy, 
-            union_id=union_id,
-            close_id=close_id,
-            limit=True if order_type in ('stopLimit', 'takeLimit') else False,
-        )
-
-    def __get_union(self, data, union_id):
-        """
-        """
         if data.empty:
             return None
 
@@ -791,8 +846,22 @@ class StrategyClass(ABC):
 
         return data_leak if not data_leak.empty else None
 
-    def __price_check(self, price, union_id, type_side):
+    def __price_check(self, price:float, union_id:str, 
+                      type_side:bool) -> tuple:
         """
+        Price check
+
+        Checks if 'price' is a correct value for the position 
+            type associated with 'union_id' based on 'type_side'.
+
+        Args:
+            price (float): Price to be verified. 
+            union_id (str): Associated unionId.
+            type_side (bool): Associated typeSide.
+
+        Return:
+            tuple: Condition of 'typeSide' equals and 
+                True if correct False if not.
         """
 
         if pd.isna(union_id):
@@ -801,8 +870,21 @@ class StrategyClass(ABC):
         union_id = union_id.split('/')[-1]
         func = np.max if type_side else np.min
 
-        def get_union_price(data, col_name):
+        def get_union_price(data, col_name:str) -> tuple:
             """
+            Get union price
+
+            Finds positions with the same 'unionId' and 
+                returns the result of passing 'col_name' to 'func'.
+            'func' and 'unionId' external variables.
+
+            Args:
+                data: Data where to search. 
+                col_name (str): Column to pass through 'func'.
+
+            Return:
+                tuple: Condition of 'typeSide' equals and 
+                    result of 'func' on 'col_name'.
             """
 
             nonlocal func
@@ -841,10 +923,30 @@ class StrategyClass(ABC):
         price_cn = func([union_pos, union_ord, union_ord_bff])
         return comp, price >= price_cn if func == np.max else price <= price_cn
 
-    def __ord_put(self, order_type:str, price:float, 
+    def __put_ord(self, order_type:str, price:float, 
                   amount:float = None, buy:bool = True, wait:bool = True,
-                  union_id:int = None, close_id:int = None, limit:bool = False):
+                  union_id:int = None, close_id:int = None, limit:bool = False) -> str:
         """
+        Put order
+
+        Place a new order.
+
+        Args:
+            order_type (str): Order type 
+                ('op', 'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit').
+            price (float): Order price.
+            amount (float, optional): Order amount, None takes the total.
+            buy (bool, optional): Order type (only works on 'op' type).
+            wait (bool, optional): Indicates if the order waits for an open 
+                position with the same unionId.
+            union_id (int, optional): unionId in charge of connecting to the 
+                desired position, if left as None the last one will be used.
+            close_id (int, optional): closeId responsible for closing the 
+                order if an order with the same closeId or id is closed.
+            limit (bool, optional): Set to True if the order is Maker.
+
+        Return:
+            str: unionId integer.
         """
 
         amount = amount or np.nan
@@ -887,8 +989,68 @@ class StrategyClass(ABC):
 
         return union_id
 
-    def ord_rmv(self, index:int):
+    def ord_put(self, order_type:str, price:float, 
+                amount:float = None, union_id:int = None, 
+            close_id:int = None) -> str:
         """
+        Order put
+
+        Place a new order.
+
+        Args:
+            order_type (str): Order type 
+                ('stopLoss', 'takeProfit', 'takeLimit', 'stopLimit').
+            price (float): Order price.
+            amount (float, optional): Order amount, None takes the total.
+            union_id (int, optional): unionId in charge of connecting to the 
+                desired position, if left as None the last one will be used.
+            close_id (int, optional): closeId responsible for closing the 
+                order if an order with the same closeId or id is closed.
+
+        Return:
+            str: unionId integer.
+        """
+
+        if not order_type in (
+            'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit'):
+            raise ValueError('Bad op type')
+
+        # Last unionId
+        last_data = None
+        if not self.__positions.empty:
+            last_data = self.__positions
+        elif '__orders' in self.__buffer and len(self.__buffer['__orders']) > 0:
+            last_data = self.__buffer['__orders'][-1]
+        elif not self.__orders.empty:
+            last_data = self.__orders
+        elif not self.__pos_record.empty:
+            last_data = self.__pos_record
+
+        last_ui = None
+        if isinstance(last_data, dict):
+            last_ui = last_data['unionId']
+        elif isinstance(last_data, pd.DataFrame):
+            last_ui = last_data['unionId'].values[-1]
+
+        union_id = union_id or (last_ui.split('/')[-1] if last_ui else 0)
+
+        return self.__put_ord(
+            order_type, 
+            price=price, 
+            amount=amount,
+            union_id=union_id,
+            close_id=close_id,
+            limit=True if order_type in ('stopLimit', 'takeLimit') else False,
+        )
+
+    def ord_rmv(self, index:int) -> None:
+        """
+        Order remove
+
+        Remove the order you want.
+
+        Args:
+            index (int): Real index of the order to be deleted.
         """
 
         order = self.__orders.iloc[[index]]
@@ -898,8 +1060,19 @@ class StrategyClass(ABC):
             (order['id'].iloc[0] != self.__orders['unionId'].str.split('/').str[-1])
             & (order['id'].iloc[0] != self.__orders['closeId'])]
 
-    def ord_mod(self, index:int, price:float = None, amount:float = None):
+    def ord_mod(self, index:int, price:float = None, amount:float = None) -> None:
         """
+        Order modify
+
+        Modify the order you want.
+
+        Args:
+            index (int): Real index of the order to be modified.
+            price (float, optional): New order price leave as None 
+                if you do not want to change it.
+            amount (float, optional): New order amount leave as None 
+                if you do not want to change it. 
+                Leave it as np.nan if you want to remove the amount.
         """
 
         order = self.__orders.iloc[[index]]
@@ -963,11 +1136,11 @@ class StrategyClass(ABC):
 
         return flx.DataWrapper(data, columns=data_columns)
 
-    def prev_pos_rec(self, label:str = None, last:int = None) -> flx.DataWrapper:
+    def prev_positions_rec(self, label:str = None, last:int = None) -> flx.DataWrapper:
         """
         Prev of trades closed.
 
-        This function returns the values of `trades_cl`.
+        This function returns the values of `pos_record`.
 
         Args:
             label (str, optional): Data column to return. If None, all columns 
@@ -977,13 +1150,13 @@ class StrategyClass(ABC):
                 present. If None, data for all times is returned.
 
         Info:
-            `__pos_record` columns.
+            `pos_record` columns.
 
             - date: Creation date.
             - positionOpen: Opening price.
             - commission: Position commissions.
             - amount: Position amount
-            - typeSide: Position type True for buy.
+            - typeSide: Position type.
             - unionId: Id linked to orders.
             - positionClose: Closing price.
             - positionDate: Closing date.
@@ -1022,7 +1195,7 @@ class StrategyClass(ABC):
         """
         Prev of trades active.
 
-        This function returns the values of `trades_ac`.
+        This function returns the values of `positions`.
 
         Args:
             label (str, optional): Data column to return. If None, all columns 
@@ -1032,7 +1205,7 @@ class StrategyClass(ABC):
                 present. If None, data for all times is returned.
 
         Info:
-            `__positions` columns.
+            `positions` columns.
 
             - date: Creation date.
             - positionOpen: Opening price.
@@ -1074,7 +1247,7 @@ class StrategyClass(ABC):
         """
         Prev of active orders.
 
-        This function returns the values of `__orders`.
+        This function returns the values of `orders`.
 
         Args:
             label (str, optional): Data column to return. If None, all columns 
@@ -1088,13 +1261,14 @@ class StrategyClass(ABC):
                 present. If None, data for all times is returned.
 
         Info:
-            `__orders` columns.
+            `orders` columns.
 
             - order: Order type ('op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit').
             - date: Creation date.
             - orderPrice: Execution price.
             - amount: Amount to be executed.
-            - typeSide: Order type True for buy.
+            - typeSide: Position type.
+            - typeSideOrd: Order type True for positive type.
             - id: Unique order ID.
             - unionId: Linked id to position.
             - closeId: Close link.
