@@ -105,6 +105,7 @@ class StrategyClass(ABC):
         __slippage_pct: Closing and opening slippage.
         __commission: Commission per trade.
         __orders: Active orders.
+        __orders_order: Order type priority.
         __positions: Active positions.
         __pos_record: Position history.
         __data: DataFrame containing cuted data.
@@ -115,6 +116,7 @@ class StrategyClass(ABC):
         __orders_columns: When '__before' is executed, 
             the '__orders' columns are saved.
         __ff: Lambda to find the index of each column in '__orders_columns'.
+        __to_delate: Lists of indexes to remove from lists.
 
     Methods:
         unique_id: Generates a random id quickly.
@@ -149,6 +151,7 @@ class StrategyClass(ABC):
         idc_atr: Calculates the Average True Range (ATR).
 
     Private Methods:
+        __del: Adds items to '__to_delete'.
         __act_reduce: Reduce a position or close it.
         __put_pos: Put a position in the simulation.
         __put_ord: Place a new order.
@@ -216,7 +219,7 @@ class StrategyClass(ABC):
         self.__idc_data = {}
         self.__buffer = {}
         self.__orders_columns = []
-        self.__ff = lambda n: np.where(self.__orders_columns == n)[0][0]
+        self.__ff = lambda n: self.__orders_columns.index(n)
 
         self.interval, self.icon, self.width = _data_info()
 
@@ -225,12 +228,12 @@ class StrategyClass(ABC):
         self.__commission = commission
         self.__init_funds = init_funds
 
-        self.__orders = pd.DataFrame()
+        self.__orders = []
         self.__positions = pd.DataFrame()
         self.__pos_record = pd.DataFrame()
 
-        self.__orders['order'] = pd.Categorical(
-            [], categories=['op', 'stopLoss', 'takeProfit'], ordered=True)
+        self.__orders_order = {'op': 0, 'stopLoss': 1, 'takeProfit': 2}
+        self.__to_delate = {}
 
         # Set decorators
         for name in dir(self):
@@ -503,56 +506,71 @@ class StrategyClass(ABC):
         self.__data_updater(index=index)
 
         # Check operations
-        if not self.__orders.empty:
-            self.__orders = self.__orders.sort_values('order')
+        if self.__orders:
+            self.__orders.sort(key=lambda x: self.__orders_order.get(x['order'], 99))
 
             higher = self.__data['High'].values[-1]*(self.__spread_pct.get_taker()/100/2+1)
             lower = self.__data['Low'].values[-1]*(1-self.__spread_pct.get_taker()/100/2)
+
+            self.__to_delate.update({'__orders':set()})
             i = self.__ff
 
-            # Create a ndarray to iterate faster
-            self.__orders_columns = np.append('index', self.__orders.columns.values)
-            data = np.hstack((self.__orders.index.values.reshape(-1, 1), 
-                              self.__orders.values))
-
-            for row in data:
-                if not row[i('index')] in self.__orders.index:
+            for i, row in enumerate(self.__orders):
+                if i in self.__to_delate['__orders']:
                     continue
 
                 # If the id contains 'w' it means that it waits for the position with the same id
-                if not isinstance(row[i('unionId')], float):
-                    row_split = row[i('unionId')].split('/')
+                if not isinstance(row['unionId'], float):
+                    row_split = row['unionId'].split('/')
                     if (row_split[0] == 'w' and not self.__positions.empty
                         and row_split[-1] in self.__positions['unionId'].values):
 
-                        row[i('unionId')] = self.__orders.at[row[i('index')], 'unionId'] = row_split[-1]
+                        row['unionId'] = self.__orders[i]['unionId'] = row_split[-1]
                     elif row_split[0] == 'w':
                         continue
 
                 # Maker
-                limit = (row[i('limit')] and higher >= row[i('orderPrice')]
-                and lower <= row[i('orderPrice')])
+                limit = (row['limit'] and higher >= row['orderPrice']
+                and lower <= row['orderPrice'])
 
                 # Taker
-                pos_cn = (not row[i('limit')] and higher >= row[i('orderPrice')] 
-                            if row[i('typeSide')] else
-                            not row[i('limit')] and lower <= row[i('orderPrice')])
+                pos_cn = (not row['limit'] and higher >= row['orderPrice'] 
+                            if row['typeSide'] else
+                            not row['limit'] and lower <= row['orderPrice'])
 
                 # Execute order and delete
                 if limit or pos_cn:
                     self.__order_execute(row)
 
-                    self.__orders = self.__orders.drop(row[i('index')], errors='ignore')
+                    self.__del('__orders', [i])
+
+            if '__orders' in self.__to_delate and len(self.__to_delate['__orders']) > 0:
+                for i in sorted(self.__to_delate['__orders'], reverse=True):
+                    del self.__orders[i]
 
         # Execute strategy
         self.next()
 
         # Concat orders
         if '__orders' in self.__buffer and len(self.__buffer['__orders']) > 0:
-            self.__orders = pd.concat([self.__orders, 
-                                    pd.DataFrame(self.__buffer['__orders'].tolist())], 
-                                    ignore_index=True) 
+            self.__orders.extend(self.__buffer['__orders'])
             self.__buffer['__orders'] = self.__buffer['__orders'][:0]
+
+    def __del(self, name:str, index:list) -> None:
+        """
+        Delete
+
+        Adds items to '__to_delete'.
+
+        Args:
+            name (str): '__to_delete' key to save, if it doesn't exist create it.
+            index (list): list of indexes to save.
+        """
+
+        if name not in self.__to_delate:
+            self.__to_delate.update({name:set(index)}); return
+
+        self.__to_delate[name].update(index)
 
     def unique_id(self = None) -> str:
         """
@@ -696,10 +714,12 @@ class StrategyClass(ABC):
             # Close and unionId
             self.__positions = self.__positions.drop(position_series.name)
 
-            if not self.__orders.empty:
-                self.__orders = self.__orders[
-                    (position_series['unionId'] != self.__orders['unionId'].str.split('/').str[-1].values)
-                    & (position_series['unionId'] != self.__orders['closeId'].values)]
+            if self.__orders:
+                self.__del('__orders', [
+                    i for i,d in enumerate(self.__orders) 
+                    if position_series['unionId'] in (d.get('unionId').split('/')[-1], 
+                                                      d.get('closeId'))
+                ])
 
         if not np.isnan(pos_amount):
             profit_per = position_frame['profitPer'].values[0]
@@ -780,14 +800,14 @@ class StrategyClass(ABC):
         i = self.__ff
 
         # Hello world
-        match order[i('order')]:
+        match order['order']:
             case 'op':
                 self.__put_pos(
-                    price=order[i('orderPrice')],
-                    date=order[i('date')],
-                    amount=order[i('amount')],
-                    type_side=order[i('typeSideOrd')],
-                    union_id=order[i('unionId')]
+                    price=order['orderPrice'],
+                    date=order['date'],
+                    amount=order['amount'],
+                    type_side=order['typeSideOrd'],
+                    union_id=order['unionId']
                 )
 
             case 'takeProfit' | 'stopLoss':
@@ -795,7 +815,7 @@ class StrategyClass(ABC):
                     return
 
                 union_pos = self.__positions['unionId'][
-                    self.__positions['unionId'].values == order[i('unionId')]]
+                    self.__positions['unionId'].values == order['unionId']]
                 if union_pos.empty:
                     return 
 
@@ -805,23 +825,22 @@ class StrategyClass(ABC):
                 max_gap = max(self.__data['Open'].values[-1], 
                               self.__data['Close'].values[-2])
 
-                if order[i('orderPrice')] > min_gap and order[i('orderPrice')] < max_gap:
-                    order[i('orderPrice')] = self.__data['Open'].values[-1]
+                if order['orderPrice'] > min_gap and order['orderPrice'] < max_gap:
+                    order['orderPrice'] = self.__data['Open'].values[-1]
 
                 self.__act_reduce(
                     self.__positions.index.get_loc(union_pos.index[0]), 
-                        order[i('orderPrice')], amount=order[i('amount')], mode='taker')
+                        order['orderPrice'], amount=order['amount'], mode='taker')
 
             # Work in progress
             case 'takeLimit' | 'stopLimit':
                 pass
 
         # Del closeId orders
-        mask = self.__orders['closeId'].values != order[i('id')]
-        if not pd.isna(order[i('closeId')]):
-            mask &= self.__orders['closeId'].values != order[i('closeId')]
-
-        self.__orders = self.__orders[mask]
+        self.__del('__orders', [
+            i for i, d in enumerate(self.__orders)
+            if d.get('closeId') in (order['id'], order['closeId'])
+        ])
 
     def __get_union(self, data:pd.DataFrame, union_id:str) -> pd.DataFrame:
         """
@@ -894,15 +913,15 @@ class StrategyClass(ABC):
             if len(data) == 0:
                 return None, None
 
-            if type(data) is np.ndarray:
-                leak = {k: [d[k] for d in data if d.get('unionId') == union_id and d.get('order') == 'op']
+            if type(data) is list:
+                leak = {k: [d[k] for d in data if d.get('unionId') == union_id 
+                            and d.get('order', 'op') == 'op']
                         for k in data[0].keys()}
 
                 if any(map(bool, leak.values())):
                     leak_type_side = leak['typeSide'][0]
                 else:
                     return None, None
-
             else:
                 leak = self.__get_union(data=data, union_id=union_id)
 
@@ -994,8 +1013,8 @@ class StrategyClass(ABC):
         }
 
         if not '__orders' in self.__buffer:
-            self.__buffer['__orders'] = np.array([])
-        self.__buffer['__orders'] = np.append(self.__buffer['__orders'], order)
+            self.__buffer['__orders'] = []
+        self.__buffer['__orders'].append(order)
 
         return union_id
 
@@ -1029,10 +1048,10 @@ class StrategyClass(ABC):
         last_data = None
         if not self.__positions.empty:
             last_data = self.__positions
-        elif '__orders' in self.__buffer and len(self.__buffer['__orders']) > 0:
+        elif '__orders' in self.__buffer and self.__buffer['__orders']:
             last_data = self.__buffer['__orders'][-1]
-        elif not self.__orders.empty:
-            last_data = self.__orders
+        elif not self.__orders:
+            last_data = self.__orders[-1]
         elif not self.__pos_record.empty:
             last_data = self.__pos_record
 
@@ -1053,7 +1072,7 @@ class StrategyClass(ABC):
             limit=True if order_type in ('stopLimit', 'takeLimit') else False,
         )
 
-    def ord_rmv(self, index:int) -> None:
+    def ord_rmv(self, index:int) -> None: # MOD
         """
         Order remove
 
@@ -1070,7 +1089,8 @@ class StrategyClass(ABC):
             (order['id'].iloc[0] != self.__orders['unionId'].str.split('/').str[-1])
             & (order['id'].iloc[0] != self.__orders['closeId'])]
 
-    def ord_mod(self, index:int, price:float = None, amount:float = None) -> None:
+    def ord_mod(self, index:int, price:float = None,
+                amount:float = None) -> None:
         """
         Order modify
 
@@ -1085,17 +1105,17 @@ class StrategyClass(ABC):
                 Leave it as np.nan if you want to remove the amount.
         """
 
-        order = self.__orders.iloc[[index]]
+        order = self.__orders[index]
 
-        union = self.__price_check(
+        _, union = self.__price_check(
             price=price, 
-            union_id=order['unionId'].values[0], 
-            type_side=order['typeSide'].values[0])
+            union_id=order['unionId'], 
+            type_side=order['typeSide'])
 
         if union and not price is None:
-            self.__orders.loc[order.index, 'orderPrice'] = price
+            self.__orders[index]['orderPrice'] = price
         if not amount is None:
-            self.__orders.loc[order.index, 'amount'] = amount
+            self.__orders[index]['amount'] = amount
 
     def prev(self, label:str = None, last:int = None) -> flx.DataWrapper:
         """
@@ -1261,8 +1281,7 @@ class StrategyClass(ABC):
 
         Args:
             label (str, optional): Data column to return. If None, all columns 
-                are returned. If 'index', only indexes are returned, ignoring 
-                the `last` parameter.
+                are returned. If 'index', 'rIndex' return.
             or_type (str, optional): If you want to filter only one type 
                 of operation you can do so with this argument.
                 Current types of orders: 'op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit'.
@@ -1273,6 +1292,7 @@ class StrategyClass(ABC):
         Info:
             `orders` columns.
 
+            - rIndex: Column added in 'prev_orders' marks the real index of each row.
             - order: Order type ('op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit').
             - date: Creation date.
             - orderPrice: Execution price.
@@ -1289,7 +1309,7 @@ class StrategyClass(ABC):
         """
 
         __ord = self.__orders
-        if __ord.empty: 
+        if not __ord or len(__ord) == 0: 
             return flx.DataWrapper()
         elif (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
@@ -1303,36 +1323,27 @@ class StrategyClass(ABC):
             and not set(ids.keys()).issubset(('id','unionId','closeId')))):
 
             raise ValueError(utils.text_fix(
-                "'union_id' with bad format or incorrect.", newline_exclude=True))
+                "'ids' with bad format or incorrect.", newline_exclude=True))
 
-        data_columns = __ord.columns
+        data_columns = list(__ord[0].keys())
+        data_columns.insert(0, 'rIndex')
 
-        if or_type != None:
-            __ord = __ord[__ord['order'].values == or_type]
-        if ids != None:
-            mask = True
+        data = []
+        for i,v in enumerate(__ord):
+            if or_type != None and v['order'] != or_type:
+                continue
+            if ids != None and all(v[i_label] == ids[i_label] 
+                                   for i_label in ids.keys()):
+                continue
 
-            # Optimized code
-            if 'unionId' in ids:
-                mask &= __ord['unionId'].values == ids['unionId']
-            if 'id' in ids:
-                mask &= __ord['id'].values == ids['id']
-            if 'closeId' in ids:
-                mask &= __ord['closeId'].values == ids['closeId']
+            data.append([int(i)] + list(v.values()))
 
-            __ord = __ord[mask]
+        data = data[
+            len(data) - last if last is not None and last < len(data) else 0:]
 
-        if label == 'index': 
-            return flx.DataWrapper(__ord.index, columns='index')
-
-        data = __ord.values[
-            len(__ord) - last if last is not None and last < len(__ord) else 0:]
-    
-        if label != None: 
-            _loc = __ord.columns.get_loc(label)
-
-            data_columns = data_columns[_loc]
-            data = data[:,_loc]
+        if label != None and data_columns and data:
+            if label == 'index': label = 'rIndex'
+            data = [v[data_columns.index(label)] for v in data]
 
         return flx.DataWrapper(data, columns=data_columns)
 

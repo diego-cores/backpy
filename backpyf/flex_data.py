@@ -98,9 +98,10 @@ class DataWrapper(MutableSequence, Generic[T]):
         elif type(data) is DataWrapper:
             return data.unwrap()
         elif type(data) is list:
-            return np.array(data)
+            return np.array(data, dtype=object)
         elif type(data) is dict:
-            return np.array(list(data.values())).T
+            return np.array(list(data.values()), 
+                            dtype=object).T
 
         match type(data):
             case pd.DataFrame:
