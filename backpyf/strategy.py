@@ -105,17 +105,14 @@ class StrategyClass(ABC):
         __slippage_pct: Closing and opening slippage.
         __commission: Commission per trade.
         __orders: Active orders.
-        __orders_order: Order type priority.
         __positions: Active positions.
         __pos_record: Position history.
+        __orders_order: Order type priority.
         __data: DataFrame containing cuted data.
         __data_all: DataFrame containing all data.
         __data_index: Index to cut data.
         __idc_data: Saved data from the indicators.
         __buffer: Buffer to concatenate DataFrame.
-        __orders_columns: When '__before' is executed, 
-            the '__orders' columns are saved.
-        __ff: Lambda to find the index of each column in '__orders_columns'.
         __to_delate: Lists of indexes to remove from lists.
 
     Methods:
@@ -152,6 +149,7 @@ class StrategyClass(ABC):
 
     Private Methods:
         __del: Adds items to '__to_delete'.
+        __deli: Removes indexes from '__to_delate'.
         __act_reduce: Reduce a position or close it.
         __put_pos: Put a position in the simulation.
         __put_ord: Place a new order.
@@ -218,8 +216,6 @@ class StrategyClass(ABC):
 
         self.__idc_data = {}
         self.__buffer = {}
-        self.__orders_columns = []
-        self.__ff = lambda n: self.__orders_columns.index(n)
 
         self.interval, self.icon, self.width = _data_info()
 
@@ -228,11 +224,12 @@ class StrategyClass(ABC):
         self.__commission = commission
         self.__init_funds = init_funds
 
-        self.__orders = []
-        self.__positions = pd.DataFrame()
-        self.__pos_record = pd.DataFrame()
-
         self.__orders_order = {'op': 0, 'stopLoss': 1, 'takeProfit': 2}
+
+        self.__orders = []
+        self.__positions = []
+        self.__pos_record = []
+
         self.__to_delate = {}
 
         # Set decorators
@@ -513,7 +510,6 @@ class StrategyClass(ABC):
             lower = self.__data['Low'].values[-1]*(1-self.__spread_pct.get_taker()/100/2)
 
             self.__to_delate.update({'__orders':set()})
-            i = self.__ff
 
             for i, row in enumerate(self.__orders):
                 if i in self.__to_delate['__orders']:
@@ -522,8 +518,9 @@ class StrategyClass(ABC):
                 # If the id contains 'w' it means that it waits for the position with the same id
                 if not isinstance(row['unionId'], float):
                     row_split = row['unionId'].split('/')
-                    if (row_split[0] == 'w' and not self.__positions.empty
-                        and row_split[-1] in self.__positions['unionId'].values):
+
+                    if (row_split[0] == 'w' and self.__positions
+                        and row_split[-1] in [v.get('unionId') for v in self.__positions]):
 
                         row['unionId'] = self.__orders[i]['unionId'] = row_split[-1]
                     elif row_split[0] == 'w':
@@ -544,9 +541,7 @@ class StrategyClass(ABC):
 
                     self.__del('__orders', [i])
 
-            if '__orders' in self.__to_delate and len(self.__to_delate['__orders']) > 0:
-                for i in sorted(self.__to_delate['__orders'], reverse=True):
-                    del self.__orders[i]
+            self.__deli('__orders')
 
         # Execute strategy
         self.next()
@@ -555,6 +550,24 @@ class StrategyClass(ABC):
         if '__orders' in self.__buffer and len(self.__buffer['__orders']) > 0:
             self.__orders.extend(self.__buffer['__orders'])
             self.__buffer['__orders'] = self.__buffer['__orders'][:0]
+
+    def __deli(self, name:str) -> None:
+        """
+        Delete index
+
+        Removes indexes from '__to_delate'.
+        Removes them from the '_StrategyClass'+name attribute.
+
+        Args:
+            name (str): Name saved in '__to_delate' and attribute name.
+        """
+
+        if (name in self.__to_delate 
+            and len(self.__to_delate[name]) > 0):
+            for i in sorted(self.__to_delate[name], 
+                            reverse=True):
+
+                del getattr(self, '_StrategyClass'+name)[i]
 
     def __del(self, name:str, index:list) -> None:
         """
@@ -670,10 +683,9 @@ class StrategyClass(ABC):
 
         amount = amount or np.nan
 
-        position_frame = self.__positions.iloc[[index]].copy()
-        position_series = position_frame.iloc[0]
+        position = self.__positions[index].copy()
 
-        pos_amount = position_series['amount']
+        pos_amount = position.get('amount')
         if np.isnan(amount):
             amount = pos_amount
 
@@ -690,53 +702,52 @@ class StrategyClass(ABC):
             slippage = price*(self.__slippage_pct.get_taker()/100)
 
             position_close_spread = (position_close-spread-slippage 
-                                    if position_series['typeSide']
+                                    if position.get('typeSide')
                                     else position_close+spread+slippage)
         else:
             return
 
         # Fill data.
-        position_frame['positionClose'] = position_close_spread
-        position_frame['positionDate'] = self.__data.index[-1]
-        open = position_series['positionOpen']
+        position['positionClose'] = position_close_spread
+        position['positionDate'] = self.__data.index[-1]
+        open = position.get('positionOpen')
 
-        if position_series['typeSide']:
+        if position.get('typeSide'):
             profit_per_val = (position_close_spread-open)/open*100 
         else:
             profit_per_val = (open-position_close_spread)/open*100
-        position_frame['profitPer'] = profit_per_val
+        position['profitPer'] = profit_per_val
 
         if pos_amount > amount:
-            self.__positions['amount'].values[index] -= amount
-            position_frame['amount'] = amount
+            self.__positions[index]['amount'] -= amount
+            position['amount'] = amount
 
         else:
             # Close and unionId
-            self.__positions = self.__positions.drop(position_series.name)
+            del self.__positions[index]
 
             if self.__orders:
                 self.__del('__orders', [
                     i for i,d in enumerate(self.__orders) 
-                    if position_series['unionId'] in (d.get('unionId').split('/')[-1], 
+                    if position.get('unionId') in (d.get('unionId').split('/')[-1], 
                                                       d.get('closeId'))
                 ])
 
         if not np.isnan(pos_amount):
-            profit_per = position_frame['profitPer'].values[0]
+            profit_per = position.get('profitPer')
 
             gross_profit = pos_amount * profit_per / 100
             broker_fee = pos_amount * (commission / 100)
             exit_fee = ((gross_profit + pos_amount) 
-                        * (position_series['commission'] / 100))
+                        * (position.get('commission') / 100))
 
-            position_frame['profit'] = gross_profit - broker_fee - exit_fee
+            position['profit'] = gross_profit - broker_fee - exit_fee
         else:
-            position_frame['profit'] = np.nan
+            position['profit'] = np.nan
 
-        position_frame['commission'] += commission
+        position['commission'] += commission
 
-        self.__pos_record = pd.concat([self.__pos_record, position_frame], 
-                                      ignore_index=True) 
+        self.__pos_record.append(position)
 
     def __put_pos(self, price:float, date:float, 
                   amount:float, type_side:bool, union_id:str) -> None:
@@ -774,18 +785,18 @@ class StrategyClass(ABC):
             position_open = (position_price+spread+slippage
                             if type_side else position_price-spread-slippage)
 
-        position = pd.DataFrame({
+        position = {
             'date':self.__data.index[-1],
             'positionOpen':position_open,
             'commission':commission,
             'amount':amount,
             'typeSide':type_side,
             'unionId':union_id,
-        }, index=[1])
+        }
 
-        self.__positions = pd.concat([self.__positions, position], ignore_index=True) 
+        self.__positions.append(position) 
 
-    def __order_execute(self, order:np.ndarray) -> None:
+    def __order_execute(self, order:dict) -> None:
         """
         Order execute
 
@@ -793,11 +804,8 @@ class StrategyClass(ABC):
             according to its type and a mask is applied for 'closeId'.
 
         Args:
-            order (ndarray): Array with the order.
-                'self.__ff' will be used to filter by words.
+            order (dict): Dict with the order.
         """
-
-        i = self.__ff
 
         # Hello world
         match order['order']:
@@ -811,12 +819,16 @@ class StrategyClass(ABC):
                 )
 
             case 'takeProfit' | 'stopLoss':
-                if self.__positions.empty:
+                if not self.__positions:
                     return
 
-                union_pos = self.__positions['unionId'][
-                    self.__positions['unionId'].values == order['unionId']]
-                if union_pos.empty:
+                union_pos = [
+                    {**v, 'rIndex': i}
+                    for i, v in enumerate(self.__positions)
+                    if v.get('unionId') == order['unionId']
+                ]
+
+                if not union_pos:
                     return 
 
                 # Gap case
@@ -829,8 +841,8 @@ class StrategyClass(ABC):
                     order['orderPrice'] = self.__data['Open'].values[-1]
 
                 self.__act_reduce(
-                    self.__positions.index.get_loc(union_pos.index[0]), 
-                        order['orderPrice'], amount=order['amount'], mode='taker')
+                    union_pos[0]['rIndex'], order['orderPrice'], 
+                    amount=order['amount'], mode='taker')
 
             # Work in progress
             case 'takeLimit' | 'stopLimit':
@@ -1046,14 +1058,14 @@ class StrategyClass(ABC):
 
         # Last unionId
         last_data = None
-        if not self.__positions.empty:
-            last_data = self.__positions
+        if self.__positions:
+            last_data = self.__positions[-1]
         elif '__orders' in self.__buffer and self.__buffer['__orders']:
             last_data = self.__buffer['__orders'][-1]
-        elif not self.__orders:
+        elif self.__orders:
             last_data = self.__orders[-1]
-        elif not self.__pos_record.empty:
-            last_data = self.__pos_record
+        elif self.__pos_record:
+            last_data = self.__pos_record[-1]
 
         last_ui = None
         if isinstance(last_data, dict):
@@ -1072,22 +1084,30 @@ class StrategyClass(ABC):
             limit=True if order_type in ('stopLimit', 'takeLimit') else False,
         )
 
-    def ord_rmv(self, index:int) -> None: # MOD
+    def ord_rmv(self, index:int) -> None:
         """
         Order remove
 
-        Remove the order you want.
+        Remove an active order.
+        An order is considered active if it is in '__ orders'.
 
         Args:
             index (int): Real index of the order to be deleted.
         """
 
-        order = self.__orders.iloc[[index]]
-        self.__orders = self.__orders.drop(order.index)
+        if not self.__orders:
+            raise exception.OrderError('There are no active orders.')
+        elif not isinstance(index, int):
+            return
 
-        self.__orders = self.__orders[
-            (order['id'].iloc[0] != self.__orders['unionId'].str.split('/').str[-1])
-            & (order['id'].iloc[0] != self.__orders['closeId'])]
+        order = self.__orders[index]
+
+        self.__del('__orders', [index]+[
+            i for i,d in enumerate(self.__orders) 
+            if order['id'] in (d.get('unionId').split('/')[-1], 
+                                d.get('closeId'))
+        ])
+        self.__deli('__orders')
 
     def ord_mod(self, index:int, price:float = None,
                 amount:float = None) -> None:
@@ -1166,7 +1186,8 @@ class StrategyClass(ABC):
 
         return flx.DataWrapper(data, columns=data_columns)
 
-    def prev_positions_rec(self, label:str = None, last:int = None) -> flx.DataWrapper:
+    def prev_positions_rec(self, label:str = None, 
+                           last:int = None) -> flx.DataWrapper:
         """
         Prev of trades closed.
 
@@ -1174,14 +1195,15 @@ class StrategyClass(ABC):
 
         Args:
             label (str, optional): Data column to return. If None, all columns 
-                are returned. If 'index', only indexes are returned, ignoring 
-                the `last` parameter.
+                are returned. If 'index', 'rIndex' return.
             last (int, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
 
         Info:
             `pos_record` columns.
 
+            - rIndex: Column added in 'prev_positions_rec' marks 
+                the real index of each row.
             - date: Creation date.
             - positionOpen: Opening price.
             - commission: Position commissions.
@@ -1198,30 +1220,31 @@ class StrategyClass(ABC):
         """
 
         __pos_rec = self.__pos_record
-        if label == 'index': 
-            return flx.DataWrapper(__pos_rec.index, columns='index')
-        elif __pos_rec.empty: 
+        if not __pos_rec or len(__pos_rec) == 0: 
             return flx.DataWrapper()
         elif (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
+
             raise ValueError(utils.text_fix("""
                             Last has to be less than the length of 
                             'data' and greater than 0.
                             """, newline_exclude=True))
 
-        data_columns = __pos_rec.columns
-        data = __pos_rec.values[
-            len(__pos_rec) - last if last is not None and last < len(__pos_rec) else 0:]
-        
-        if label != None: 
-            _loc = __pos_rec.columns.get_loc(label)
+        data_columns = list(__pos_rec[0].keys())
+        data_columns.insert(0, 'rIndex')
 
-            data_columns = data_columns[_loc]
-            data = data[:,_loc]
+        data = [[int(i)] + list(v.values()) for i,v in enumerate(__pos_rec)]
+        data = data[
+            len(data) - last if last is not None and last < len(data) else 0:]
+
+        if label != None and data_columns and data:
+            if label == 'index': label = 'rIndex'
+            data = [v[data_columns.index(label)] for v in data]
 
         return flx.DataWrapper(data, columns=data_columns)
 
-    def prev_positions(self, label:str = None, last:int = None) -> flx.DataWrapper:
+    def prev_positions(self, label:str = None, 
+                       last:int = None) -> flx.DataWrapper:
         """
         Prev of trades active.
 
@@ -1229,14 +1252,15 @@ class StrategyClass(ABC):
 
         Args:
             label (str, optional): Data column to return. If None, all columns 
-                are returned. If 'index', only indexes are returned, ignoring 
-                the `last` parameter.
+                are returned. If 'index', 'rIndex' return.
             last (int, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
 
         Info:
             `positions` columns.
 
+            - rIndex: Column added in 'prev_positions' 
+                marks the real index of each row.
             - date: Creation date.
             - positionOpen: Opening price.
             - commission: Position commissions.
@@ -1249,26 +1273,26 @@ class StrategyClass(ABC):
         """
 
         __pos = self.__positions
-        if label == 'index': 
-            return flx.DataWrapper(__pos.index, columns='index')
-        elif __pos.empty: 
+        if not __pos or len(__pos) == 0: 
             return flx.DataWrapper()
         elif (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
+
             raise ValueError(utils.text_fix("""
                             Last has to be less than the length of 
                             'data' and greater than 0.
                             """, newline_exclude=True))
 
-        data_columns = __pos.columns
-        data = __pos.values[
-            len(__pos) - last if last is not None and last < len(__pos) else 0:]
-    
-        if label != None: 
-            _loc = __pos.columns.get_loc(label)
+        data_columns = list(__pos[0].keys())
+        data_columns.insert(0, 'rIndex')
 
-            data_columns = data_columns[_loc]
-            data = data[:,_loc]
+        data = [[int(i)] + list(v.values()) for i,v in enumerate(__pos)]
+        data = data[
+            len(data) - last if last is not None and last < len(data) else 0:]
+
+        if label != None and data_columns and data:
+            if label == 'index': label = 'rIndex'
+            data = [v[data_columns.index(label)] for v in data]
 
         return flx.DataWrapper(data, columns=data_columns)
 
@@ -1292,8 +1316,10 @@ class StrategyClass(ABC):
         Info:
             `orders` columns.
 
-            - rIndex: Column added in 'prev_orders' marks the real index of each row.
-            - order: Order type ('op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit').
+            - rIndex: Column added in 'prev_orders' 
+                marks the real index of each row.
+            - order: Order type ('op', 'takeProfit', 
+                'stopLoss', 'takeLimit', 'stopLimit').
             - date: Creation date.
             - orderPrice: Execution price.
             - amount: Amount to be executed.

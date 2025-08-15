@@ -579,8 +579,8 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
             f'RunTimer: {utils.num_align(time()-t)}'
             if _cm.run_timer and not progress else '') 
 
-    act_trades = instance._StrategyClass__positions.dropna(axis=1, how='all')
-    _cm.__trades = instance._StrategyClass__pos_record.dropna(axis=1, how='all')
+    act_trades = pd.DataFrame(instance._StrategyClass__positions).dropna(axis=1, how='all')
+    _cm.__trades = pd.DataFrame(instance._StrategyClass__pos_record).dropna(axis=1, how='all')
 
     if not act_trades.empty: _cm.__trades = pd.concat([
         _cm.__trades, act_trades

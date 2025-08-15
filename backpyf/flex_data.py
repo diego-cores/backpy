@@ -300,6 +300,8 @@ class DataWrapper(MutableSequence, Generic[T]):
         return self._data if dtype is None else self._data.astype(dtype)
 
     def __getitem__(self, idx):
+        if len(self._data) == 0: return self._data
+
         return self._data[idx]
 
     def __setitem__(self, idx, value):
