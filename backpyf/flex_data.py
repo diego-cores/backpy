@@ -57,6 +57,7 @@ class DataWrapper(MutableSequence, Generic[T]):
             data (Union[List[T], Dict[str, List[T]]]): Value to store.
             columns (np.ndarray, optional): Column names.
         """
+
         if type(columns) != np.ndarray and not columns is None:
             columns = self.__get_columns(columns)
 
