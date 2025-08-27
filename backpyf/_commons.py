@@ -76,7 +76,7 @@ __plt_styles = {
         'bg': '#e5e5e5', 
         'fr': 'SystemButtonFace', 
         'btn': '#000000',
-        'btna': '#333333'
+        'btna': "#FFFFFF"
     },
     'darkmode':{
         'bg': '#1e1e1e', 

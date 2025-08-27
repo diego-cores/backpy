@@ -89,12 +89,12 @@ class StrategyClass(ABC):
     within the `StrategyClass.next()` structure.
 
     Attributes:
-        open: Last 'Open' value from `data`.
-        high: Last 'High' value from `data`.
-        low: Last 'Low' value from `data`.
-        close: Last 'Close' value from `data`.
-        volume: Last 'Volume' value from `data`.
-        date: Last index from `data`.
+        open: 'Open' values from `data`.
+        high: 'High' values from `data`.
+        low: 'Low' values from `data`.
+        close: 'Close' values from `data`.
+        volume: 'Volume' values from `data`.
+        date: Index list from `data`.
         width: Data width from `__data_width`.
         icon: Data icon from `__data_icon`.
         interval: Data interval from `__data_interval`.
@@ -127,7 +127,6 @@ class StrategyClass(ABC):
         get_slippage: Get __slippage_pct.
         get_commission: Returns the commission per trade.
         get_init_funds: Returns the initial funds for the strategy.
-        prev: Recovers all step data.
         prev_orders: Return '__orders' values.
         prev_positions: Return '__positions' values.
         prev_positions_rec: Return '__pos_record' values.
@@ -477,14 +476,14 @@ class StrategyClass(ABC):
         """
 
         data = self.__data_all.iloc[:index]
-        data_ = data.values[-1]
+        data_ = data.values.T
 
         self.open = data_[0]
         self.high = data_[1]
         self.low = data_[2]
         self.close = data_[3]
         self.volume = data_[4]
-        self.date = data.index[-1]
+        self.date = data.index.values
 
         self.__data = data
         self.__data_index = index
@@ -504,7 +503,11 @@ class StrategyClass(ABC):
 
         # Check operations
         if self.__orders:
-            self.__orders.sort(key=lambda x: self.__orders_order.get(x['order'], 99))
+            self.__orders.sort(
+            key=lambda x: (
+                self.__orders_order.get(x['order'], 99),
+                abs(x['orderPrice'] - self.__data['Open'].values[-1])
+            ))
 
             higher = self.__data['High'].values[-1]*(self.__spread_pct.get_taker()/100/2+1)
             lower = self.__data['Low'].values[-1]*(1-self.__spread_pct.get_taker()/100/2)
@@ -720,7 +723,9 @@ class StrategyClass(ABC):
 
         if pos_amount > amount:
             self.__positions[index]['amount'] -= amount
+
             position['amount'] = amount
+            pos_amount = amount
 
         else:
             # Close and unionId
@@ -738,11 +743,11 @@ class StrategyClass(ABC):
             profit_per = position.get('profitPer')
 
             gross_profit = pos_amount * profit_per / 100
-            broker_fee = pos_amount * (commission / 100)
+            entry_fee = pos_amount * (position.get('commission') / 100)
             exit_fee = ((gross_profit + pos_amount) 
-                        * (position.get('commission') / 100))
+                        * (commission / 100))
 
-            position['profit'] = gross_profit - broker_fee - exit_fee
+            position['profit'] = gross_profit - entry_fee - exit_fee
         else:
             position['profit'] = np.nan
 
@@ -884,7 +889,7 @@ class StrategyClass(ABC):
         return data_leak if not data_leak.empty else None
 
     def __price_check(self, price:float, union_id:str, 
-                      type_side:bool) -> tuple:
+                      type_side:bool, price_cn:float = None) -> tuple:
         """
         Price check
 
@@ -895,6 +900,11 @@ class StrategyClass(ABC):
             price (float): Price to be verified. 
             union_id (str): Associated unionId.
             type_side (bool): Associated typeSide.
+            price_cn (float, optional): This function, 
+                if you leave this variable as None, will compare 
+                the price with the price of the linked operation, 
+                if you want to compare it with another 
+                you can use this variable.
 
         Return:
             tuple: Condition of 'typeSide' equals and 
@@ -960,11 +970,12 @@ class StrategyClass(ABC):
 
         comp = next(filter(lambda x: x is not None, (comp_pos, comp_ord_bff, comp_ord)), None)
 
-        union_pos = union_pos or union_ord or union_ord_bff or price
-        union_ord = union_ord or union_pos or union_ord_bff
-        union_ord_bff = union_ord_bff or union_ord or union_pos
+        if price_cn is None:
+            union_pos = union_pos or union_ord or union_ord_bff or price
+            union_ord = union_ord or union_pos or union_ord_bff
+            union_ord_bff = union_ord_bff or union_ord or union_pos
 
-        price_cn = func([union_pos, union_ord, union_ord_bff])
+            price_cn = func([union_pos, union_ord, union_ord_bff])
         return comp, price >= price_cn if func == np.max else price <= price_cn
 
     def __put_ord(self, order_type:str, price:float, 
@@ -1122,69 +1133,27 @@ class StrategyClass(ABC):
                 Leave it as np.nan if you want to remove the amount.
         """
 
+        if price is None and amount is None:
+            raise exception.OrderError('Nothing to modify.')
+
         order = self.__orders[index]
 
-        _, union = self.__price_check(
-            price=price, 
-            union_id=order['unionId'], 
-            type_side=order['typeSide'])
+        if not price is None:
+            _, union = self.__price_check(
+                price=price, 
+                union_id=order['unionId'], 
+                type_side=order['typeSide'],
+                price_cn=self.__data['Close'].iloc[-1]
+            )
 
-        if union and not price is None:
-            self.__orders[index]['orderPrice'] = price
+            if union:
+                self.__orders[index]['orderPrice'] = price
+
         if not amount is None:
             self.__orders[index]['amount'] = amount
 
-    def prev(self, label:str = None, last:int = None) -> flx.DataWrapper:
-        """
-        Prev.
-
-        This function returns the values of `data`.
-        
-        Args:
-            label (str, optional): Data column to return. If None, all columns 
-                are returned. If 'index', only indexes are returned, ignoring 
-                the `last` parameter.
-            last (int, optional): Number of steps to return starting from the 
-                present. If None, data for all times is returned.
-
-        Info:
-            `data` columns.
-
-            - Open: The 'Open' price of the step.
-            - High: The 'High' price of the step.
-            - Low: The 'Low' price of the step.
-            - Close: The 'Close' price of the step.
-            - Volume: The 'Volume' of the step.
-            - index: The 'Index' of the step.
-
-        Returns:
-            DataWrapper: DataWrapper containing the data of previous steps.
-        """
-
-        __data = self.__data
-        if label == 'index': 
-            return flx.DataWrapper(__data.index, columns='index')
-        elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
-            raise ValueError(utils.text_fix("""
-                            Last has to be less than the length of 
-                            'data' and greater than 0.
-                            """, newline_exclude=True))
-
-        data_columns = __data.columns
-        data = __data.values[
-            len(__data) - last if last is not None and last < len(__data) else 0:]
-
-        if label != None: 
-            _loc = __data.columns.get_loc(label)
-
-            data_columns = data_columns[_loc]
-            data = data[:,_loc]
-
-        return flx.DataWrapper(data, columns=data_columns)
-
     def prev_positions_rec(self, label:str = None, 
-                           last:int = None) -> flx.DataWrapper:
+                           uid:int = None, last:int = None) -> flx.DataWrapper:
         """
         Prev of trades closed.
 
@@ -1193,6 +1162,7 @@ class StrategyClass(ABC):
         Args:
             label (str, optional): Data column to return. If None, all columns 
                 are returned. If 'index', 'rIndex' return.
+            uid (int, optional): Filter by unionId.
             last (int, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
 
@@ -1227,21 +1197,31 @@ class StrategyClass(ABC):
                             'data' and greater than 0.
                             """, newline_exclude=True))
 
-        data_columns = list(__pos_rec[0].keys())
+        keys = list(__pos_rec[0].keys())
+        data_columns = keys.copy()
         data_columns.insert(0, 'rIndex')
 
-        data = [[int(i)] + list(v.values()) for i,v in enumerate(__pos_rec)]
+        data = []
+        dtype = [(key, object) for key in data_columns]
+
+        for i,v in enumerate(__pos_rec):
+            if uid != None and uid != v['unionId']:
+                continue
+
+            data.append((i, *[v[k] for k in keys]))
+        data = np.array(data, dtype=dtype)
+
         data = data[
             len(data) - last if last is not None and last < len(data) else 0:]
 
-        if label != None and data_columns and data:
+        if label != None and data_columns and data.size:
             if label == 'index': label = 'rIndex'
-            data = [v[data_columns.index(label)] for v in data]
 
+            data = data[label]
         return flx.DataWrapper(data, columns=data_columns)
 
     def prev_positions(self, label:str = None, 
-                       last:int = None) -> flx.DataWrapper:
+                       uid:int = None, last:int = None) -> flx.DataWrapper:
         """
         Prev of trades active.
 
@@ -1250,6 +1230,7 @@ class StrategyClass(ABC):
         Args:
             label (str, optional): Data column to return. If None, all columns 
                 are returned. If 'index', 'rIndex' return.
+            uid (int, optional): Filter by unionId.
             last (int, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
 
@@ -1280,17 +1261,27 @@ class StrategyClass(ABC):
                             'data' and greater than 0.
                             """, newline_exclude=True))
 
-        data_columns = list(__pos[0].keys())
+        keys = list(__pos[0].keys())
+        data_columns = keys.copy()
         data_columns.insert(0, 'rIndex')
 
-        data = [[int(i)] + list(v.values()) for i,v in enumerate(__pos)]
+        data = []
+        dtype = [(key, object) for key in data_columns]
+
+        for i,v in enumerate(__pos):
+            if uid != None and uid != v['unionId']:
+                continue
+
+            data.append((i, *[v[k] for k in keys]))
+        data = np.array(data, dtype=dtype)
+
         data = data[
             len(data) - last if last is not None and last < len(data) else 0:]
 
-        if label != None and data_columns and data:
+        if label != None and data_columns and data.size:
             if label == 'index': label = 'rIndex'
-            data = [v[data_columns.index(label)] for v in data]
 
+            data = data[label]
         return flx.DataWrapper(data, columns=data_columns)
 
     def prev_orders(self, label:str = None, or_type:str = None, 
@@ -1348,10 +1339,13 @@ class StrategyClass(ABC):
             raise ValueError(utils.text_fix(
                 "'ids' with bad format or incorrect.", newline_exclude=True))
 
-        data_columns = list(__ord[0].keys())
+        keys = list(__ord[0].keys())
+        data_columns = keys.copy()
         data_columns.insert(0, 'rIndex')
 
         data = []
+        dtype = [(key, object) for key in data_columns]
+
         for i,v in enumerate(__ord):
             if or_type != None and v['order'] != or_type:
                 continue
@@ -1359,15 +1353,16 @@ class StrategyClass(ABC):
                                    for i_label in ids.keys()):
                 continue
 
-            data.append([int(i)] + list(v.values()))
+            data.append((i, *[v[k] for k in keys]))
+        data = np.array(data, dtype=dtype)
 
         data = data[
             len(data) - last if last is not None and last < len(data) else 0:]
 
-        if label != None and data_columns and data:
+        if label != None and data_columns and data.size:
             if label == 'index': label = 'rIndex'
-            data = [v[data_columns.index(label)] for v in data]
 
+            data = data[label]
         return flx.DataWrapper(data, columns=data_columns)
 
     def idc_fibonacci(self, lv0:float = 10, lv1:float = 1) -> flx.DataWrapper:
@@ -2202,7 +2197,7 @@ class StrategyClass(ABC):
 
         data = self.__data_all if data is None else data
 
-        atr = self.__idc_atr(length=length_di, smooth='smma').to_series()
+        atr = self.__idc_atr(length=length_di, smooth='smma').unwrap()
 
         dm_p_raw = data['High'].diff()
         dm_n_raw = -data['Low'].diff()

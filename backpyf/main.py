@@ -729,6 +729,7 @@ def plot(log:bool = False, progress:bool = True,
     mpl_canvas = window.mpl_canvas(fig=fig)
     window.mpl_toolbar(mpl_canvas=mpl_canvas)
 
+    mpl.pyplot.close(fig)
     window.show(block=block)
 
 def plot_strategy(log:bool = False, view:str = 'p/w/r/e', 
@@ -1082,7 +1083,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
     diary_profit = trades_calc.groupby('diary')['profit'].sum()
 
     # Consecutive trades calc.
-    trades_count_cs = _cm.__trades['profit'].apply(
+    trades_count_cs = _cm.__trades['profitPer'].apply(
         lambda x: 1 if x > 0 else (-1 if x < 0 else 0)
         )
     trades_count_cs = pd.concat(

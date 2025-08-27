@@ -106,11 +106,12 @@ class DataWrapper(MutableSequence, Generic[T]):
 
         match type(data):
             case pd.DataFrame:
+                data_ = data.values.T
+
+                dtype = [(v, data_[i].dtype) for i,v in enumerate(data.columns.values)]
+                return np.array(list(zip(*data_)), dtype=dtype)
+            case pd.Series | pd.Index:
                 return data.values
-            case pd.Series:
-                return data.to_numpy()
-            case pd.Index:
-                return data.to_numpy()
             case np.ndarray:
                 return data
 
@@ -228,8 +229,12 @@ class DataWrapper(MutableSequence, Generic[T]):
         """
 
         try: 
-            return pd.DataFrame(self._data, index=self.__valid_index(), 
-                                columns=self.__valid_columns())
+            if (hasattr(self._data.dtype, "names") 
+                and self._data.dtype.names is not None):
+                return pd.DataFrame(self._data, index=self.__valid_index())
+            else:
+                return pd.DataFrame(self._data, index=self.__valid_index(), 
+                                    columns=self.__valid_columns())
         except ValueError as e: 
             raise exception.ConvWrapperError(f"Dataframe conversion error.")
 
@@ -244,7 +249,8 @@ class DataWrapper(MutableSequence, Generic[T]):
         """
 
         try: 
-            return pd.Series(self._data.flatten(), index=self.__valid_index(True))
+            return pd.Series(self._data.flatten(), 
+                             index=self.__valid_index(True))
         except ValueError as e: 
             raise exception.ConvWrapperError(f"Series conversion error.")
 
@@ -266,7 +272,7 @@ class DataWrapper(MutableSequence, Generic[T]):
             else:
                 return {i: [val] for i, val in enumerate(self._data)}
         except ValueError as e:
-            raise exception.ConvWrapperError(f"Dict conversion error: {e}")
+            raise exception.ConvWrapperError(f"Dict conversion error.")
 
     def to_list(self) -> list:
         """
@@ -312,6 +318,10 @@ class DataWrapper(MutableSequence, Generic[T]):
         del self._data[idx]
 
     def __len__(self):
+        if (hasattr(self._data.dtype, "names") 
+            and self._data.dtype.names is not None):
+            return self._data.size
+
         return len(self._data)
 
     def __iter__(self):

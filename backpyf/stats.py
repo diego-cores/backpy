@@ -35,16 +35,16 @@ def average_ratio(trades:pd.DataFrame) -> float:
     Based on the profit, it calculates an average ratio.
 
     Args:
-        trades (pd.DataFrame): A dataframe with 'profit' column.
+        trades (pd.DataFrame): A dataframe with 'profitPer' column.
 
     Returns:
         float: Average ratio.
     """
 
-    if 'profit' in trades.columns:
+    if 'profitPer' in trades.columns:
 
-        return ((trades['profit'][trades['profit'] > 0].mean()
-                / abs(trades['profit'][trades['profit'] < 0]).mean()))
+        return ((trades['profitPer'][trades['profitPer'] > 0].mean()
+                / abs(trades['profitPer'][trades['profitPer'] < 0]).mean()))
     return 0
 
 def profit_fact(profits:pd.Series) -> float:
