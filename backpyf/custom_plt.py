@@ -16,6 +16,7 @@ Functions:
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from PIL import Image, ImageTk, ImageOps
+from matplotlib.figure import Figure
 from importlib import resources
 import matplotlib.colors
 import matplotlib as mpl
@@ -68,16 +69,17 @@ class CustomToolbar(NavigationToolbar2Tk):
         'Save': 'filesave.png'
     }
 
-    def __init__(self, canvas, window, color_btn = '#000000', 
-                 color_bg = 'SystemButtonFace', color_act = '#333333') -> None:
+    def __init__(self, canvas:FigureCanvasTkAgg, window:tk.Tk, 
+                 color_btn:str = '#000000', color_bg:str = 'SystemButtonFace', 
+                 color_act:str = '#333333') -> None:
         """
         __init__
 
         Builder for initializing the class.
 
         Args:
-            canvas (str, optional): Canvas containing the matplotlib figure.
-            window (str, optional): Window root.
+            canvas (FigureCanvasTkAgg): Canvas containing the matplotlib figure.
+            window (Tk): Window root.
             color_btn (str, optional): Button color.
             color_bg (str, optional): Frame color.
             color_act (str, optional): Color of the sunken buttons.
@@ -133,8 +135,8 @@ class CustomToolbar(NavigationToolbar2Tk):
         Changes the style of the button when selected.
 
         Args:
-            btn (tk.Button): Button.
-            img (PIL.ImageTk.PhotoImage): Button icon.
+            btn (Button): Button.
+            img (PhotoImage): Button icon.
         """
 
         btn.var.set(0)
@@ -147,7 +149,7 @@ class CustomToolbar(NavigationToolbar2Tk):
         Changes the style of the button when deselect.
 
         Args:
-            btn (tk.Button): Button.
+            btn (Button): Button.
         """
 
         btn.var.set(0)
@@ -279,14 +281,14 @@ class CustomWin:
         if self.root.winfo_exists():
             self.root.destroy()
 
-    def mpl_canvas(self, fig) -> FigureCanvasTkAgg:
+    def mpl_canvas(self, fig:Figure) -> FigureCanvasTkAgg:
         """
         Matplotlib canvas.
 
         Put your matplotlib figure inside the window.
 
         Args:
-            fig (mpl.figure.Figure): Figure from matplotlib.
+            fig (Figure): Figure from matplotlib.
 
         Return:
             FigureCanvasTkAgg: Resulting canvas figure.
@@ -371,11 +373,16 @@ class CustomWin:
 
             self._after_id = self.root.after(50, lambda: self.show(block=False))
 
-def def_style(name:str, background:tuple = '#e5e5e5', 
+def def_style(name:str, 
+              background:str | tuple[str, ...] | list[str] = '#e5e5e5', 
               frames:str = 'SystemButtonFace', 
-              buttons:str = '#000000', button_act:str = None, 
-              gardient_dir:bool = True, volume:str = None, 
-              up:str = None, down:str = None) -> None:
+              buttons:str = '#000000', 
+              button_act:str | None = None, 
+              gardient_dir:bool = True, 
+              volume:str | None = None, 
+              up:str | None = None, 
+              down:str | None = None
+              ) -> None:
     """
     Def style.
 
@@ -396,18 +403,19 @@ def def_style(name:str, background:tuple = '#e5e5e5',
 
     Args:
         name (str): Name of the new style by which you will call it later.
-        background (tuple, optional): Background color of the axes.
+        background (str | tuple[str, ...] | list[str], optional): 
+            Background color of the axes. 
             It can be a gradient of at least 2 colors using a tuple or list.
         frames (str, optional): Background color of the frames.
         buttons (str, optional): Button color.
-        button_act (str, optional): Color of buttons when selected or sunken.
+        button_act (str | None, optional): Color of buttons when selected or sunken.
         gardient_dir (bool, optional): The gradient direction will always 
             be top to bottom and diagonal, but you can choose whether 
             it starts from the right or left, true = right.
-        volume (str, optional): Volume color.
-        up (str, optional): Color when the price rises, this influences 
+        volume (str | None, optional): Volume color.
+        up (str | None, optional): Color when the price rises, this influences 
             the color of the candle and the bullish position indicator.
-        down (str, optional): Color of when the price rises this influences 
+        down (str | None, optional): Color of when the price rises this influences 
             the color of the candle and the bearish position indicator.
     """
     if name in _cm.__plt_styles.keys():
@@ -426,14 +434,15 @@ def def_style(name:str, background:tuple = '#e5e5e5',
                 'd':down or 'red',
     }}})
 
-def gradient_ax(ax:matplotlib.axes._axes.Axes, colors:list, right:bool=False) -> None:
+def gradient_ax(ax:matplotlib.axes._axes.Axes, 
+                colors:list, right:bool=False) -> None:
     """
     Gradient axes.
 
     Create a diagonal background gradient on the 'ax' with 'ax.imshow'.
 
     Args:
-        ax (matplotlib.axes._axes.Axes): Axes to draw.
+        ax (Axes): Axes to draw.
         colors (list): List of the colors of the garden in order.
         right (bool, optional): Corner from which the gradient 
             starts if False starts from the top left.
@@ -451,7 +460,8 @@ def gradient_ax(ax:matplotlib.axes._axes.Axes, colors:list, right:bool=False) ->
                 extent=[0, 1, 0, 1], transform=ax.transAxes, zorder=-1)
     im.get_cursor_data = lambda event: None
 
-def custom_ax(ax, bg = '#e5e5e5', edge:bool = False) -> None:
+def custom_ax(ax:matplotlib.axes._axes.Axes, 
+              bg = '#e5e5e5', edge:bool = False) -> None:
     """
     Custom axes.
 
@@ -461,6 +471,7 @@ def custom_ax(ax, bg = '#e5e5e5', edge:bool = False) -> None:
         The gradient can change the 'x' limits.
 
     Args:
+        ax (Axes): Axes to config.
         bg (str, optional): Background color of the axis, 
             if it is a list or tuple a gradient will be created.
         edge (bool, optional): If the background is a gradient, this 

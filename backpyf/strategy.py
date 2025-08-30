@@ -58,20 +58,21 @@ def idc_decorator(func:callable) -> Callable[..., flx.DataWrapper]:
         func (callable): Function.
 
     Return:
-        callable: Function.
+        Callable[..., flx.DataWrapper]: Function.
     """
 
     func._uidc = True
     return func
 
-def _data_info() -> tuple:
+def _data_info() -> tuple[str, str, float]:
     """
     Data Info
 
     Returns all 'data' variables except `__data`.
 
     Returns:
-        tuple: A tuple containing the following variables in order:
+        tuple[str, str, float]: 
+            A tuple containing the following variables in order:
             - __data_interval (str): Data interval.
             - __data_icon (str): Data icon.
             - __data_width (int): Data index width.
@@ -243,7 +244,7 @@ class StrategyClass(ABC):
                 setattr(self, name, decorator)
 
     @abstractmethod
-    def next(self) -> None: ...
+    def next(self) -> any: ...
 
     def get_spread(self) -> flx.CostsValue:
         """
@@ -254,7 +255,7 @@ class StrategyClass(ABC):
             In this case they will return the same.
 
         Returns:
-            flx.CostsValue: The value of the hidden variable `__spread_pct`.
+            CostsValue: The value of the hidden variable `__spread_pct`.
         """
 
         return self.__spread_pct
@@ -268,7 +269,7 @@ class StrategyClass(ABC):
             In this case they will return the same.
 
         Returns:
-            flx.CostsValue: The value of the hidden variable `__slippage_pct`.
+            CostsValue: The value of the hidden variable `__slippage_pct`.
         """
 
         return self.__slippage_pct
@@ -281,12 +282,12 @@ class StrategyClass(ABC):
             To get the value use: 'get_maker' or 'get_taker'.
 
         Returns:
-            float: The value of the hidden variable `__commission`.
+            CostsValue: The value of the hidden variable `__commission`.
         """
 
         return self.__commission
-    
-    def get_init_funds(self) -> int:
+
+    def get_init_funds(self) -> float:
         """
         Get __init_funds
 
@@ -396,7 +397,7 @@ class StrategyClass(ABC):
             return self.__uidc_cut(result)
         return __wr_func
 
-    def __func_idg(func:callable, *args, **kwargs) -> tuple:
+    def __func_idg(func:callable, *args, **kwargs) -> tuple[str, dict]:
         """
         Function id generator
 
@@ -407,7 +408,7 @@ class StrategyClass(ABC):
             func (callable): Function.
 
         Return:
-            tuple: Generated id and arguments.
+            tuple[str, dict]: Generated id and arguments.
         """
 
         df = func.__defaults__ or () 
@@ -432,10 +433,10 @@ class StrategyClass(ABC):
         Slices data for the user based on the current index.
 
         Args:
-            data (flx.DataWrapper): Data to cut.
+            data (DataWrapper): Data to cut.
 
         Return:
-            flx.DataWrapper: Data cut.
+            DataWrapper: Data cut.
         """
 
         if len(data) != len(self.__data_all):
@@ -446,7 +447,8 @@ class StrategyClass(ABC):
 
         return result
 
-    def __data_cut(self, data:flx.DataWrapper, last:int = None) -> flx.DataWrapper:
+    def __data_cut(self, data:flx.DataWrapper, 
+                   last:int | None = None) -> flx.DataWrapper:
         """
         Data cut
 
@@ -454,7 +456,7 @@ class StrategyClass(ABC):
 
         Args:
             data (DataWrapper): Data to cut.
-            last (int, optional): You can get only the latest 'last' data.
+            last (int | None, optional): You can get only the latest 'last' data.
 
         Return:
             DataWrapper: Data cut.
@@ -469,10 +471,10 @@ class StrategyClass(ABC):
         """
         Data updater
 
-        Updates all data with the provided DataFrame.
+        Cut the data and update the variables.
 
         Args:
-            data (pd.DataFrame): All data from the step and previous ones.
+            index (int): Index at which the data must be cut.
         """
 
         data = self.__data_all.iloc[:index]
@@ -594,6 +596,10 @@ class StrategyClass(ABC):
 
         Generates a random id quickly.
 
+        Args:
+            self (optional): 
+                You can run the function from the instance.
+
         Return:
             str: An unique id.
         """
@@ -671,7 +677,7 @@ class StrategyClass(ABC):
         self.__act_reduce(index, self.__data['Close'].iloc[-1], mode='taker')
 
     def __act_reduce(self, index:int, price:float, 
-                     amount:float = None, mode:str = 'taker') -> None:
+                     amount:float | None = None, mode:str = 'taker') -> None:
         """
         Action reduce
 
@@ -680,7 +686,7 @@ class StrategyClass(ABC):
         Args:
             index (int): Real index of the position.
             price (float): Price where to reduce.
-            amount (float, optional): Amount to reduce. None to close it.
+            amount (float | None, optional): Amount to reduce. None to close it.
             mode (str, optional): Order type ('taker', 'maker').
         """
 
@@ -889,7 +895,8 @@ class StrategyClass(ABC):
         return data_leak if not data_leak.empty else None
 
     def __price_check(self, price:float, union_id:str, 
-                      type_side:bool, price_cn:float = None) -> tuple:
+                      type_side:bool, price_cn:float | None = None
+                      ) -> tuple[bool | None, bool]:
         """
         Price check
 
@@ -900,14 +907,14 @@ class StrategyClass(ABC):
             price (float): Price to be verified. 
             union_id (str): Associated unionId.
             type_side (bool): Associated typeSide.
-            price_cn (float, optional): This function, 
+            price_cn (float | None, optional): This function, 
                 if you leave this variable as None, will compare 
                 the price with the price of the linked operation, 
                 if you want to compare it with another 
                 you can use this variable.
 
         Return:
-            tuple: Condition of 'typeSide' equals and 
+            tuple[bool | None, bool]: Condition of 'typeSide' equals and 
                 True if correct False if not.
         """
 
@@ -917,7 +924,7 @@ class StrategyClass(ABC):
         union_id = union_id.split('/')[-1]
         func = np.max if type_side else np.min
 
-        def get_union_price(data, col_name:str) -> tuple:
+        def get_union_price(data, col_name:str) -> tuple[bool, float]:
             """
             Get union price
 
@@ -930,7 +937,7 @@ class StrategyClass(ABC):
                 col_name (str): Column to pass through 'func'.
 
             Return:
-                tuple: Condition of 'typeSide' equals and 
+                tuple[bool, float]: Condition of 'typeSide' equals and 
                     result of 'func' on 'col_name'.
             """
 
@@ -979,8 +986,9 @@ class StrategyClass(ABC):
         return comp, price >= price_cn if func == np.max else price <= price_cn
 
     def __put_ord(self, order_type:str, price:float, 
-                  amount:float = None, buy:bool = True, wait:bool = True,
-                  union_id:int = None, close_id:int = None, limit:bool = False) -> str:
+                  amount:float | None = None, buy:bool = True, wait:bool = True,
+                  union_id:int | None = None, close_id:int | None = None, 
+                  limit:bool = False) -> str:
         """
         Put order
 
@@ -990,13 +998,13 @@ class StrategyClass(ABC):
             order_type (str): Order type 
                 ('op', 'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit').
             price (float): Order price.
-            amount (float, optional): Order amount, None takes the total.
+            amount (float | None, optional): Order amount, None takes the total.
             buy (bool, optional): Order type (only works on 'op' type).
             wait (bool, optional): Indicates if the order waits for an open 
                 position with the same unionId.
-            union_id (int, optional): unionId in charge of connecting to the 
+            union_id (int | None, optional): unionId in charge of connecting to the 
                 desired position, if left as None the last one will be used.
-            close_id (int, optional): closeId responsible for closing the 
+            close_id (int | None, optional): closeId responsible for closing the 
                 order if an order with the same closeId or id is closed.
             limit (bool, optional): Set to True if the order is Maker.
 
@@ -1045,8 +1053,8 @@ class StrategyClass(ABC):
         return union_id
 
     def ord_put(self, order_type:str, price:float, 
-                amount:float = None, union_id:int = None, 
-            close_id:int = None) -> str:
+                amount:float | None = None, union_id:int | None = None, 
+            close_id:int | None = None) -> str:
         """
         Order put
 
@@ -1056,10 +1064,10 @@ class StrategyClass(ABC):
             order_type (str): Order type 
                 ('stopLoss', 'takeProfit', 'takeLimit', 'stopLimit').
             price (float): Order price.
-            amount (float, optional): Order amount, None takes the total.
-            union_id (int, optional): unionId in charge of connecting to the 
+            amount (float | None, optional): Order amount, None takes the total.
+            union_id (int | None, optional): unionId in charge of connecting to the 
                 desired position, if left as None the last one will be used.
-            close_id (int, optional): closeId responsible for closing the 
+            close_id (int | None, optional): closeId responsible for closing the 
                 order if an order with the same closeId or id is closed.
 
         Return:
@@ -1117,8 +1125,8 @@ class StrategyClass(ABC):
         ])
         self.__deli('__orders')
 
-    def ord_mod(self, index:int, price:float = None,
-                amount:float = None) -> None:
+    def ord_mod(self, index:int, price:float | None = None,
+                amount:float | None = None) -> None:
         """
         Order modify
 
@@ -1126,9 +1134,9 @@ class StrategyClass(ABC):
 
         Args:
             index (int): Real index of the order to be modified.
-            price (float, optional): New order price leave as None 
+            price (float | None, optional): New order price leave as None 
                 if you do not want to change it.
-            amount (float, optional): New order amount leave as None 
+            amount (float | None, optional): New order amount leave as None 
                 if you do not want to change it. 
                 Leave it as np.nan if you want to remove the amount.
         """
@@ -1152,18 +1160,19 @@ class StrategyClass(ABC):
         if not amount is None:
             self.__orders[index]['amount'] = amount
 
-    def prev_positions_rec(self, label:str = None, 
-                           uid:int = None, last:int = None) -> flx.DataWrapper:
+    def prev_positions_rec(self, label:str | None = None, 
+                           uid:int | None = None, 
+                           last:int | None = None) -> flx.DataWrapper:
         """
         Prev of trades closed.
 
         This function returns the values of `pos_record`.
 
         Args:
-            label (str, optional): Data column to return. If None, all columns 
+            label (str | None, optional): Data column to return. If None, all columns 
                 are returned. If 'index', 'rIndex' return.
-            uid (int, optional): Filter by unionId.
-            last (int, optional): Number of steps to return starting from the 
+            uid (int | None, optional): Filter by unionId.
+            last (int | None, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
 
         Info:
@@ -1220,18 +1229,19 @@ class StrategyClass(ABC):
             data = data[label]
         return flx.DataWrapper(data, columns=data_columns)
 
-    def prev_positions(self, label:str = None, 
-                       uid:int = None, last:int = None) -> flx.DataWrapper:
+    def prev_positions(self, label:str | None = None, 
+                       uid:int | None = None, last:int | None = None
+                       ) -> flx.DataWrapper:
         """
         Prev of trades active.
 
         This function returns the values of `positions`.
 
         Args:
-            label (str, optional): Data column to return. If None, all columns 
+            label (str | None, optional): Data column to return. If None, all columns 
                 are returned. If 'index', 'rIndex' return.
-            uid (int, optional): Filter by unionId.
-            last (int, optional): Number of steps to return starting from the 
+            uid (int | None, optional): Filter by unionId.
+            last (int | None, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
 
         Info:
@@ -1284,21 +1294,22 @@ class StrategyClass(ABC):
             data = data[label]
         return flx.DataWrapper(data, columns=data_columns)
 
-    def prev_orders(self, label:str = None, or_type:str = None, 
-                    ids:dict = None, last:int = None) -> flx.DataWrapper:
+    def prev_orders(self, label:str | None = None, or_type:str | None = None,
+                    ids:dict | None = None, last:int | None = None
+                    ) -> flx.DataWrapper:
         """
         Prev of active orders.
 
         This function returns the values of `orders`.
 
         Args:
-            label (str, optional): Data column to return. If None, all columns 
+            label (str | None, optional): Data column to return. If None, all columns 
                 are returned. If 'index', 'rIndex' return.
-            or_type (str, optional): If you want to filter only one type 
+            or_type (str | None, optional): If you want to filter only one type 
                 of operation you can do so with this argument.
                 Current types of orders: 'op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit'.
-            ids (dict, optional): Filter by id by making a dictionary with id_name:id.
-            last (int, optional): Number of steps to return starting from the 
+            ids (dict | None, optional): Filter by id by making a dictionary with id_name:id.
+            last (int | None, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
 
         Info:
@@ -1413,8 +1424,8 @@ class StrategyClass(ABC):
         return pd.DataFrame({'Level':fibo_levels,
                              'Value':lv0 - (lv0 - lv1) * fibo_levels})
 
-    def idc_ema(self, length:int = any, 
-                source:str = 'Close', last:int = None) -> flx.DataWrapper:
+    def idc_ema(self, length:int, source:str = 'Close', 
+                last:int | None = None) -> flx.DataWrapper:
         """
         Exponential moving average (EMA).
 
@@ -1424,7 +1435,7 @@ class StrategyClass(ABC):
             length (int): The length of the EMA.
             source (str, optional): The data source for the EMA calculation. Allowed 
                 parameters are 'Close', 'Open', 'High', 'Low', and 'Volume'.
-            last (int, optional): Number of data points to return from the 
+            last (int | None, optional): Number of data points to return from the 
                 present backwards. If None, returns data for all time.
 
         Returns:
@@ -1453,8 +1464,8 @@ class StrategyClass(ABC):
                               last=last, cut=True)
 
     @__store_decorator
-    def __idc_ema(self, data:pd.Series = None, length:int = any, 
-                  source:str = 'Close', last:int = None, 
+    def __idc_ema(self, data:pd.Series | None = None, length:int = 10, 
+                  source:str = 'Close', last:int | None = None, 
                   cut:bool = False) -> flx.DataWrapper:
         """
         Exponential Moving Average (EMA).
@@ -1466,7 +1477,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (Series, optional): Series of data to perform the EMA calculation.
+            data (Series | None, optional): Series of data to perform the EMA calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
@@ -1478,8 +1489,8 @@ class StrategyClass(ABC):
 
         return ema
 
-    def idc_sma(self, length:int = any, 
-                source:str = 'Close', last:int = None) -> flx.DataWrapper:
+    def idc_sma(self, length:int, source:str = 'Close', 
+                last:int | None = None) -> flx.DataWrapper:
         """
         Simple Moving Average (SMA).
 
@@ -1489,7 +1500,7 @@ class StrategyClass(ABC):
             length (int): Length of the SMA.
             source (str, optional): Data source for SMA calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low', 'Volume').
-            last (int, optional): Number of data points to return from the present 
+            last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
         
         Returns:
@@ -1518,8 +1529,8 @@ class StrategyClass(ABC):
                                 last=last, cut=True)
 
     @__store_decorator
-    def __idc_sma(self, data:pd.Series = None, length:int = any, 
-                  source:str = 'Close', last:int = None, 
+    def __idc_sma(self, data:pd.Series | None = None, length:int = 10, 
+                  source:str = 'Close', last:int | None = None, 
                   cut:bool = False) -> flx.DataWrapper:
         """
         Simple Moving Average (SMA).
@@ -1531,7 +1542,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (Series, optional): Series of data to perform the SMA calculation.
+            data (Series | None, optional): Series of data to perform the SMA calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
@@ -1543,8 +1554,8 @@ class StrategyClass(ABC):
 
         return sma
 
-    def idc_wma(self, length:int = any, source:str = 'Close', 
-                invt_weight:bool = False, last:int = None) -> flx.DataWrapper:
+    def idc_wma(self, length:int, source:str = 'Close', 
+                invt_weight:bool = False, last:int | None = None) -> flx.DataWrapper:
         """
         Weighted Moving Average (WMA).
 
@@ -1555,7 +1566,7 @@ class StrategyClass(ABC):
             source (str, optional): Data source for WMA calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low', 'Volume').
             invt_weight (bool, optional): If True, the distribution of weights is reversed.
-            last (int, optional): Number of data points to return from the present 
+            last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
         Returns:
@@ -1584,9 +1595,9 @@ class StrategyClass(ABC):
                               invt_weight=invt_weight, last=last, cut=True)
 
     @__store_decorator
-    def __idc_wma(self, data:pd.Series = None, 
-                  length:int = any, source:str = 'Close', 
-                  invt_weight:bool = False, last:int = None, 
+    def __idc_wma(self, data:pd.Series | None = None, 
+                  length:int = 10, source:str = 'Close', 
+                  invt_weight:bool = False, last:int | None = None, 
                   cut:bool = False) -> flx.DataWrapper:
         """
         Weighted Moving Average (WMA).
@@ -1598,7 +1609,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (Series, optional): Series of data to perform the WMA calculation.
+            data (Series | None, optional): Series of data to perform the WMA calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
@@ -1614,8 +1625,8 @@ class StrategyClass(ABC):
 
         return wma
     
-    def idc_smma(self, length:int = any, 
-                 source:str = 'Close', last:int = None) -> flx.DataWrapper:
+    def idc_smma(self, length:int, source:str = 'Close', 
+                 last:int | None = None) -> flx.DataWrapper:
         """
         Smoothed Moving Average (SMMA).
 
@@ -1625,7 +1636,7 @@ class StrategyClass(ABC):
             length (int): Length of the SMMA.
             source (str, optional): Data source for SMMA calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low', 'Volume').
-            last (int, optional): Number of data points to return from the present 
+            last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
         Returns:
@@ -1654,7 +1665,7 @@ class StrategyClass(ABC):
                                 last=last, cut=True)
 
     @__store_decorator
-    def __idc_smma(self, data:pd.Series = None, length:int = any, 
+    def __idc_smma(self, data:pd.Series = None, length:int = 10, 
                    source:str = 'Close', last:int = None, 
                    cut:bool = False) -> flx.DataWrapper:
         """
@@ -1667,7 +1678,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (Series, optional): Series of data to perform the SMMA calculation.
+            data (Series | None, optional): Series of data to perform the SMMA calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
@@ -1683,7 +1694,7 @@ class StrategyClass(ABC):
     
     def idc_sema(self, length:int = 9, method:str = 'sma', 
                   smooth:int = 5, only:bool = False, 
-                  source:str = 'Close', last:int = None) -> flx.DataWrapper:
+                  source:str = 'Close', last:int | None = None) -> flx.DataWrapper:
         """
         Smoothed Exponential Moving Average (SEMA).
 
@@ -1698,7 +1709,7 @@ class StrategyClass(ABC):
                         'method'.
             source (str, optional): Data source for EMA calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low', 'Volume').
-            last (int, optional): Number of data points to return from the present 
+            last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
         Returns:
@@ -1742,9 +1753,9 @@ class StrategyClass(ABC):
                                 only=only, source=source, last=last, cut=True)
     
     @__store_decorator
-    def __idc_sema(self, data:pd.Series = None, length:int = 9, 
+    def __idc_sema(self, data:pd.Series | None = None, length:int = 9, 
                     method:str = 'sma', smooth:int = 5, only:bool = False, 
-                    source:str = 'Close', last:int = None, cut:bool = False) -> flx.DataWrapper:
+                    source:str = 'Close', last:int | None = None, cut:bool = False) -> flx.DataWrapper:
         """
         Smoothed Exponential Moving Average (SEMA).
 
@@ -1755,7 +1766,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (Series, optional): Series of data to perform the SEMA calculation.
+            data (Series | None, optional): Series of data to perform the SEMA calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
@@ -1785,7 +1796,7 @@ class StrategyClass(ABC):
         return smema
 
     def idc_bb(self, length:int = 20, std_dev:float = 2, ma_type:str = 'sma', 
-               source:str = 'Close', last:int = None) -> flx.DataWrapper:
+               source:str = 'Close', last:int | None = None) -> flx.DataWrapper:
         """
         Bollinger Bands (BB).
 
@@ -1798,7 +1809,7 @@ class StrategyClass(ABC):
                           moving average.
             source (str, optional): Data source for calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low').
-            last (int, optional): Number of data points to return from the present 
+            last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
         Returns:
@@ -1843,9 +1854,9 @@ class StrategyClass(ABC):
                             ma_type=ma_type, source=source, last=last, cut=True)
 
     @__store_decorator
-    def __idc_bb(self, data:pd.Series = None, length:int = 20, 
+    def __idc_bb(self, data:pd.Series | None = None, length:int = 20, 
                  std_dev:float = 2, ma_type:str = 'sma', source:str = 'Close', 
-                 last:int = None, cut:bool = False) -> flx.DataWrapper:
+                 last:int | None = None, cut:bool = False) -> flx.DataWrapper:
         """
         Bollinger Bands (BB).
 
@@ -1856,7 +1867,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (Series, optional): Series of data to perform the Bollinger Bands 
+            data (Series | None, optional): Series of data to perform the Bollinger Bands 
                 calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
@@ -1887,7 +1898,7 @@ class StrategyClass(ABC):
     def idc_rsi(self, length_rsi:int = 14, length:int = 14, 
                 rsi_ma_type:str = 'smma', base_type:str = 'sma', 
                 bb_std_dev:float = 2, source:str = 'Close', 
-                last:int = None) -> flx.DataWrapper:
+                last:int | None = None) -> flx.DataWrapper:
         """
         Relative Strength Index (RSI).
 
@@ -1905,7 +1916,7 @@ class StrategyClass(ABC):
             bb_std_dev (float, optional): Standard deviation for Bollinger Bands. Default is 2.
             source (str, optional): Data source for calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low').
-            last (int, optional): Number of data points to return from the present 
+            last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
         Returns:
@@ -1961,10 +1972,10 @@ class StrategyClass(ABC):
                               last=last, cut=True)
 
     @__store_decorator
-    def __idc_rsi(self, data:pd.Series = None, length_rsi:int = 14, 
+    def __idc_rsi(self, data:pd.Series | None = None, length_rsi:int = 14, 
                   length:int = 14, rsi_ma_type:str = 'smma', 
                   base_type:str = 'sma', bb_std_dev:float = 2, 
-                  source:str = 'Close', last:int = None, cut:bool = False)  -> flx.DataWrapper:
+                  source:str = 'Close', last:int | None = None, cut:bool = False)  -> flx.DataWrapper:
         """
         Relative Strength Index (RSI).
 
@@ -1975,7 +1986,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (Series, optional): Series of data to perform the RSI calculation.
+            data (Series | None, optional): Series of data to perform the RSI calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
@@ -2016,7 +2027,7 @@ class StrategyClass(ABC):
 
     def idc_stochastic(self, length_k:int = 14, smooth_k:int = 1, 
                        length_d:int = 3, d_type:str = 'sma', 
-                       source:str = 'Close', last:int = None) -> flx.DataWrapper:
+                       source:str = 'Close', last:int | None = None) -> flx.DataWrapper:
         """
         Stochastic Oscillator.
 
@@ -2031,7 +2042,7 @@ class StrategyClass(ABC):
                           For example, 'sma' for simple moving average.
             source (str, optional): Data source for calculation. Allowed values are 
                           ('Close', 'Open', 'High', 'Low').
-            last (int, optional): Number of data points to return from the present 
+            last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
         Returns:
@@ -2080,9 +2091,10 @@ class StrategyClass(ABC):
                                     source=source, last=last, cut=True)
 
     @__store_decorator
-    def __idc_stochastic(self, data:pd.Series = None, length_k:int = 14, 
+    def __idc_stochastic(self, data:pd.Series | None = None, length_k:int = 14, 
                          smooth_k:int = 1, length_d:int = 3, d_type:int = 'sma', 
-                         source:str = 'Close', last:int = None, cut:bool = False) -> flx.DataWrapper:
+                         source:str = 'Close', last:int | None = None, 
+                         cut:bool = False) -> flx.DataWrapper:
         """
         Stochastic Oscillator.
 
@@ -2093,7 +2105,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (Series, optional): Series of data to perform the stochastic calculation.
+            data (Series | None, optional): Series of data to perform the stochastic calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
@@ -2124,7 +2136,7 @@ class StrategyClass(ABC):
         return result
 
     def idc_adx(self, smooth:int = 14, length_di:int = 14,
-                only:bool = False, last:int = None) -> flx.DataWrapper:
+                only:bool = False, last:int | None = None) -> flx.DataWrapper:
         """
         Average Directional Index (ADX).
 
@@ -2134,7 +2146,7 @@ class StrategyClass(ABC):
             smooth (int, optional): Smoothing length. Default is 14.
             length_di (int, optional): Window length for calculating +DI and -DI. Default is 14.
             only (bool, optional): If True, returns only a Series with the ADX values.
-            last (int, optional): Number of data points to return from the present 
+            last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
         Returns:
@@ -2169,9 +2181,9 @@ class StrategyClass(ABC):
                             only=only, last=last, cut=True)
 
     @__store_decorator
-    def __idc_adx(self, data:pd.Series = None, smooth:int = 14, 
+    def __idc_adx(self, data:pd.Series | None = None, smooth:int = 14, 
                   length_di:int = 14, only:bool = False, 
-                  last:int = None, cut:bool = False) -> flx.DataWrapper:
+                  last:int | None = None, cut:bool = False) -> flx.DataWrapper:
         """
         Average Directional Index (ADX).
 
@@ -2182,7 +2194,7 @@ class StrategyClass(ABC):
             include exception handling.
 
         Args:
-            data (Series, optional): Series of data to perform the ADX calculation.
+            data (Series | None, optional): Series of data to perform the ADX calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
@@ -2225,7 +2237,7 @@ class StrategyClass(ABC):
     def idc_macd(self, short_len:int = 12, long_len:int = 26, 
                  signal_len:int = 9, macd_ma_type:str = 'ema', 
                  signal_ma_type:str = 'ema', histogram:bool = True, 
-                 source:str = 'Close', last:int = None) -> flx.DataWrapper:
+                 source:str = 'Close', last:int | None = None) -> flx.DataWrapper:
         """
         Calculate the convergence/divergence of the moving average (MACD).
 
@@ -2240,7 +2252,7 @@ class StrategyClass(ABC):
             histogram (bool, optional): If True, includes an additional 'histogram' column.
             source (str, optional): Data source for calculations. Allowed values: 'Close', 
                 'Open', 'High', 'Low'.
-            last (int, optional): Number of data points to return starting from the
+            last (int | None, optional): Number of data points to return starting from the
                 present backward. If None, returns data for all available periods.
 
         Returns:
@@ -2296,11 +2308,11 @@ class StrategyClass(ABC):
                             source=source, last=last, cut=True)
 
     @__store_decorator
-    def __idc_macd(self, data:pd.Series = None, short_len:int = 12, 
+    def __idc_macd(self, data:pd.Series | None = None, short_len:int = 12, 
                    long_len:int = 26, signal_len:int = 9, 
                    macd_ma_type:str = 'ema', signal_ma_type:str = 'ema', 
                    histogram:bool = True, source:str = 'Close', 
-                   last:int = None, cut:bool = False) -> flx.DataWrapper:
+                   last:int | None = None, cut:bool = False) -> flx.DataWrapper:
         """
         Calculate the convergence/divergence of the moving average (MACD).
 
@@ -2311,7 +2323,7 @@ class StrategyClass(ABC):
             It does not include exception handling.
 
         Args:
-            data (Series, optional): The data used for calculation of MACD.
+            data (Series | None, optional): The data used for calculation of MACD.
             cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
@@ -2353,7 +2365,7 @@ class StrategyClass(ABC):
     def idc_sqzmom(self, bb_len:int = 20, bb_mult:float = 1.5, 
                    kc_len:int = 20, kc_mult:float = 1.5, 
                    use_tr:bool = True, source:str = 'Close', 
-                   last:int = None) -> flx.DataWrapper:
+                   last:int | None = None) -> flx.DataWrapper:
         """
         Calculate Squeeze Momentum (SQZMOM).
 
@@ -2374,7 +2386,7 @@ class StrategyClass(ABC):
                 range.
             source (str, optional): Data source for calculations. Allowed values: 'Close', 
                 'Open', 'High', 'Low'.
-            last (int, optional): Number of data points to return starting from the
+            last (int | None, optional): Number of data points to return starting from the
                 present backward. If None, returns data for all available periods.
 
         Returns:
@@ -2425,11 +2437,11 @@ class StrategyClass(ABC):
                                 last=last, cut=True)
 
     @__store_decorator
-    def __idc_sqzmom(self, data:pd.Series = None, 
+    def __idc_sqzmom(self, data:pd.Series | None = None, 
                      bb_len:int = 20, bb_mult:float = 1.5, 
                      kc_len:int = 20, kc_mult:float = 1.5, 
                      use_tr:bool = True, source:str = 'Close', 
-                     last:int = None, cut:bool = False) -> flx.DataWrapper:
+                     last:int | None = None, cut:bool = False) -> flx.DataWrapper:
         """
         Calculate Squeeze Momentum (SQZMOM).
 
@@ -2446,7 +2458,7 @@ class StrategyClass(ABC):
             It does not include exception handling.
 
         Args:
-            data (Series, optional): The data used for calculating the Squeeze Momentum.
+            data (Series | None, optional): The data used for calculating the Squeeze Momentum.
             cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
@@ -2488,7 +2500,7 @@ class StrategyClass(ABC):
         return result
 
     @__store_decorator
-    def __idc_rlinreg(self, data:pd.Series = None, 
+    def __idc_rlinreg(self, data:pd.Series | None = None, 
                       length:int = 5, offset:int = 1,
                       cut:bool = False) -> flx.DataWrapper:
         """
@@ -2501,7 +2513,7 @@ class StrategyClass(ABC):
             modification and does not include exception handling.
 
         Args:
-            data (Series, optional): The data used for linear regression calculations.
+            data (Series | None, optional): The data used for linear regression calculations.
             length (int, optional): Length of each window for the rolling regression.
             offset (int, optional): Offset used in the regression calculation.
             cut (bool, optional): True to return the trimmed data with current index.
@@ -2521,7 +2533,7 @@ class StrategyClass(ABC):
         return m * (length - 1 - offset) + b
 
     def idc_mom(self, length:int = 10, source:str = 'Close', 
-                last:int = None) -> flx.DataWrapper:
+                last:int | None = None) -> flx.DataWrapper:
         """
         Calculate momentum values (MOM).
 
@@ -2531,7 +2543,7 @@ class StrategyClass(ABC):
             length (int, optional): Length for calculating momentum.
             source (str, optional): Data source for momentum calculation. Allowed values:
                 'Close', 'Open', 'High', 'Low'.
-            last (int, optional): Number of data points to return starting from the
+            last (int | None, optional): Number of data points to return starting from the
                 present backward. If None, returns data for all available periods.
 
         Returns:
@@ -2560,8 +2572,8 @@ class StrategyClass(ABC):
                               last=last, cut=True)
 
     @__store_decorator
-    def __idc_mom(self, data:pd.Series = None, length:int = 10, 
-                  source:str = 'Close', last:int = None,
+    def __idc_mom(self, data:pd.Series | None = None, length:int = 10, 
+                  source:str = 'Close', last:int | None = None,
                   cut:bool = False) -> flx.DataWrapper:
         """
         Calculate momentum values (MOM).
@@ -2573,7 +2585,7 @@ class StrategyClass(ABC):
             It does not include exception handling.
 
         Args:
-            data (Series, optional): The data used to calculate momentum.
+            data (Series | None, optional): The data used to calculate momentum.
             cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
@@ -2587,7 +2599,7 @@ class StrategyClass(ABC):
 
     def idc_ichimoku(self, tenkan_period:int = 9, kijun_period:int = 26, 
                      senkou_span_b_period:int = 52, ichimoku_lines:bool = True, 
-                     last:int = None) -> flx.DataWrapper:
+                     last:int | None = None) -> flx.DataWrapper:
         """
         Calculate Ichimoku cloud values.
 
@@ -2599,7 +2611,7 @@ class StrategyClass(ABC):
             senkou_span_b_period (int, optional): Window length to calculate the Senkou Span B.
             ichimoku_lines (bool, optional): If True, adds the columns 'tenkan_sen' and
                 'kijun_sen' to the returned DataFrame.
-            last (int, optional): Number of data points to return starting from the
+            last (int | None, optional): Number of data points to return starting from the
                 present backwards. If None, returns data for all available periods.
 
         Returns:
@@ -2644,10 +2656,10 @@ class StrategyClass(ABC):
                                     last=last, cut=True)
 
     @__store_decorator
-    def __idc_ichimoku(self, data:pd.Series = None, tenkan_period:int = 9, 
+    def __idc_ichimoku(self, data:pd.Series | None = None, tenkan_period:int = 9, 
                        kijun_period:int = 26, senkou_span_b_period:int = 52, 
                        ichimoku_lines:bool = True, 
-                       last:int = None, cut:bool = False) -> flx.DataWrapper:
+                       last:int | None = None, cut:bool = False) -> flx.DataWrapper:
         """
         Calculate Ichimoku cloud values.
 
@@ -2658,7 +2670,7 @@ class StrategyClass(ABC):
             It does not include exception handling.
 
         Args:
-            data (Series, optional): The data used to calculate the Ichimoku cloud values.
+            data (Series | None, optional): The data used to calculate the Ichimoku cloud values.
             cut (bool, optional): True to return the trimmed data with current index.
 
         Returns:
@@ -2695,7 +2707,7 @@ class StrategyClass(ABC):
         return senkou_span
 
     def idc_atr(self, length:int = 14, smooth:str = 'smma', 
-                last:int = None) -> flx.DataWrapper:
+                last:int | None = None) -> flx.DataWrapper:
         """
         Calculate the average true range (ATR).
 
@@ -2704,7 +2716,7 @@ class StrategyClass(ABC):
         Args:
             length (int, optional): Window length used to smooth the average true range (ATR).
             smooth (str, optional): Type of moving average used to smooth the ATR. 
-            last (int, optional): Number of data points to return starting from the 
+            last (int | None, optional): Number of data points to return starting from the 
                 present backward. If None, returns data for all available periods.
 
         Returns:
@@ -2733,7 +2745,7 @@ class StrategyClass(ABC):
 
     @__store_decorator
     def __idc_atr(self, length:int = 14, smooth:str = 'smma', 
-                  last:int = None, cut:bool = False) -> flx.DataWrapper:
+                  last:int | None = None, cut:bool = False) -> flx.DataWrapper:
         """
         Calculate the average true range (ATR).
 
@@ -2764,8 +2776,8 @@ class StrategyClass(ABC):
         return atr
 
     @__store_decorator
-    def __idc_trange(self, data:pd.Series = None, 
-                     handle_na: bool = True, last:int = None,
+    def __idc_trange(self, data:pd.Series | None = None, 
+                     handle_na: bool = True, last:int | None = None,
                      cut:bool = False) -> flx.DataWrapper:
         """
         Calculate the true range.
@@ -2777,9 +2789,9 @@ class StrategyClass(ABC):
             It does not include exception handling.
 
         Args:
-            data (Series, optional): The data used to perform the calculation.
+            data (Series | None, optional): The data used to perform the calculation.
             handle_na (bool, optional): Whether to handle NaN values in 'Close'.
-            last (int, optional): Number of data points to return starting from the 
+            last (int | None, optional): Number of data points to return starting from the 
                 present backward. If None, returns data for all available periods.
             cut (bool, optional): True to return the trimmed data with current index.
 

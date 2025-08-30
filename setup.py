@@ -21,7 +21,7 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3',
     ],
-    python_requires=">=3.9",
+    python_requires=">=3.10",
     install_requires=[
         'pandas>=2.3.0',
         'numpy>=2.3.2',

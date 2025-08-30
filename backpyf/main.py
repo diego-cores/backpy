@@ -28,6 +28,7 @@ from datetime import datetime
 import matplotlib.pyplot
 import matplotlib as mpl
 
+import random as rd
 import pickle as pk
 import pandas as pd
 import numpy as np
@@ -43,9 +44,10 @@ from . import utils
 from . import stats
 
 def __load_binance_data(client:callable, symbol:str = 'BTCUSDT', 
-                        interval:str = '1d', start_time:str = None, 
-                        end_time:str = None, statistics:bool = True, 
-                        progress:bool = True, data_extract:bool = False) -> tuple:
+                        interval:str = '1d', start_time:str | None = None, 
+                        end_time:str | None = None, statistics:bool = True, 
+                        progress:bool = True, data_extract:bool = False
+                        ) -> tuple[pd.DataFrame, float] | None:
     """
     Load Binance data.
 
@@ -55,15 +57,15 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
         client (callable): Bianance client.
         symbol (str, optional): The trading pair.
         interval (str, optional): Data interval, e.g 1s, 1m, 5m, 1h, 1d, etc.
-        start_time (str): Start date for load data in YYYY-MM-DD format.
-        end_time (str): End date for load data in YYYY-MM-DD format.
+        start_time (str | None): Start date for load data in YYYY-MM-DD format.
+        end_time (str | None): End date for load data in YYYY-MM-DD format.
         statistics (bool, optional): If True, prints statistics of the loaded data.
         progress (bool, optional): If True, shows a progress bar and timer.
         data_extract (bool, optional): If True, the data will be returned and 
             the module variables will not be assigned with them.
 
     Returns:
-        tuple: If 'data_extract' is true, 
+        tuple[DataFrame, float] | None: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
 
@@ -152,9 +154,10 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
     _cm.__data_year_days = 365
 
 def load_binance_data_futures(symbol:str = 'BTCUSDT', interval:str = '1d', 
-                            start_time:str = None, end_time:str = None,
-                            statistics:bool = True, progress:bool = True,
-                            data_extract:bool = False) -> tuple:
+                            start_time:str | None = None, 
+                            end_time:str | None = None, statistics:bool = True, 
+                            progress:bool = True, data_extract:bool = False
+                            ) -> tuple[pd.DataFrame, float] | None:
     """
     Load Binance data from futures.
 
@@ -167,15 +170,15 @@ def load_binance_data_futures(symbol:str = 'BTCUSDT', interval:str = '1d',
     Args:
         symbol (str, optional): The trading pair.
         interval (str, optional): Data interval, e.g 1s, 1m, 5m, 1h, 1d, etc.
-        start_time (str): Start date for load data in YYYY-MM-DD format.
-        end_time (str): End date for load data in YYYY-MM-DD format.
+        start_time (str | None): Start date for load data in YYYY-MM-DD format.
+        end_time (str | None): End date for load data in YYYY-MM-DD format.
         statistics (bool, optional): If True, prints statistics of the loaded data.
         progress (bool, optional): If True, shows a progress bar and timer.
         data_extract (bool, optional): If True, the data will be returned and 
             the module variables will not be assigned with them.
 
     Returns:
-        tuple: If 'data_extract' is true, 
+        tuple[DataFrame, float] | None: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
     try:
@@ -196,9 +199,10 @@ def load_binance_data_futures(symbol:str = 'BTCUSDT', interval:str = '1d',
         raise exception.BinanceError('Binance parameters error.')
 
 def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d', 
-                            start_time:str = None, end_time:str = None,
+                            start_time:str | None = None, end_time:str | None = None,
                             statistics:bool = True, progress:bool = True,
-                            data_extract:bool = False) -> tuple:
+                            data_extract:bool = False
+                            ) -> tuple[pd.DataFrame, float] | None:
     """
     Load Binance data from spot.
 
@@ -211,15 +215,15 @@ def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d',
     Args:
         symbol (str, optional): The trading pair.
         interval (str, optional): Data interval, e.g 1s, 1m, 5m, 1h, 1d, etc.
-        start_time (str): Start date for load data in YYYY-MM-DD format.
-        end_time (str): End date for load data in YYYY-MM-DD format.
+        start_time (str | None): Start date for load data in YYYY-MM-DD format.
+        end_time (str | None): End date for load data in YYYY-MM-DD format.
         statistics (bool, optional): If True, prints statistics of the loaded data.
         progress (bool, optional): If True, shows a progress bar and timer.
         data_extract (bool, optional): If True, the data will be returned and 
                         the module variables will not be assigned with them.
 
     Returns:
-        tuple: If 'data_extract' is true, 
+        tuple[DataFrame, float] | None: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
     try:
@@ -240,9 +244,11 @@ def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d',
         raise exception.BinanceError('Binance parameters error.')
 
 def load_yfinance_data(tickers:str = any, 
-                       start:str = None, end:str = None, interval:str = '1d', 
-                       days_op:int = 365, statistics:bool = True, 
-                       progress:bool = True, data_extract:bool = False) -> tuple:
+                       start:str | None = None, end:str | None = None, 
+                       interval:str = '1d', days_op:int = 365, 
+                       statistics:bool = True, progress:bool = True, 
+                       data_extract:bool = False
+                       ) -> tuple[pd.DataFrame, float] | None:
     """
     Load yfinance Data.
 
@@ -250,9 +256,9 @@ def load_yfinance_data(tickers:str = any,
 
     Args:
         tickers (str): String of ticker symbols to download.
-        start (str, optional): Start date for download in YYYY-MM-DD format. 
+        start (str | None, optional): Start date for download in YYYY-MM-DD format. 
                               Default is 99 years ago.
-        end (str, optional): End date for download in YYYY-MM-DD format. 
+        end (str | None, optional): End date for download in YYYY-MM-DD format. 
                             Default is the current date.
         interval (str, optional): Data interval. Valid values are '1m', '2m', '5m', '15m', 
                         '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo', 
@@ -265,7 +271,7 @@ def load_yfinance_data(tickers:str = any,
                         the module variables will not be assigned with them.
 
     Returns:
-        tuple: If 'data_extract' is true, 
+        tuple[DataFrame, float] | None: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
     days_op = int(days_op)
@@ -298,10 +304,12 @@ def load_yfinance_data(tickers:str = any,
                                   data_icon=tickers.strip(),
                                   data_interval=interval.strip())
 
+        data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
+
         if data_extract:
             return data, data_width
-        
-        _cm.__data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
+
+        _cm.__data = data
         _cm.__data_width = data_width
         _cm.__data_icon = tickers.strip()
         _cm.__data_interval = interval.strip()
@@ -313,8 +321,8 @@ def load_yfinance_data(tickers:str = any,
     except: 
         raise exception.YfinanceError('Yfinance parameters error.')
 
-def load_data(data:pd.DataFrame = any, icon:str = None, 
-              interval:str = None, days_op:int = 365, 
+def load_data(data:pd.DataFrame, icon:str | None = None, 
+              interval:str | None = None, days_op:int = 365, 
               statistics:bool = True, progress:bool = True) -> None: 
     """
     Load Any Data.
@@ -323,12 +331,12 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
 
     Args:
         data (pd.DataFrame): DataFrame containing the data to load. Must have the 
-                            following columns: ['Open', 'High', 'Low', 'Close', 
-                            'Volume'].
-        icon (str, optional): String representing the data icon.
-        interval (str, optional): String representing the data interval.
+            following columns: ['Open', 'High', 'Low', 'Close', 
+            'Volume'].
+        icon (str | None, optional): String representing the data icon.
+        interval (str | None, optional): String representing the data interval.
         days_op (int, optional): Number of operable days in 1 year. This will be 
-                stored to calculate some statistics. Normal values: 365, 252.
+            stored to calculate some statistics. Normal values: 365, 252.
         statistics (bool): If True, prints statistics of the loaded data.
         progress (bool, optional): If True, shows a progress bar and timer.
     """
@@ -370,10 +378,11 @@ def load_data(data:pd.DataFrame = any, icon:str = None,
 
     if statistics: stats_icon(prnt=True)
 
-def load_data_bpd(path:str = 'data.bpd', start:int = None, 
-                  end:int = None, days_op:int = None, 
+def load_data_bpd(path:str = 'data.bpd', start:int | None = None, 
+                  end:int | None = None, days_op:int | None = None, 
                   statistics:bool = True, progress:bool = True, 
-                  data_extract:bool = False) -> None:
+                  data_extract:bool = False
+                  ) -> tuple[pd.DataFrame, float] | None:
     """
     Load data from .bpd file
 
@@ -384,15 +393,19 @@ def load_data_bpd(path:str = 'data.bpd', start:int = None,
 
     Args:
         path (str, optional): Path address to the file to be loaded (.bpd).
-        start (int, optional): Cut the saved data [start:end].
-        end (int, optional): Cut the saved data [start:end].
-        days_op (int, optional): Number of operable days in 1 year. This will be 
+        start (int  | None, optional): Cut the saved data [start:end].
+        end (int | None, optional): Cut the saved data [start:end].
+        days_op (int | None, optional): Number of operable days in 1 year. This will be 
             stored to calculate some statistics. Normal values: 365, 252.
             If you want to use the one saved just leave it as 'None'
         statistics (bool): If True, prints statistics of the loaded data.
         progress (bool, optional): If True, shows a progress bar and timer.
         data_extract (bool, optional): If True, the data will be returned and 
             the module variables will not be assigned with them.
+
+    Returns:
+        tuple[DataFrame, float] | None: If 'data_extract' is true, 
+            a tuple containing the data will be returned (data, data_width).
     """
 
     if (start and end 
@@ -437,11 +450,13 @@ def load_data_bpd(path:str = 'data.bpd', start:int = None,
                     data_icon=icon,
                     data_interval=interval)
 
+    data_width = utils.calc_width(data.index)
+
     if data_extract:
-        return data, utils.calc_width(data.index)
+        return data, data_width
 
     _cm.__data = data
-    _cm.__data_width = utils.calc_width(_cm.__data.index)
+    _cm.__data_width = data_width
     _cm.__data_icon = icon 
     _cm.__data_interval = interval
     _cm.__data_year_days = days_op
@@ -478,7 +493,7 @@ def save_data_bpd(file_name:str = 'data') -> None:
 
 def run(cls:type, initial_funds:int = 10000, commission:tuple = 0, 
         spread:tuple = 0, slippage:tuple = 0,
-        prnt:bool = True, progress:bool = True) -> str:
+        prnt:bool = True, progress:bool = True) -> str | None:
     """
     Run Your Strategy.
 
@@ -511,7 +526,7 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
         progress (bool, optional): If True, shows a progress bar and timer. Default is True.
 
     Returns:
-        str: Statistics.
+        str | None: Statistics.
     """
     # Exceptions.
     if _cm.__data is None: 
@@ -591,8 +606,8 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
     except: pass
 
 def plot(log:bool = False, progress:bool = True, 
-         position:str = 'complex', style:str = None,
-         style_c:dict = None, block:bool = True) -> None:
+         position:str = 'complex', style:str | None = None,
+         style_c:dict | None = None, block:bool = True) -> None:
     """
     Plot Graph with Trades.
 
@@ -618,8 +633,8 @@ def plot(log:bool = False, progress:bool = True,
             are 'complex' or 'simple'. If None or 'none', positions will not 
             be drawn. Default is 'complex'. The "complex" option may take longer 
             to process.
-        style (str, optional): Color style.
-        style_c (dict, optional): Customize the defined style by 
+        style (str | None, optional): Color style.
+        style_c (dict | None, optional): Customize the defined style by 
             modifying the dictionary. To know what to modify, 
             read the docstring of 'def_style'.
         block (bool, optional): If True, pauses script execution until all 
@@ -633,14 +648,19 @@ def plot(log:bool = False, progress:bool = True,
     elif position and not position.lower() in ('complex', 'simple', 'none'):
         raise exception.PlotError(
             f"'{position}' Not a valid option for: 'position'.")
-    elif not style is None and not style in _cm.__plt_styles.keys():
+    elif (not style is None and (style:=style.lower()) != 'random' 
+          and not style in _cm.__plt_styles.keys()):
         raise exception.PlotError(f"'{style}' Not a style.")
 
     # Corrections.
     _cm.__data.index = utils.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index, True)
 
-    style = list(_cm.__plt_styles.keys())[0] if style is None else style
+    if style is None:
+        style = list(_cm.__plt_styles.keys())[0]
+    elif style == 'random':
+        style = rd.choice(list(_cm.__plt_styles.keys()))
+
     plt_colors = _cm.__plt_styles[style]
 
     if isinstance(style_c, dict):
@@ -857,7 +877,7 @@ def plot_strategy_decorator(name:str) -> callable:
         'trades.index' as the x-axis or normalizing the axis.
 
     Args:
-        name (str, optional): Name with which it will be called.
+        name (str): Name with which it will be called.
 
     Returns:
         callable: 'plot_strategy_add'.
@@ -865,18 +885,18 @@ def plot_strategy_decorator(name:str) -> callable:
 
     return lambda x: plot_strategy_add(x, name)
 
-def plot_strategy_add(func, name:str) -> callable:
+def plot_strategy_add(func:callable, name:str) -> callable:
     """
     Add statistics for plot.
 
     Add functions and then see them graphed with 'plot_strategy'.
 
     Args:
-        func: Function, to which this will be passed in order: 
+        func (callable): Function, to which this will be passed in order: 
             'ax', '_cm.__trades', '_cm.__data', 'log'.
             To avoid visual problems, I suggest using 
             'trades.index' as the x-axis or normalizing the axis.
-        name (str, optional): Name with which it will be called.
+        name (str): Name with which it will be called.
 
     Returns:
         callable: 'func' param.
@@ -887,8 +907,9 @@ def plot_strategy_add(func, name:str) -> callable:
     _cm.__custom_plot[name.strip()] = func
     return func
 
-def stats_icon(prnt:bool = True, data:pd.DataFrame = None, 
-               data_icon:str = None, data_interval:str = None) -> str:
+def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None, 
+               data_icon:str | None = None, 
+               data_interval:str | None = None) -> str | None:
     """
     Icon Statistics.
 
@@ -897,17 +918,17 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame = None,
     Args:
         prnt (bool, optional): If True, prints the statistics. If False, returns
             the statistics as a string. Default is True.
-        data (pd.DataFrame, optional): The data with which the statistics 
+        data (DataFrame | None, optional): The data with which the statistics 
             are calculated, if left to None the loaded data will be used.
             The DataFrame must contain the following columns: 
             ('Close', 'Open', 'High', 'Low', 'Volume').
-        data_icon (str, optional): Icon shown in the statistics, 
+        data_icon (str | None, optional): Icon shown in the statistics, 
             if you leave it at None the loaded data will be the one used.
-        data_interval (str, optional): Interval shown in the statistics, 
+        data_interval (str | None, optional): Interval shown in the statistics, 
             if you leave it at None the loaded data will be the one used.
 
     Returns:
-        str: statistics.
+        str | None: Statistics.
     """
 
     data_interval = _cm.__data_interval if data_interval is None else data_interval
@@ -959,7 +980,7 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame = None,
     if prnt:print(text) 
     else: return text
 
-def stats_trades(data:bool = False, prnt:bool = True) -> str:
+def stats_trades(data:bool = False, prnt:bool = True) -> str | None:
     """
     Trades Statistics.
 
@@ -1047,7 +1068,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str:
         - Winnings: Percentage of operations won.
 
     Returns:
-        str: Statistics.
+        str | None: Statistics.
     """
 
     # Exceptions.

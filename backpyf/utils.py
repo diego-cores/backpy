@@ -68,7 +68,7 @@ def load_bar(size:int, step:int, count:bool = True, text:str = '') -> None:
         + (text if text.split() != '' else ''), 
         end='')
 
-def statistics_format(data:dict, title:str = None, 
+def statistics_format(data:dict, title:str | None = None, 
                       val_tt:list = ['Metric', 'Value']) -> str:
     """
     Statistics format.
@@ -83,7 +83,7 @@ def statistics_format(data:dict, title:str = None,
             "another_metric": ["value", backpyf._commons.__COLORS['COLOR']]
             }
             If a metric value is a list, the second element should be a color.
-        title (str, optional): Statistics title.
+        title (str | None, optional): Statistics title.
         val_tt (list, optional): Name of the metrics and values.
 
     Returns:
@@ -210,10 +210,10 @@ def correct_index(index:pd.Index) -> np.ndarray:
     Correct `index` by converting it to float
 
     Args:
-        index (pd.Index): The `index` of the data to be corrected.
+        index (Index): The `index` of the data to be corrected.
 
     Returns:
-        np.ndarray: The corrected `index`.
+        ndarray: The corrected `index`.
     """
 
     if not all(isinstance(ix, float) for ix in index):
@@ -232,7 +232,7 @@ def calc_width(index:pd.Index, alert:bool = False) -> float:
     Calculate the width of `index` if it has not been calculated already.
 
     Args:
-        index (pd.Index): The index of the data.
+        index (Index): The index of the data.
         alert (bool, optional): If `True`, an alert will be printed. Defaults to 
             False.
 
@@ -297,7 +297,8 @@ def text_fix(text:str, newline_exclude:bool = True) -> str:
     return ''.join(line.lstrip() + ('\n' if not newline_exclude else '')  
                         for line in text.split('\n'))
 
-def diff_color(color:str, factor:float = 1, line:float = 0.2) -> tuple:
+def diff_color(color:str, factor:float = 1, 
+               line:float = 0.2) -> tuple[float, float, float]:
     """
     Different color
 
@@ -314,7 +315,7 @@ def diff_color(color:str, factor:float = 1, line:float = 0.2) -> tuple:
             number the opposite will be done (lightening).
 
     Returns:
-        tuple: Rgb color.
+        tuple[float, float, float]: Rgb color.
     """
 
     if line > 1 or line < 0:
@@ -335,7 +336,7 @@ def plot_volume(ax:Axes, data:pd.Series,
 
     Args:
         ax (Axes): The `Axes` object where the volume will be drawn.
-        data (pd.Series): Data to draw the volume.
+        data (Series): Data to draw the volume.
         width (float, optional): Width of each bar. Defaults to 1.
         color (str, optional): Color of the volume. Defaults to 'tab:orange'.
         alpha (float, optional): Opacity of the volume. Defaults to 1.
@@ -361,7 +362,7 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
 
     Args:
         ax (Axes): The `Axes` object where the candles will be drawn.
-        data (pd.DataFrame): Data to draw the candles.
+        data (DataFrame): Data to draw the candles.
         width (float, optional): Width of each candle. Defaults to 1.
         color_up (str, optional): Color of the candle when the price rises. 
             Defaults to 'g'.
@@ -395,14 +396,14 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
                   color_takec:str = 'gold', color_stopc:str = 'blueviolet',
                   alpha:float = 1, alpha_arrow:float = 1,  
                   arrow_fact:float = 0.2, operation_route:bool = True, 
-                  width_exit:any = lambda x: 9) -> None:
+                  width_exit:callable = lambda x: 9) -> None:
     """
     Position Draw.
 
     Plots positions on your `ax`.
 
     Args:
-        trades (pd.DataFrame): Trades data to draw.
+        trades (DataFrame): Trades data to draw.
         ax (Axes): Axes where it is drawn.
         color_take (str, optional): Color for positive positions. Default is 'green'.
         color_stop (str, optional): Color for negative positions. Default is 'red'.
@@ -415,7 +416,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
         operation_route (bool, optional): If True, traces the route of the operation. Default is True.
         arrow_fact (float, optional): Indicates how much the colors of the arrows darken or lighten.
             If you don't want this to happen, leave it at 0.
-        width_exit (any, optional): Function that specifies how many time points the position 
+        width_exit (callable, optional): Function that specifies how many time points the position 
             extends forward if not closed. Default is a lambda function with a width of 9.
 
     Info:
@@ -508,7 +509,7 @@ def _loop_data(function:callable, bpoint:callable, init:int, timeout:float) -> p
             adherence to API rate limits.
 
     Returns:
-        pd.DataFrame: DataFrame with all extracted data.
+        DataFrame: DataFrame with all extracted data.
     """
     data = pd.DataFrame()
 

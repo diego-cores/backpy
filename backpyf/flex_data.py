@@ -9,8 +9,11 @@ Classes:
         depending on the user's input and whether they are a maker or taker.
 """
 
-from typing import TypeVar, Generic, List, Union, Dict, Tuple
+from __future__ import annotations
+
+from typing import TypeVar, Generic, Union, Tuple
 from collections.abc import MutableSequence
+
 import pandas as pd
 import random as rd
 import numpy as np
@@ -48,14 +51,18 @@ class DataWrapper(MutableSequence, Generic[T]):
         __valid_columns: Returns the correct column names.
     """
 
-    def __init__(self, data: Union[List[T], Dict[str, List[T]]] = None, 
-                 columns:np.ndarray = None) -> None:
+    def __init__(
+            self, data: (list | dict[str, list] | np.ndarray | pd.DataFrame
+                          | pd.Series | pd.Index | DataWrapper | None) = None, 
+            columns: np.ndarray | pd.Index | list | tuple | "DataWrapper" | None = None
+        ) -> None:
         """
         Builder method.
 
         Args:
-            data (Union[List[T], Dict[str, List[T]]]): Value to store.
-            columns (np.ndarray, optional): Column names.
+            data (list | dict[str, list] | np.ndarray | pd.DataFrame 
+                | pd.Series | pd.Index | DataWrapper | None, optional): Value to store.
+            columns (np.ndarray | pd.Index | list | tuple | "DataWrapper" | None, optional): Column names.
         """
 
         if type(columns) != np.ndarray and not columns is None:
@@ -68,14 +75,20 @@ class DataWrapper(MutableSequence, Generic[T]):
 
         super().__init__()
 
-    def __get_columns(self, columns) -> np.ndarray:
+    def __get_columns(
+            self, columns:(np.ndarray | pd.Index 
+                           | list | tuple | "DataWrapper")) -> np.ndarray:
         """
         Get columns.
 
-        This function converts its 'columns' argument to np.ndarray.
+        This function converts its 'columns' argument to ndarray.
+        
+        Args:
+            columns (np.ndarray | pd.Index 
+            | list | tuple | "DataWrapper" | None, optional): Columns to convert.
 
         Returns:
-            list: 'columns' in np.ndarray type.
+            ndarray: 'columns' in ndarray type.
         """
 
         if type(columns) is DataWrapper:
@@ -85,14 +98,19 @@ class DataWrapper(MutableSequence, Generic[T]):
         else:
             return np.array(columns, ndmin=1)
 
-    def __set_convertible(self, data) -> np.ndarray:
+    def __set_convertible(self, data:list | dict[str, list] | np.ndarray | pd.DataFrame 
+                | pd.Series | pd.Index | "DataWrapper" | None) -> np.ndarray:
         """
         Set convertible.
 
         Returns 'data' in list type.
 
+        Args:
+            data (list | dict[str, list] | np.ndarray | pd.DataFrame 
+                | pd.Series | pd.Index | DataWrapper | None, optional): Value to store.
+
         Returns:
-            list: 'data' in list type.
+            ndarray: 'data' in ndarray type.
         """
         if data is None:
             return np.array([])
@@ -117,14 +135,19 @@ class DataWrapper(MutableSequence, Generic[T]):
 
         return data
 
-    def __set_index(self, data) -> np.ndarray:
+    def __set_index(self, data:list | dict[str, list] | np.ndarray | pd.DataFrame 
+                | pd.Series | pd.Index | "DataWrapper" | None) -> np.ndarray:
         """
         Set index.
 
         Returns the Pandas index if 'data' has one.
 
+        Args:
+            data (list | dict[str, list] | np.ndarray | pd.DataFrame 
+                | pd.Series | pd.Index | DataWrapper | None, optional): Value with index.
+
         Returns:
-            list: Index in np.ndarray type.
+            ndarray: Index in ndarray type.
         """
 
         if type(data) is DataWrapper:
@@ -136,14 +159,19 @@ class DataWrapper(MutableSequence, Generic[T]):
 
         return None
 
-    def __set_columns(self, data) -> np.ndarray:
+    def __set_columns(self, data:list | dict[str, list] | np.ndarray | pd.DataFrame 
+                | pd.Series | pd.Index | "DataWrapper" | None) -> np.ndarray:
         """
         Set index.
 
         Returns the names of columns if 'data' has columns.
 
+        Args:
+            data (list | dict[str, list] | np.ndarray | pd.DataFrame 
+                | pd.Series | pd.Index | DataWrapper | None, optional): Value with columns.
+
         Returns:
-            list: Columns in np.ndarray type.
+            ndarray: Columns in ndarray type.
         """
 
         if type(data) is DataWrapper:
@@ -210,10 +238,10 @@ class DataWrapper(MutableSequence, Generic[T]):
         """
         Unwrap
 
-        Returns self._data in its np.ndarray format.
+        Returns _data in its ndarray format.
         
         Returns:
-            np.ndarray: self._data.
+            ndarray: _data.
         """
 
         return self._data
@@ -222,10 +250,10 @@ class DataWrapper(MutableSequence, Generic[T]):
         """
         To Pandas Dataframe.
 
-        Return the value in pd.DataFrame format
+        Return the value in DataFrame format
 
         Returns:
-            pd.DataFrame: Data.
+            DataFrame: Data.
         """
 
         try: 
@@ -242,10 +270,10 @@ class DataWrapper(MutableSequence, Generic[T]):
         """
         To Pandas Series
 
-        Return the value in pd.Series format.
+        Return the value in Series format.
 
         Returns:
-            pd.Series: Data.
+            Series: Data.
         """
 
         try: 
@@ -278,7 +306,7 @@ class DataWrapper(MutableSequence, Generic[T]):
         """
         To Python list
 
-        Return the value in Python list format.
+        Return the _data in Python list format.
 
         Returns:
             list: Data.
@@ -375,19 +403,21 @@ class CostsValue:
         __process_value: Returns the random or fixed value.
     """
 
-    def __init__(self, value: Union[
-        float, Tuple[float, float], 
-        Tuple[Union[float, Tuple[float, float]], Union[float, Tuple[float, float]]]], 
-        supp_random:bool = True, supp_double:bool = False,
-        cust_error:str = None) -> None:
+    def __init__(
+            self, value: (float | tuple[float, float] | tuple[float 
+            | tuple[float, float], float | tuple[float, float]]), 
+            supp_random:bool = True, supp_double:bool = False, 
+            cust_error:str | None = None
+        ) -> None:
         """
         Builder method.
 
         Args:
-            value: Data tuple with this format: (maker, taker).
+            value (float | tuple[float, float] | tuple[float | tuple[float, float], float | tuple[float, float]]): 
+                Data tuple with this format: (maker, taker).
             supp_random (bool, optional): If it supports random values.
             supp_double (bool, optional): False if there is only one side (maker, taker).
-            cust_error (str, optional): If an error occurs, 
+            cust_error (str | None, optional): If an error occurs, 
                 you can add custom text at the end of the error.
         """
 
@@ -410,7 +440,7 @@ class CostsValue:
         else:
             self.__maker = self.__taker = self.__process_value(value)
 
-    def __process_value(self, val) -> callable:
+    def __process_value(self, val: tuple | int | float) -> callable:
         """
         Process value.
 
@@ -418,7 +448,7 @@ class CostsValue:
         if it matches a 'random.uniform' or returns the fixed value.
 
         Args:
-            val: Value to evaluate.
+            val (tuple | int | float): Value to evaluate.
 
         Return:
             callable: The function that will return the random or fixed value.
@@ -445,7 +475,7 @@ class CostsValue:
         Get maker.
 
         Return:
-            float: '__maker()'.
+            float: Maker value.
         """
 
         return self.__maker()
@@ -455,7 +485,7 @@ class CostsValue:
         Get taker.
         
         Return:
-            float: '__taker()'.
+            float: Taker value.
         """
 
         return self.__taker()

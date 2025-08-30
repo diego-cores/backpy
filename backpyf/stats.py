@@ -35,7 +35,7 @@ def average_ratio(trades:pd.DataFrame) -> float:
     Based on the profit, it calculates an average ratio.
 
     Args:
-        trades (pd.DataFrame): A dataframe with 'profitPer' column.
+        trades (DataFrame): A dataframe with 'profitPer' column.
 
     Returns:
         float: Average ratio.
@@ -54,7 +54,7 @@ def profit_fact(profits:pd.Series) -> float:
     Calculate the profit factor of the values.
 
     Args:
-        profits (pd.Series): Returns on each operation.
+        profits (Series): Returns on each operation.
 
     Returns:
         float: Profit fact.
@@ -75,7 +75,7 @@ def math_hope(profits:pd.Series) -> float:
     Calculate the mathematical expectation of the values.
 
     Args:
-        profits (pd.Series): Returns on each operation.
+        profits (Series): Returns on each operation.
 
     Returns:
         float: Math hope.
@@ -94,8 +94,8 @@ def math_hope_relative(trades:pd.DataFrame, profits:pd.Series) -> float:
         expectation based on the average_ratio and the profits.
 
     Args:
-        trades (pd.DataFrame): A dataframe with 'profit' column.
-        profits (pd.Series): Returns on each operation.
+        trades (DataFrame): A dataframe with 'profit' column.
+        profits (Series): Returns on each operation.
 
     Returns:
         float: Math hope relative.
@@ -110,7 +110,7 @@ def winnings(profits:pd.Series) -> float:
     Calculate the percentage of positive numbers in the series.
 
     Args:
-        profits (pd.Series): Returns on each operation.
+        profits (Series): Returns on each operation.
 
     Returns:
         float: Winnings percentage.
@@ -135,7 +135,7 @@ def sharpe_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
     Args:
         ann_av (float): Annual returns.
         year_days (int): Operable days of the year (normally 252).
-        diary_per (pd.Series): Daily return.
+        diary_per (Series): Daily return.
 
     Returns:
         float: Sharpe ratio.
@@ -157,7 +157,7 @@ def sortino_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
     Args:
         ann_av (float): Annual returns.
         year_days (int): Operable days of the year (normally 252).
-        diary_per (pd.Series): Daily return.
+        diary_per (Series): Daily return.
 
     Returns:
         float: Sortino ratio.
@@ -175,7 +175,7 @@ def payoff_ratio(profits:pd.Series) -> float:
         mean of positive numbers/mean of negative numbers.
 
     Args:
-        profits (pd.Series): Returns on each operation..
+        profits (Series): Returns on each operation..
 
     Returns:
         float: Payoff ratio.
@@ -191,7 +191,7 @@ def expectation(profits:pd.Series) -> float:
     Calculate the expectation based on payoff.
 
     Args:
-        profits (pd.Series): Returns on each operation.
+        profits (Series): Returns on each operation.
 
     Returns:
         float: Expectation.
@@ -207,7 +207,7 @@ def long_exposure(types:pd.Series) -> float:
     Calculate the percentage of 1 in the 'types'.
 
     Args:
-        types (pd.Series): Type of each operation, 1 for long, 0 for short.
+        types (Series): Type of each operation, 1 for long, 0 for short.
 
     Returns:
         float: Percentages of longs.
@@ -215,14 +215,16 @@ def long_exposure(types:pd.Series) -> float:
 
     return (types==1).sum()/types.count()
 
-def var_historical(data:list, confidence_level:int = 95) -> float:
+def var_historical(data:list | pd.Series | np.ndarray, 
+                   confidence_level:int = 95) -> float:
     """
     Var historical.
 
     Calculate the historical var.
 
     Args:
-        data (list): List of data which will calculate the var.
+        data (list | pd.Series | np.ndarray): 
+            List of data which will calculate the var.
         confidence_level (int, optional): Percentile.
     
     Returns:
@@ -231,14 +233,16 @@ def var_historical(data:list, confidence_level:int = 95) -> float:
 
     return np.sort(data)[int((100 - confidence_level) / 100 * len(data))]
 
-def var_parametric(data:list, z_alpha:float = -1.645) -> float:
+def var_parametric(data:list | pd.Series | np.ndarray, 
+                   z_alpha:float = -1.645) -> float:
     """
     Var parametric.
 
     Calculate the parametric var.
 
     Args:
-        data (list): List of data which will calculate the var.
+        data (list | pd.Series | np.ndarray): 
+            List of data which will calculate the var.
         z_alpha (float, optional): Critical value of the standard normal 
             distribution corresponding to the confidence level.
 
@@ -255,7 +259,7 @@ def max_drawdown(values:pd.Series) -> float:
     Calculate the maximum drawdown of `values`.
 
     Args:
-        values (pd.Series): The ordered data to calculate the maximum drawdown.
+        values (Series): The ordered data to calculate the maximum drawdown.
 
     Returns:
         float: The maximum drawdown from the given data.
@@ -276,18 +280,22 @@ def max_drawdown(values:pd.Series) -> float:
 
     return max_drdwn
 
-def get_drawdowns(values:list) -> list:
+def get_drawdowns(
+        values:list | pd.Series | np.ndarray
+    ) -> list | pd.Series | np.ndarray:
     """
     Get drawdowns.
 
     Calculate the drawdowns of `values`.
 
     Args:
-        values (pd.Series): The ordered data to calculate the drawdowns.
+        values (list | pd.Series | np.ndarray): 
+            The ordered data to calculate the drawdowns.
 
     Returns:
         list: The drawdowns from the given data.
     """
+
     if len(values) == 0:
         return 0
 
