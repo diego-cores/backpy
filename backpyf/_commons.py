@@ -111,6 +111,11 @@ __plt_styles = {
         'fr': '#FFE6D6', 'btn': '#FF7043', 'btna': '#E35B33',
         'vol': '#FFA07A', 'mk': {'u': '#FF7043', 'd': '#CC4F2D'},
     },
+    'emberday': {
+        'bg': ("#f0f0f0", "#e5e5e5", "#dfdfdf"), 'gdir': True,
+        'fr': '#0A0A0A', 'btn': "#FF6347", 'btna': "#DF2828",
+        'vol': "#FF806A", 'mk': {'u': '#FF6347', 'd': "#CF0000"},
+    },
 
     # dark
     'sunrisedusk': {

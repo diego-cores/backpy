@@ -468,7 +468,7 @@ def custom_ax(ax:matplotlib.axes._axes.Axes,
     Aesthetically configures an axis.
 
     Note:
-        The gradient can change the 'x' limits.
+        The gradient can change the 'ax' limits.
 
     Args:
         ax (Axes): Axes to config.

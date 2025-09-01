@@ -753,7 +753,8 @@ def plot(log:bool = False, progress:bool = True,
     window.show(block=block)
 
 def plot_strategy(log:bool = False, view:str = 'p/w/r/e', 
-                  custom_graph:dict = {}, block:bool = True) -> None:
+                  custom_graph:dict = {}, style:str | None = None,
+                  style_c:dict | None = None, block:bool = True) -> None:
     """
     Plot Strategy Statistics.
 
@@ -765,6 +766,12 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
         - 'r' = Return graph.
         - 'w' = Winnings graph.
 
+    All color styles:
+        'lightmode', 'darkmode', 'sunrise', 'mintfresh', 'skyday', 
+        'lavenderblush', 'peachpuff', 'sunrisedusk', 'embernight',
+        'obsidian', 'neonforge', 'carbonfire', 'datamatrix', 
+        'terminalblood', 'plasmacore'.
+
     Args:
         log (bool, optional): If True, plots data using a logarithmic scale. 
             Default is False.
@@ -775,6 +782,10 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
             be passed: 'ax', '_cm.__trades', '_cm.__data', 'log'.
             To avoid visual problems, I suggest using 
             'trades.index' as the x-axis or normalizing the axis.
+        style (str | None, optional): Color style.
+        style_c (dict | None, optional): Customize the defined style by 
+            modifying the dictionary. To know what to modify, 
+            read the docstring of 'def_style'.
         block (bool, optional): If True, pauses script execution until all figure 
             windows are closed. If False, the script continues running after 
             displaying the figures. Default is True.
@@ -798,6 +809,19 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
                     [f"'{i}'" for i in _cm.__custom_plot.keys()])) 
                     if _cm.__custom_plot.keys() else ''}.
             """, newline_exclude=True))
+    elif (not style is None and (style:=style.lower()) != 'random' 
+          and not style in _cm.__plt_styles.keys()):
+        raise exception.StatsError(f"'{style}' Not a style.")
+
+    if style is None:
+        style = list(_cm.__plt_styles.keys())[0]
+    elif style == 'random':
+        style = rd.choice(list(_cm.__plt_styles.keys()))
+
+    plt_colors = _cm.__plt_styles[style]
+
+    if isinstance(style_c, dict):
+        plt_colors.update(style_c)
 
     mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
@@ -811,48 +835,82 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
     trades = pd.concat([
         init_p, _cm.__trades], ignore_index=True)
 
+    gdir = plt_colors.get('gdir', False)
+    market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
+
     for i,v in enumerate(view):
         match len(view):
             case 1: 
                 ax = mpl.pyplot.subplot2grid((6,2), loc[0], 
                                              rowspan=6, colspan=2)
-                ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
             case 2: 
                 ax = mpl.pyplot.subplot2grid((6,2), loc[i], 
                                              rowspan=3, colspan=2, 
                                              sharex=ax)
-                ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
             case 3: 
                 ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, 
                                              colspan=2 if i==0 else 1, 
                                              sharex=ax)
-                ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
             case 4: 
                 ax = mpl.pyplot.subplot2grid((6,2), loc[i], 
                                              rowspan=3, colspan=1, 
                                              sharex=ax)
-                ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
+
+        cpl.custom_ax(ax, plt_colors['bg'], edge=gdir)
+        ax.tick_params('x', which='both', bottom=False, 
+                       top=False, labelbottom=False)
+        ax.tick_params('y', which='both', left=False, 
+                       right=False, labelleft=False)
+
+        ax.yaxis.set_major_formatter(lambda y, _: y.real)
+        ax.yaxis.set_major_formatter(lambda y, _: y.real)
+        ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
+
+        pos_date = trades['positionDate']
+        ax.set_xlim(pos_date.iloc[0]-(_cm.__data_width*len(pos_date)/10), 
+                    pos_date.iloc[-2]+(_cm.__data_width*len(pos_date)/10))
+
+        y_limit = lambda values, comp=1: (values.min()-comp, 
+                                          values.max()*1.05+comp)
 
         match v:
             case 'p':
-                ax.plot(trades['positionDate'],trades['profit'].cumsum(), 
-                        c='black', label='Profit.', ds='steps-post')
-                
+                values = trades['profit'].cumsum()
+                color = (market_colors.get('u', 'g') if values.iloc[-2] > 0 
+                         else market_colors.get('d', 'r'))
+
+                ax.plot(pos_date, values, c=color, 
+                        label='Profit.', ds='steps-post')
+   
+                ax.set_ylim(y_limit(values))
+
                 if log: ax.set_yscale('symlog')
             case 'w':
-                ax.plot(trades['positionDate'],
-                        (trades['profitPer'].apply(
-                            lambda row: 1 if row>0 else -1)).cumsum(), 
-                        c='black', label='Winnings.', ds='steps-post')
+                values = (trades['profitPer'].apply(
+                            lambda row: 1 if row>0 else -1)).cumsum()
+                color = market_colors.get('u', 'g')
+
+                ax.plot(pos_date, values, c=color, 
+                        label='Winnings.', ds='steps-post')
+                ax.set_ylim(y_limit(values))
             case 'e':
-                ax.plot(trades['positionDate'], 
-                        np.cumprod(1 + trades['profitPer'] / 100), 
-                        c='black', label='Equity.', ds='steps-post')
+                values = np.cumprod(1 + trades['profitPer'] / 100)
+                color = (market_colors.get('u', 'g') if values.iloc[-2] > 1 
+                         else market_colors.get('d', 'r'))
+
+                ax.plot(pos_date, values, c=color, 
+                        label='Equity.', ds='steps-post')
+                ax.set_ylim(y_limit(values, 0.01))
 
                 if log: ax.set_yscale('symlog')
             case 'r':
-                ax.plot(trades['positionDate'],trades['profitPer'].cumsum(), 
-                        c='black', label='Return.', ds='steps-post')
+                values = trades['profitPer'].cumsum()
+                color = (market_colors.get('u', 'g') if values.iloc[-2] > 0 
+                         else market_colors.get('d', 'r'))
+
+                ax.plot(pos_date, values, c=color, 
+                        label='Return.', ds='steps-post')
+                ax.set_ylim(y_limit(values))
 
                 if log: ax.set_yscale('symlog')
             case key if key in _cm.__custom_plot.keys():
@@ -862,9 +920,23 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
 
         ax.legend(loc='upper left')
 
+    fig.autofmt_xdate()
+    fig.subplots_adjust(left=0, right=1, top=1, 
+                        bottom=0, wspace=0, hspace=0)
+
     mpl.pyplot.xticks([])
-    mpl.pyplot.gcf().canvas.manager.set_window_title(f'Strategy statistics')
-    mpl.pyplot.show(block=block)
+
+    window = cpl.CustomWin(
+        f'Strategy statistics - {style}',
+        frame_color=plt_colors['fr'],
+        buttons_color=plt_colors['btn'],
+        button_act=plt_colors.get('btna', '#333333'))
+
+    mpl_canvas = window.mpl_canvas(fig=fig)
+    window.mpl_toolbar(mpl_canvas=mpl_canvas)
+
+    mpl.pyplot.close(fig)
+    window.show(block=block)
 
 def plot_strategy_decorator(name:str) -> callable:
     """
