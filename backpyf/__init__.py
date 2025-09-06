@@ -33,18 +33,11 @@ License:
     SOFTWARE.
 """
 
+from . import _commons
+
 from .strategy import (
     StrategyClass,
     idc_decorator,
-)
-
-from ._commons import (
-    __binance_timeout,
-    max_bar_updates,
-    run_timer,
-    alert,
-    dots,
-    lift,
 )
 
 from .custom_plt import (
@@ -66,8 +59,9 @@ from .main import (
     load_data_bpd,
     save_data_bpd,
     stats_trades,
-    stats_icon, 
-    load_data, 
+    stats_icon,
+    run_config, 
+    load_data,
     plot, 
     run, 
 )
@@ -77,37 +71,45 @@ from .stats import (
     max_drawdown,
 )
 
-from .utils import utils
+from . import utils
 
 __doc__ = """
-BackPy documentation.
+BackPy documentation
 
-BackPy is a library used to test strategies in the market. It allows you 
-to provide your own data or use the Yfinance module.
+BackPy is a module for backtesting data. 
+You can create your own data or use 
+    functions that extract data from other modules.
 
-Important Notice:
+Important Notice: 
     Understanding the Risks of Trading and Financial Data Analysis.
-
     Trading financial instruments and using financial data for analysis 
-    involves significant risks, including the possibility of loss of 
-    capital. Markets can be volatile and data may contain errors. Before 
-    engaging in trading activities or using financial data, it is important 
-    to understand and carefully consider these risks and seek independent 
-    financial advice if necessary.
+    involves significant risks, including the possibility of loss of capital. 
+    Markets can be volatile and data may contain errors. Before engaging in 
+    trading activities or using financial data, it is important to understand 
+    and carefully consider these risks and seek independent financial advice 
+    if necessary.
 
 Disclaimer Regarding Accuracy of BackPy:
-    It is essential to acknowledge that the backtesting software utilized 
-    for financial chart analysis may not be entirely accurate and could 
-    contain errors, leading to results that may not reflect real-world 
-    outcomes.
+    It is essential to acknowledge that the backtesting software 
+    utilized for financial chart analysis may not be entirely 
+    accurate and could contain errors, leading to results that 
+    may not reflect real-world outcomes.
 
-What can I do with BackPy?
-    - Determine the position of different indicators for each point.
-    - Create your own indicators based on price, date, and volume.
-    - Consult previous data such as previous closings and active actions 
-      for each point.
-    - Display data with or without a logarithmic scale.
-    - Print statistics of the uploaded data.
+Disclaimer Regarding Financial Advice:
+    It is crucial to emphasize that the backtesting software, including BackPy, 
+    should not be construed as a substitute for professional financial advice. 
+    While BackPy provides tools for financial data analysis, it does not 
+    constitute financial advice or recommendations for trading decisions. 
+    Users should exercise caution and seek advice from qualified financial 
+    professionals before making any financial decisions based on the 
+    results obtained from BackPy or any similar software.
+
+Terms and Conditions:
+    By using BackPy, you acknowledge that you have read and understood the 
+    above notices and disclaimers and agree to abide by them. Your use of 
+    BackPy constitutes your acceptance of these terms and conditions. If you 
+    do not agree with these terms, you should not use BackPy.
+
 """
 
 __all__ = [
@@ -129,9 +131,11 @@ __all__ = [
     'DataWrapper',
     'stats_icon',
     'CostsValue',
+    'run_config',
     'load_data',
     'run_timer',
     'def_style',
+    '_commons',
     'utils',
     'alert',
     'plot',

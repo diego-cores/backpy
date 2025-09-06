@@ -24,7 +24,7 @@ from uuid import uuid4
 from time import time
 
 from . import flex_data as flx
-from . import _commons as _cm
+from . import _commons as cm_
 from . import exception
 from . import utils
 
@@ -78,7 +78,7 @@ def _data_info() -> tuple[str, str, float]:
             - __data_width (int): Data index width.
     """
 
-    return _cm.__data_interval, _cm.__data_icon, _cm.__data_width
+    return cm_.__data_interval, cm_.__data_icon, cm_.__data_width
 
 class StrategyClass(ABC):
     """
@@ -109,6 +109,11 @@ class StrategyClass(ABC):
         __positions: Active positions.
         __pos_record: Position history.
         __orders_order: Order type priority.
+        __ngap: If True, gaps are not calculated when adjusting the price.
+        __limit_ig: If left at True, the 'takeLimit' and 
+            'stopLimit' orders are sent to the next candle.
+        __orders_nclose: If set True, the orders are not ordered so that 
+            the closest ones are executed first.
         __data: DataFrame containing cuted data.
         __data_all: DataFrame containing all data.
         __data_index: Index to cut data.
@@ -150,9 +155,12 @@ class StrategyClass(ABC):
     Private Methods:
         __del: Adds items to '__to_delete'.
         __deli: Removes indexes from '__to_delate'.
+        __buff: Extracts values from '__buffer'.
         __act_reduce: Reduce a position or close it.
         __put_pos: Put a position in the simulation.
         __put_ord: Place a new order.
+        __union_pos: Get all positions with the same union id.
+        __word_reduce: Take an order and reduce the corresponding action.
         __order_execute: Executes an order based on the order type.
         __get_union: Find rows with the same 'unionId'.
         __price_check: Checks if 'price' is a correct value for the position.
@@ -183,11 +191,7 @@ class StrategyClass(ABC):
         __before: This function is used to run trades and other operations.
     """
 
-    def __init__(self, data:pd.DataFrame = pd.DataFrame(), 
-                 spread_pct:flx.CostsValue = flx.CostsValue(0), 
-                 commission:flx.CostsValue = flx.CostsValue(0), 
-                 slippage_pct:flx.CostsValue = flx.CostsValue(0), 
-                 init_funds:int = 0) -> None: 
+    def __init__(self, data:pd.DataFrame = pd.DataFrame()) -> None: 
         """
         __init__
 
@@ -195,16 +199,12 @@ class StrategyClass(ABC):
 
         Args:
             data (DataFrame, optional): All data from the step and previous ones.
-            spread_pct (CostsValue, optional): Spread per trade.
-            commission (CostsValue, optional): Commission per trade.
-            slippage_pct (CostsValue, optional): Slippage per trade.
-            init_funds (int, optional): Initial funds for the strategy.
         """
 
         self.open = None
-        self.high = None
-        self.low = None
         self.close = None
+        self.low = None
+        self.high = None
         self.volume = None
         self.date = None
 
@@ -212,17 +212,35 @@ class StrategyClass(ABC):
         self.__data_all = data
         self.__data_index = None
 
-        self.__idc_data = {}
         self.__buffer = {}
+        self.__idc_data = {}
 
-        self.interval, self.icon, self.width = _data_info()
+        cmattr = lambda x: getattr(cm_, x)
 
-        self.__spread_pct  = spread_pct
-        self.__slippage_pct = slippage_pct
-        self.__commission = commission
-        self.__init_funds = init_funds
+        self.icon = cmattr('__data_icon')
+        self.width = cmattr('__data_width')
+        self.interval = cmattr('__data_interval')
 
-        self.__orders_order = {'op': 0, 'stopLoss': 1, 'takeProfit': 2}
+        # Execution configuration
+        self.__init_funds = cmattr('__init_funds') or 0
+        self.__commission = cmattr('__commission') or flx.CostsValue(0)
+        self.__spread_pct  = cmattr('__spread_pct') or flx.CostsValue(0)
+        self.__slippage_pct = cmattr('__slippage_pct') or flx.CostsValue(0)
+        self.__orders_order = {'op': 0, 'rd': 1, 'stopLimit': 2, 'stopLoss': 3, 
+                               'takeLimit': 4, 'takeProfit': 5}
+
+        if isinstance(cmattr('__orders_order'), dict):
+            for k,v in cmattr('__orders_order').items():
+                if not k in ('stopLimit', 'stopLoss', 'takeLimit', 'takeProfit'):
+                    continue
+                elif v > 99:
+                    raise exception.StyClassError('Order ord value out of range.')
+
+                self.__orders_order.update({k:v})
+
+        self.__ngap = bool(cmattr('__min_gap'))
+        self.__limit_ig = bool(cmattr('__limit_ig'))
+        self.__orders_nclose = bool(cmattr('__orders_nclose'))
 
         self.__orders = []
         self.__positions = []
@@ -508,7 +526,8 @@ class StrategyClass(ABC):
             self.__orders.sort(
             key=lambda x: (
                 self.__orders_order.get(x['order'], 99),
-                abs(x['orderPrice'] - self.__data['Open'].values[-1])
+                (abs(x['orderPrice'] - self.__data['Open'].values[-1]) 
+                 if not self.__orders_nclose else None)
             ))
 
             higher = self.__data['High'].values[-1]*(self.__spread_pct.get_taker()/100/2+1)
@@ -547,14 +566,34 @@ class StrategyClass(ABC):
                     self.__del('__orders', [i])
 
             self.__deli('__orders')
+        if (psff:=self.__buff('__pos_record')): self.__pos_record.extend(psff)
 
         # Execute strategy
         self.next()
 
-        # Concat orders
-        if '__orders' in self.__buffer and len(self.__buffer['__orders']) > 0:
-            self.__orders.extend(self.__buffer['__orders'])
-            self.__buffer['__orders'] = self.__buffer['__orders'][:0]
+        # Concat buffer
+        if (obff:=self.__buff('__orders')): self.__orders.extend(obff)
+        if (psff:=self.__buff('__pos_record')): self.__pos_record.extend(psff)
+
+    def __buff(self, name:str) -> list | None:
+        """
+        Buffering
+
+        Extracts values from '__buffer'.
+
+        Args:
+            name (str): Saved value name.
+
+        Return:
+            list | None: Returns the list of values or None if no values exist.
+        """
+
+        result = None
+        if name in self.__buffer and len(self.__buffer[name]) > 0:
+            result = self.__buffer[name]
+            self.__buffer[name] = self.__buffer[name][:0]
+
+        return result
 
     def __deli(self, name:str) -> None:
         """
@@ -759,7 +798,9 @@ class StrategyClass(ABC):
 
         position['commission'] += commission
 
-        self.__pos_record.append(position)
+        if not '__pos_record' in self.__buffer:
+            self.__buffer['__pos_record'] = []
+        self.__buffer['__pos_record'].append(position)
 
     def __put_pos(self, price:float, date:float, 
                   amount:float, type_side:bool, union_id:str) -> None:
@@ -808,6 +849,58 @@ class StrategyClass(ABC):
 
         self.__positions.append(position) 
 
+    def __union_pos(self, union_id:str) -> list | None:
+        """
+        Union positions
+
+        Get all positions with the same union id.
+
+        The positions are returned with a new column: 
+            'rIndex' which indicates the actual index in self.__positions.
+
+        Args:
+            union_id (str): Union id to filter with.
+
+        Return:
+            list | None: 
+                Positions if none are found, None is returned.
+        """
+
+        if not self.__positions:
+                return
+
+        union_positions = [
+            {**v, 'rIndex': i}
+            for i, v in enumerate(self.__positions)
+            if (not v.get('unionId') is None 
+                and v.get('unionId') == union_id)
+        ]
+
+        return union_positions or None
+
+    def __word_reduce(self, order:dict, mode:str = 'taker') -> bool | None:
+        """
+        With order reduce
+
+        Take an order and reduce the corresponding action.
+
+        Args:
+            order (dict): Dict with the order.
+            mode (str): Order type ('taker', 'maker').
+
+        Return:
+            bool | None: 
+                Returns True if the action was reduced, otherwise returns None.
+        """
+
+        if not (u_pos:=self.__union_pos(order['unionId'])):
+            return
+
+        self.__act_reduce(
+            u_pos[0]['rIndex'], order['orderPrice'], 
+            amount=order['amount'], mode=mode)
+        return True
+
     def __order_execute(self, order:dict) -> None:
         """
         Order execute
@@ -829,37 +922,48 @@ class StrategyClass(ABC):
                     type_side=order['typeSideOrd'],
                     union_id=order['unionId']
                 )
+    
+            case 'rd':
+                self.__word_reduce(order, mode='maker')
 
             case 'takeProfit' | 'stopLoss':
-                if not self.__positions:
-                    return
-
-                union_pos = [
-                    {**v, 'rIndex': i}
-                    for i, v in enumerate(self.__positions)
-                    if (not v.get('unionId') is None 
-                        and v.get('unionId') == order['unionId'])
-                ]
-
-                if not union_pos:
-                    return 
-
                 # Gap case
-                min_gap = min(self.__data['Open'].values[-1], 
-                              self.__data['Close'].values[-2])
-                max_gap = max(self.__data['Open'].values[-1], 
-                              self.__data['Close'].values[-2])
+                if not self.__ngap:
+                    min_gap = min(self.__data['Open'].values[-1], 
+                                self.__data['Close'].values[-2])
+                    max_gap = max(self.__data['Open'].values[-1], 
+                                self.__data['Close'].values[-2])
 
-                if order['orderPrice'] > min_gap and order['orderPrice'] < max_gap:
-                    order['orderPrice'] = self.__data['Open'].values[-1]
+                    if order['orderPrice'] > min_gap and order['orderPrice'] < max_gap:
+                        order['orderPrice'] = self.__data['Open'].values[-1]
 
-                self.__act_reduce(
-                    union_pos[0]['rIndex'], order['orderPrice'], 
-                    amount=order['amount'], mode='taker')
-
-            # Work in progress
+                self.__word_reduce(order, mode='taker')
+ 
             case 'takeLimit' | 'stopLimit':
-                pass
+                higher = order['orderPrice']*(self.__spread_pct.get_taker()/100/2+1)
+                lower = order['orderPrice']*(1-self.__spread_pct.get_taker()/100/2)
+
+                
+                if (higher <= order['limitPrice'] 
+                    and lower >= order['limitPrice']
+                    and not self.__limit_ig):
+
+                    self.__word_reduce(order, mode='taker')
+                elif (order['limitPrice'] <= self.__data['High'].values[-1] 
+                    and order['limitPrice'] >= self.__data['Low'].values[-1]
+                    and not self.__limit_ig):
+
+                    self.__word_reduce(order, mode='maker')
+                else:
+                    self.__put_ord(
+                        'rd', 
+                        price=order['limitPrice'], 
+                        amount=order['amount'],
+                        buy=order['typeSide'],
+                        union_id=order['unionId'],
+                        close_id=order['closeId'],
+                        limit=True,
+                    )
 
         # Del closeId orders
         self.__del('__orders', [
@@ -985,10 +1089,10 @@ class StrategyClass(ABC):
             price_cn = func([union_pos, union_ord, union_ord_bff])
         return comp, price >= price_cn if func == np.max else price <= price_cn
 
-    def __put_ord(self, order_type:str, price:float, 
-                  amount:float | None = None, buy:bool = True, wait:bool = True,
-                  union_id:int | None = None, close_id:int | None = None, 
-                  limit:bool = False) -> str:
+    def __put_ord(self, order_type:str, price: float, amount:float | None = None, 
+                  limit_price:float | None = None, buy:bool = True, 
+                  wait:bool = True, union_id:int | None = None, 
+                  close_id:int | None = None, limit:bool = False) -> str:
         """
         Put order
 
@@ -996,10 +1100,12 @@ class StrategyClass(ABC):
 
         Args:
             order_type (str): Order type 
-                ('op', 'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit').
+                ('op', 'rd', 'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit').
             price (float): Order price.
             amount (float | None, optional): Order amount, None takes the total.
-            buy (bool, optional): Order type (only works on 'op' type).
+            limit_price (float | None, optional): 
+                Limit order price, using 'takeLimit' and 'stopLimit'.
+            buy (bool, optional): Order type (only works on 'op' and 'rd' type).
             wait (bool, optional): Indicates if the order waits for an open 
                 position with the same unionId.
             union_id (int | None, optional): unionId in charge of connecting to the 
@@ -1018,7 +1124,7 @@ class StrategyClass(ABC):
         union_id = f'{"w/" if wait else ""}{int(union_id)}' if union_id else None
 
         match order_type:
-            case 'op':
+            case 'op' | 'rd':
                 buy = buy
             case 'stopLoss' | 'stopLimit':
                 buy = False
@@ -1037,6 +1143,7 @@ class StrategyClass(ABC):
             'order':order_type,
             'date':self.__data.index[-1],
             'orderPrice':price,
+            'limitPrice':limit_price if limit_price else price,
             'amount':amount,
             'typeSide':pos_type_side if not pos_type_side is None else buy,
             'typeSideOrd':buy,
@@ -1052,9 +1159,9 @@ class StrategyClass(ABC):
 
         return union_id
 
-    def ord_put(self, order_type:str, price:float, 
-                amount:float | None = None, union_id:int | None = None, 
-            close_id:int | None = None) -> str:
+    def ord_put(self, order_type:str, price:float, amount:float | None = None, 
+                limit_price:float | None = None, union_id:int | None = None, 
+                close_id:int | None = None) -> str:
         """
         Order put
 
@@ -1065,6 +1172,8 @@ class StrategyClass(ABC):
                 ('stopLoss', 'takeProfit', 'takeLimit', 'stopLimit').
             price (float): Order price.
             amount (float | None, optional): Order amount, None takes the total.
+            limit_price (float | None, optional): 
+                Limit order price, using 'takeLimit' and 'stopLimit'.
             union_id (int | None, optional): unionId in charge of connecting to the 
                 desired position, if left as None the last one will be used.
             close_id (int | None, optional): closeId responsible for closing the 
@@ -1086,6 +1195,8 @@ class StrategyClass(ABC):
             last_data = self.__buffer['__orders'][-1]['unionId']
         elif self.__orders:
             last_data = self.__orders[-1]['unionId']
+        elif '__pos_record' in self.__buffer and self.__buffer['__pos_record']:
+            last_data = self.__buffer['__pos_record'][-1]['unionId']
         elif self.__pos_record:
             last_data = self.__pos_record[-1]['unionId']
 
@@ -1095,6 +1206,7 @@ class StrategyClass(ABC):
             order_type, 
             price=price, 
             amount=amount,
+            limit_price=limit_price,
             union_id=union_id,
             close_id=close_id,
             limit=True if order_type in ('stopLimit', 'takeLimit') else False,

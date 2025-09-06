@@ -11,6 +11,7 @@ Functions:
     load_data: Loads user-provided data.
     load_data_bpd: Load data from a '.bpd' file and save it to the module.
     save_data_bpd: Saves 'data' to a '.bpd' file.
+    run_config: Configure the module to execute the strategy as you prefer.
     run: Executes the backtesting process.
     plot: Plots your data, highlighting the trades made.
     plot_strategy: Plots statistics for your strategy.
@@ -491,13 +492,14 @@ def save_data_bpd(file_name:str = 'data') -> None:
                 _cm.__data_interval, 
                 _cm.__data_year_days), file)
 
-def run(cls:type, initial_funds:int = 10000, commission:tuple = 0, 
-        spread:tuple = 0, slippage:tuple = 0,
-        prnt:bool = True, progress:bool = True) -> str | None:
+def run_config(initial_funds:int = 10000, commission:tuple | float = 0, 
+        spread:tuple | float = 0, slippage:tuple | float = 0, 
+        gaps:bool = True, ord_closer:bool = True, 
+        order_ord:dict | None = None, on_limit:bool = True) -> None:
     """
-    Run Your Strategy.
+    Run Config
 
-    Executes your trading strategy.
+    Configure the module to execute the strategy as you prefer.
 
     Info:
         CostsValue format:
@@ -506,6 +508,58 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
 
         For commissions, spreads and slippage, the `CostsValue` format will be followed.
 
+    Args:
+        initial_funds (int, optional): Initial amount of funds to start with. Used for 
+                            statistics. Default is 10,000.
+        commission (tuple | float, optional): The commission will be charged 
+        for each purchase/sale execution.
+        spread (tuple | float, optional): The spread is the separation between 
+            the bid and ask price and is used to mark the order book limits.
+            There is no variation between maker and taker.
+        slippage (tuple | float, optional): It will be calculated at each entry and exit.
+            There is no variation between maker and taker.
+        gaps (bool, optional): If True, gaps are calculated at the entry price 
+            in 'taker' orders.
+        ord_closer (bool, optional): If True, orders are executed based on 
+            the one closest to the close.
+        order_ord (dict | None, optional): Order of orders, original: 
+            {'op': 0, 'rd': 1, 'stopLimit': 2, 'stopLoss': 3, 'takeLimit': 4, 
+            'takeProfit': 5}, you cannot enter a value equal to or less 
+            than 0 or greater than 99. 'op' and 'rd' cannot be modified.
+            0 will execute before 99.
+        on_limit (bool, optional): If True, the 'stopLimit' and 
+            'takeLimit' orders are executed on the same candle if there is price.
+    """
+    # Exceptions
+    if initial_funds < 0: 
+        raise exception.RunError("'initial_funds' cannot be less than 0.")
+    elif (isinstance(order_ord, dict) and any(
+            [k not in ('takeProfit', 'takeLimit', 'stopLoss', 'stopLimit')
+             or order_ord[k] <= 0 or order_ord[k] > 99 for k in order_ord])):
+        raise exception.RunError("'order_ord' bad value or format.")
+
+    # Config
+    _cm.__init_funds = initial_funds
+    _cm.__min_gap = not gaps
+    _cm.__orders_nclose = not ord_closer
+    _cm.__limit_ig = not on_limit
+
+    if isinstance(order_ord, dict):
+        _cm.__orders_order = {k:order_ord[k] for k in order_ord if k in 
+                            ('takeProfit', 'takeLimit', 'stopLoss', 'stopLimit')}
+
+    # Costs config
+    _cm.__commission = flx.CostsValue(commission, supp_double=True, 
+                                      cust_error="Error of 'commission'.")
+    _cm.__slippage_pct = flx.CostsValue(slippage, cust_error="Error of 'slippage'.")
+    _cm.__spread_pct = flx.CostsValue(spread, cust_error="Error of 'spread'.")
+
+def run(cls:type, prnt:bool = True, progress:bool = True) -> str | None:
+    """
+    Run
+
+    Executes your trading strategy.
+
     Note:
         If your function prints to the console, the loading bar may not 
         function as expected.
@@ -513,14 +567,6 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
     Args:
         cls (type): A class inherited from `StrategyClass` where the strategy is 
                     implemented.
-        initial_funds (int, optional): Initial amount of funds to start with. Used for 
-                            statistics. Default is 10,000.
-        commission (tuple, optional): The commission will be charged for each purchase/sale execution.
-        spread (tuple, optional): The spread is the separation between the bid and ask 
-            price and is used to mark the order book limits.
-            There is no variation between maker and taker.
-        slippage (tuple, optional): It will be calculated at each entry and exit.
-            There is no variation between maker and taker.
         prnt (bool, optional): If True, prints trade statistics. If False, returns a string 
                     with the statistics. Default is True.
         progress (bool, optional): If True, shows a progress bar and timer. Default is True.
@@ -531,8 +577,6 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
     # Exceptions.
     if _cm.__data is None: 
         raise exception.RunError('Data not loaded.')
-    elif initial_funds < 0: 
-        raise exception.RunError("'initial_funds' cannot be less than 0.")
     elif not issubclass(cls, strategy.StrategyClass):
         raise exception.RunError(
             f"'{cls.__name__}' is not a subclass of 'strategy.StrategyClass'.")
@@ -543,17 +587,8 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
     # Corrections.
     _cm.__data.index = utils.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index, True)
-    _cm._init_funds = initial_funds
 
-    # Costs
-    commission_cv = flx.CostsValue(commission, supp_double=True, 
-                                   cust_error="Error of 'commission'.")
-    slippage_cv = flx.CostsValue(slippage, cust_error="Error of 'slippage'.")
-    spread_cv = flx.CostsValue(spread, cust_error="Error of 'spread'.")
-
-    instance = cls(data=_cm.__data, spread_pct=spread_cv, 
-                   commission=commission_cv, slippage_pct=slippage_cv, 
-                   init_funds=initial_funds)
+    instance = cls(data=_cm.__data)
     t = time()
     
     step_t = time()
@@ -606,7 +641,7 @@ def run(cls:type, initial_funds:int = 10000, commission:tuple = 0,
     except: pass
 
 def plot(log:bool = False, progress:bool = True, 
-         position:str = 'complex', style:str | None = None,
+         position:str = 'complex', style:str | None = 'last',
          style_c:dict | None = None, block:bool = True) -> None:
     """
     Plot Graph with Trades.
@@ -633,7 +668,8 @@ def plot(log:bool = False, progress:bool = True,
             are 'complex' or 'simple'. If None or 'none', positions will not 
             be drawn. Default is 'complex'. The "complex" option may take longer 
             to process.
-        style (str | None, optional): Color style.
+        style (str | None, optional): Color style. 
+            If you leave it as 'last' the last one will be used.
         style_c (dict | None, optional): Customize the defined style by 
             modifying the dictionary. To know what to modify, 
             read the docstring of 'def_style'.
@@ -648,20 +684,23 @@ def plot(log:bool = False, progress:bool = True,
     elif position and not position.lower() in ('complex', 'simple', 'none'):
         raise exception.PlotError(
             f"'{position}' Not a valid option for: 'position'.")
-    elif (not style is None and (style:=style.lower()) != 'random' 
-          and not style in _cm.__plt_styles.keys()):
+    elif (not style is None and not (style:=style.lower()) 
+          in ('random', 'last', *_cm.__plt_styles.keys())):
         raise exception.PlotError(f"'{style}' Not a style.")
 
     # Corrections.
     _cm.__data.index = utils.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index, True)
 
+    if style == 'last':
+        style = _cm.plt_style
     if style is None:
         style = list(_cm.__plt_styles.keys())[0]
     elif style == 'random':
         style = rd.choice(list(_cm.__plt_styles.keys()))
 
     plt_colors = _cm.__plt_styles[style]
+    _cm.plt_style = style
 
     if isinstance(style_c, dict):
         plt_colors.update(style_c)
@@ -753,7 +792,7 @@ def plot(log:bool = False, progress:bool = True,
     window.show(block=block)
 
 def plot_strategy(log:bool = False, view:str = 'p/w/r/e', 
-                  custom_graph:dict = {}, style:str | None = None,
+                  custom_graph:dict = {}, style:str | None = 'last',
                   style_c:dict | None = None, block:bool = True) -> None:
     """
     Plot Strategy Statistics.
@@ -782,7 +821,8 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
             be passed: 'ax', '_cm.__trades', '_cm.__data', 'log'.
             To avoid visual problems, I suggest using 
             'trades.index' as the x-axis or normalizing the axis.
-        style (str | None, optional): Color style.
+        style (str | None, optional): Color style. 
+            If you leave it as 'last' the last one will be used.
         style_c (dict | None, optional): Customize the defined style by 
             modifying the dictionary. To know what to modify, 
             read the docstring of 'def_style'.
@@ -809,16 +849,19 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
                     [f"'{i}'" for i in _cm.__custom_plot.keys()])) 
                     if _cm.__custom_plot.keys() else ''}.
             """, newline_exclude=True))
-    elif (not style is None and (style:=style.lower()) != 'random' 
-          and not style in _cm.__plt_styles.keys()):
+    elif (not style is None and not (style:=style.lower()) 
+          in ('random', 'last', *_cm.__plt_styles.keys())):
         raise exception.StatsError(f"'{style}' Not a style.")
 
+    if style == 'last':
+        style = _cm.plt_style
     if style is None:
         style = list(_cm.__plt_styles.keys())[0]
     elif style == 'random':
         style = rd.choice(list(_cm.__plt_styles.keys()))
 
     plt_colors = _cm.__plt_styles[style]
+    _cm.plt_style = style
 
     if isinstance(style_c, dict):
         plt_colors.update(style_c)
@@ -1344,11 +1387,11 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str | None:
 
         'Max drawdown$':[str(round(
             stats.max_drawdown(_cm.__trades['profit'].dropna().cumsum()+
-                               _cm._init_funds)*100,1)) + '%'],
+                               _cm.__init_funds)*100,1)) + '%'],
 
         'Average drawdown$':[str(-round(np.mean(
             stats.get_drawdowns(_cm.__trades['profit'].dropna().cumsum()+
-                                _cm._init_funds))*100, 1)) + '%'],
+                                _cm.__init_funds))*100, 1)) + '%'],
 
         'Long exposure':[str(round(
             stats.long_exposure(_cm.__trades['typeSide'])*100)) + '%',

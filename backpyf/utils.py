@@ -37,7 +37,6 @@ import pandas as pd
 import numpy as np
 
 from . import _commons as _cm
-from . import utils
 
 def load_bar(size:int, step:int, count:bool = True, text:str = '') -> None:
     """
@@ -218,7 +217,7 @@ def correct_index(index:pd.Index) -> np.ndarray:
 
     if not all(isinstance(ix, float) for ix in index):
         index = mpl.dates.date2num(index)
-        print(utils.text_fix("""
+        print(text_fix("""
               The 'index' has been automatically corrected. 
               To resolve this, use a valid index.
               """)) if _cm.alert else None
@@ -243,7 +242,7 @@ def calc_width(index:pd.Index, alert:bool = False) -> float:
     if isinstance(_cm.__data_width, float) and _cm.__data_width > 0: 
         return _cm.__data_width
         
-    print(utils.text_fix("""
+    print(text_fix("""
           The 'data_width' has been automatically corrected. 
           To resolve this, use a valid width.
           """)) if _cm.alert and alert else None

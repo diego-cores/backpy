@@ -7,6 +7,8 @@ Variables:
     alert (bool): If True, shows alerts in the console.
     dots (bool): If false, the '.' will be replaced by commas "," in prints.
     run_timer (bool): If false the execution timer will never appear in the console.
+    plt_style (str | None): Last style used, if you modify this variable 
+        and put one that does not exist it will give an error.
     max_bar_updates (int): Number of times the 'run' loading bar is updated, 
         a very high number will greatly increase the execution time. 
     lift (bool): Set to False if you don't want tkinter windows 
@@ -14,7 +16,18 @@ Variables:
 
 Hidden Variables:
     _icon: Icon currently used by the application (hidden variable).
-    _init_funds: Initial capital for the backtesting (hidden variable).
+    __min_gap: If left as True, gaps will not be calculated on the entry 
+        of 'taker' orders (hidden variable).
+    __limit_ig: If in a 'stopLimit' or 'takeLimit' the order is within the 
+        same candle and this is False, it will be executed (hidden variable).
+    __init_funds: Initial capital for the backtesting (hidden variable).
+    __commission: Commission of each execution (hidden variable).
+    __spread_pct: Market spread percentage (hidden variable).
+    __slippage_pct: Slippage percentage (hidden variable).
+    __orders_order: Dictionary with values to sort the order type when 
+        executing (hidden variable).
+    __orders_nclose: If True, orders are not ordered to be executed based 
+        on the closest one (hidden variable).
     __data_year_days: Number of operable days in 1 year (hidden variable).
     __data_width_day: Width of the day (hidden variable).
     __data_interval: Interval of the loaded data (hidden variable).
@@ -23,7 +36,8 @@ Hidden Variables:
     __data: Loaded dataset (hidden variable).
     __trades: List of trades executed during backtesting (hidden variable).
     __custom_plot: Dict of custom graphical statistics (hidden variable).
-    __binance_timeout: Time out between each request to the binance api (hidden variable).
+    __binance_timeout: Time out between each request to the binance api 
+        (hidden variable).
     __COLORS: Dictionary with printable colors (hidden variable).
     __plt_styles: Styles for coloring trading charts (hidden variable).
 """
@@ -33,6 +47,7 @@ import pandas as pd
 alert = True
 dots = True
 run_timer = True
+plt_style = None
 
 max_bar_updates = 1000
 
@@ -44,9 +59,16 @@ __data_interval = None
 __data_width = None
 __data_icon = None
 __data = None
-
 __trades = pd.DataFrame()
-_init_funds = 0
+
+__min_gap = None
+__limit_ig = None
+__init_funds = None
+__commission = None
+__spread_pct = None
+__slippage_pct = None
+__orders_order = None
+__orders_nclose = None
 
 _icon = None
 __custom_plot = {}
