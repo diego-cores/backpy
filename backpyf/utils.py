@@ -18,6 +18,7 @@ Functions:
     calc_day: Function to calculate the width of the index that each day has.
     text_fix: Function to fix or adjust text.
     diff_color: Makes a color darker or lighter.
+    diff_ccolor: Differentiate a color from another color.
     plot_volume: Function to plot volume on a give `Axes`.
     plot_candles: Function to plot candles on a given `Axes`.
     plot_position: Function to plot a trading position.
@@ -26,7 +27,7 @@ Hidden Functions:
     _loop_data: Function to extract data from an API with a data per second limit.
 """
 
-from matplotlib.collections import PatchCollection
+from matplotlib.collections import PatchCollection, LineCollection
 from matplotlib.patches import Rectangle 
 from matplotlib.axes._axes import Axes
 import matplotlib.colors
@@ -325,6 +326,39 @@ def diff_color(color:str, factor:float = 1,
     rgb = mpl.colors.to_rgb(color) 
     return tuple(min(1, c*(1+factor)) if (dk:=c*(1-factor)) <= line else dk for c in rgb)
 
+def diff_ccolor(color:str, dcolor:str, factor:float = 1, 
+               line:float = 0.2) -> tuple[float, float, float]:
+    """
+    Different color to color
+
+    Makes a color darker or lighter.
+    Based on 'factor' the color will be modified to be different than 'dcolor'.
+
+    Args:
+        color (str): String allowed by Matplotlib as color.
+        dcolor (str): Color to differentiate. String allowed by Matplotlib as color.
+        factor (float, optional): Darkening/Lightening Factor. 
+            Each RGB color with a value between 0 and 1 will 
+            be multiplied by this factor.
+        line (float, optional): Line of action, if 'color' is within the 
+            range of 'dcolor'*(1+line), 'dcolor'*(1-line) the color is 
+            modified, otherwise it is not modified.
+
+    Returns:
+        tuple[float, float, float]: Rgb color.
+    """
+
+    if line > 1 or line < 0:
+        raise ValueError("'line' can only be between 0 and 1 or equal.")
+    elif factor > 1 or factor < 0:
+        raise ValueError("'factor' can only be between 0 and 1 or equal.")
+
+    rgb = mpl.colors.to_rgb(color) 
+    rgb_d = mpl.colors.to_rgb(dcolor) 
+
+    return tuple(rgb[i] if v >= rgb_d[i]*(1+line) or v <= rgb_d[i]*(1-line) 
+                 else min(1, v*(1+factor)) for i,v in enumerate(rgb))
+
 def plot_volume(ax:Axes, data:pd.Series, 
                  width:float = 1, color:str = 'tab:orange', 
                  alpha:float = 1) -> None:
@@ -378,7 +412,10 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
                axis=1)
 
     # Drawing vertical lines.
-    ax.vlines(data.index, data['Low'], data['High'], color=color, alpha=alpha, zorder=1)
+    segments = [[(x, low), (x, high)] 
+                for x, low, high in zip(data.index, data['Low'], data['High'])]
+    ax.add_collection(LineCollection(segments, colors=color, alpha=alpha, 
+                                     linewidths=1, zorder=1))
 
     x = data.index.to_numpy() - width / 2
     y = np.minimum(data['Open'].to_numpy(), data['Close'].to_numpy())
@@ -386,16 +423,14 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
 
     # Bar drawing.
     patches = [Rectangle((xi, yi), width, hi) for xi, yi, hi in zip(x, y, height)]
-    ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0))
+    ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0, zorder=1))
 
     ax.set_ylim(data['Low'].min()*0.98+1, data['High'].max()*1.02+1)
 
 def plot_position(trades:pd.DataFrame, ax:Axes, 
-                  color_take:str = 'green', color_stop:str = 'red', 
-                  color_takec:str = 'gold', color_stopc:str = 'blueviolet',
+                  color_take:str = 'green', color_stop:str = 'red',
                   alpha:float = 1, alpha_arrow:float = 1,  
-                  arrow_fact:float = 0.2, operation_route:bool = True, 
-                  width_exit:callable = lambda x: 9) -> None:
+                  arrow_fact:float = 0.2, operation_route:bool = True) -> None:
     """
     Position Draw.
 
@@ -406,10 +441,6 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
         ax (Axes): Axes where it is drawn.
         color_take (str, optional): Color for positive positions. Default is 'green'.
         color_stop (str, optional): Color for negative positions. Default is 'red'.
-        color_takec (str, optional): Color of the close marker for positive positions. 
-            Default is 'gold'.
-        color_stopc (str, optional): Color of the close marker for negative positions. 
-            Default is 'blueviolet'.
         alpha (float, optional): Opacity of the elements. Default is 1.
         alpha_arrow (float, optional): Opacity of arrow, type marker, and close marker. Default is 1.
         operation_route (bool, optional): If True, traces the route of the operation. Default is True.
@@ -426,67 +457,59 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
         will not be drawn; the same applies to the stop loss.
     """
 
-    def draw(row):
-        if 'positionDate' not in row.index:
-            return
+    # Draw routes of the operations.
+    if operation_route:
+        segments = trades.apply(lambda row: [
+            (row['date'], row['positionOpen']), 
+            (row['positionDate'], row['positionClose'])], axis=1)
 
-        row['positionDate_date'] = (width_exit(row) 
-                                if np.isnan(row['positionDate']) 
-                                else row['positionDate']-row['date'])
-        row['positionClose'] = (row['positionOpen'] 
-                                if np.isnan(row['positionClose']) 
-                                else row['positionClose'])
+        ax.add_collection(LineCollection(
+            segments,
+            colors="grey",
+            linestyles=(0, (5, 5)),
+            linewidths=0.8,
+            alpha=alpha_arrow,
+            zorder=0.9
+        ))
 
-        # Draw route of the operation.
-        if operation_route:
-            cl = ('green' if (row['positionOpen'] < row['positionClose'] and 
-                                row['typeSide'] == 1) or 
-                                (row['positionOpen'] > row['positionClose'] and 
-                                row['typeSide'] == 0) else 'red')
+    color_close = trades.apply(
+        lambda x: (
+            diff_ccolor('#089991', color_take, factor=0.2) 
+            if x['profitPer'] >= 0 
+            else diff_ccolor('#f23651', color_stop, factor=0.2)), axis=1).to_list()
 
-            route  = Rectangle(xy=(row['date'], row['positionOpen']), 
-                            width=row['positionDate_date'], 
-                            height=row['positionClose']-row['positionOpen'],
-                            facecolor=cl, edgecolor=cl, zorder=0.8)
+    routes = [
+        Rectangle(
+            (xi, yi), (pdi - xi), hi)
+        for xi, yi, hi, pdi in zip(
+            trades['date'],
+            trades['positionOpen'],
+            trades['positionClose'] - trades['positionOpen'],
+            trades['positionDate']
+    )]
 
-            route.set_alpha(alpha)
-            ax.add_patch(route)
+    ax.add_collection(PatchCollection(routes, color=color_close, 
+                                      alpha=alpha, linewidth=0, zorder=0.8))
 
-        # Arrow drawing.
-        ax.annotate(
-            '', xy=(row['positionDate'], row['positionClose']),
-            xytext=(row['date'], row['positionOpen']),
-            arrowprops=dict(
-                arrowstyle='->',
-                linestyle=(0, (5, 5)),
-                color='grey',
-                alpha=alpha_arrow
-            ),
-            zorder=0.9)
-
-    trades.apply(draw, axis=1)
-
-    # Drawing of the closing marker of the operation.
+    # Drawing of the closing marker of the operations.
     if ('positionDate' in trades.columns and 
         'positionClose' in trades.columns):
 
-        color_close = trades.apply(
-            lambda x: color_takec if x['profitPer'] >= 0 else color_stopc, axis=1).to_list()
         ax.scatter(trades['positionDate'], trades['positionClose'], 
-                  c=color_close, s=30, marker='x', alpha=alpha_arrow)
+                  c=color_close, s=30, marker='x', alpha=alpha_arrow, zorder=1.1)
 
     # Drawing of the position type marker.
     ax.scatter(trades['date'], 
                trades.apply(lambda x: x['positionOpen'] 
                             if x['typeSide'] == 1 else None, axis=1), 
                color=diff_color(color_take, factor=arrow_fact, line=0.2), s=30, 
-               marker='^', alpha=alpha_arrow)
+               marker='^', alpha=alpha_arrow, zorder=1.1)
 
     ax.scatter(trades['date'], 
                trades.apply(lambda x: x['positionOpen']
                             if x['typeSide'] != 1 else None, axis=1),
                color=diff_color(color_stop, factor=arrow_fact, line=0.2), s=30, 
-               marker='v', alpha=alpha_arrow)
+               marker='v', alpha=alpha_arrow, zorder=1.1)
 
 def _loop_data(function:callable, bpoint:callable, init:int, timeout:float) -> pd.DataFrame:
     """

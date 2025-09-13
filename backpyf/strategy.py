@@ -244,7 +244,7 @@ class StrategyClass(ABC):
 
         self.__orders = []
         self.__positions = []
-        self.__pos_record = []
+        self.__pos_record = np.array([])
 
         self.__to_delate = {}
 
@@ -566,14 +566,25 @@ class StrategyClass(ABC):
                     self.__del('__orders', [i])
 
             self.__deli('__orders')
-        if (psff:=self.__buff('__pos_record')): self.__pos_record.extend(psff)
+
+        def psr_concat(values:list) -> None:
+            dtype = [(key, type(v)) for key, v in values[0].items()]
+            psff_arr = np.array([tuple(d.values()) for d in values], dtype=dtype)
+
+            self.__pos_record.dtype = dtype
+            self.__pos_record = np.concatenate(
+                [self.__pos_record, psff_arr], 
+                dtype=dtype
+            )
+
+        if (psff:=self.__buff('__pos_record')): psr_concat(psff)
 
         # Execute strategy
         self.next()
 
         # Concat buffer
         if (obff:=self.__buff('__orders')): self.__orders.extend(obff)
-        if (psff:=self.__buff('__pos_record')): self.__pos_record.extend(psff)
+        if (psff:=self.__buff('__pos_record')): psr_concat(psff)
 
     def __buff(self, name:str) -> list | None:
         """
@@ -1272,8 +1283,7 @@ class StrategyClass(ABC):
         if not amount is None:
             self.__orders[index]['amount'] = amount
 
-    def prev_positions_rec(self, label:str | None = None, 
-                           uid:int | None = None, 
+    def prev_positions_rec(self, label:str | None = None,
                            last:int | None = None) -> flx.DataWrapper:
         """
         Prev of trades closed.
@@ -1282,16 +1292,13 @@ class StrategyClass(ABC):
 
         Args:
             label (str | None, optional): Data column to return. If None, all columns 
-                are returned. If 'index', 'rIndex' return.
-            uid (int | None, optional): Filter by unionId.
+                are returned. If 'index' or 'rIndex' the index will be returned.
             last (int | None, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
 
         Info:
             `pos_record` columns.
 
-            - rIndex: Column added in 'prev_positions_rec' marks 
-                the real index of each row.
             - date: Creation date.
             - positionOpen: Opening price.
             - commission: Position commissions.
@@ -1308,7 +1315,7 @@ class StrategyClass(ABC):
         """
 
         __pos_rec = self.__pos_record
-        if not __pos_rec or len(__pos_rec) == 0: 
+        if len(__pos_rec) == 0: 
             return flx.DataWrapper()
         elif (last != None and 
               (last <= 0 or last > self.__data["Close"].shape[0])): 
@@ -1318,28 +1325,17 @@ class StrategyClass(ABC):
                             'data' and greater than 0.
                             """, newline_exclude=True))
 
-        keys = list(__pos_rec[0].keys())
-        data_columns = keys.copy()
-        data_columns.insert(0, 'rIndex')
+        if label in ('index', 'rIndex'):
+            __pos_rec = np.arange(len(__pos_rec))
 
-        data = []
-        dtype = [(key, object) for key in data_columns]
+        data = __pos_rec[
+            len(__pos_rec) - last if last is not None and last < len(__pos_rec) else 0:]
 
-        for i,v in enumerate(__pos_rec):
-            if uid != None and uid != v['unionId']:
-                continue
-
-            data.append((i, *[v[k] for k in keys]))
-        data = np.array(data, dtype=dtype)
-
-        data = data[
-            len(data) - last if last is not None and last < len(data) else 0:]
-
-        if label != None and data_columns and data.size:
-            if label == 'index': label = 'rIndex'
+        if (label not in (None, 'index', 'rIndex') 
+            and __pos_rec.dtype.names and data.size):
 
             data = data[label]
-        return flx.DataWrapper(data, columns=data_columns)
+        return flx.DataWrapper(data)
 
     def prev_positions(self, label:str | None = None, 
                        uid:int | None = None, last:int | None = None
@@ -1388,7 +1384,8 @@ class StrategyClass(ABC):
         data_columns.insert(0, 'rIndex')
 
         data = []
-        dtype = [(key, object) for key in data_columns]
+        dtype = [
+            (key, type(v)) for key, v in {**{'rIndex':0}, **__pos[0]}.items()]
 
         for i,v in enumerate(__pos):
             if uid != None and uid != v['unionId']:
@@ -1467,7 +1464,8 @@ class StrategyClass(ABC):
         data_columns.insert(0, 'rIndex')
 
         data = []
-        dtype = [(key, object) for key in data_columns]
+        dtype = [
+            (key, type(v)) for key, v in {**{'rIndex':0}, **__ord[0]}.items()]
 
         for i,v in enumerate(__ord):
             if or_type != None and v['order'] != or_type:

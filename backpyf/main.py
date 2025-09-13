@@ -648,10 +648,10 @@ def plot(log:bool = False, progress:bool = True,
 
     Plots your data, highlighting the trades made.
 
-    Color Guide:
-        - Gold: 'x' = Position close.
-        - Green, '^' = Buy position.
-        - Red, 'v' = Sell position.
+    Simbol guide:
+        - 'x': Position close.
+        - '^': Buy position.
+        - 'v': Sell position.
 
     All color styles:
         'lightmode', 'darkmode', 'sunrise', 'mintfresh', 'skyday', 
@@ -743,8 +743,7 @@ def plot(log:bool = False, progress:bool = True,
                           color_take=market_colors.get('u', 'green'),
                           color_stop=market_colors.get('d', 'red'),
                           operation_route=position.lower() == 'complex',
-                          alpha=0.3, alpha_arrow=0.8, 
-                          width_exit=lambda x: _cm.__data.index[-1]-x['date'])
+                          alpha=0.3, alpha_arrow=0.8)
 
     if progress: 
         text = f'| PlotTimer: {utils.num_align(time()-t)} '
