@@ -242,13 +242,13 @@ def calc_width(index:pd.Index, alert:bool = False) -> float:
 
     if isinstance(_cm.__data_width, float) and _cm.__data_width > 0: 
         return _cm.__data_width
-        
+
     print(text_fix("""
           The 'data_width' has been automatically corrected. 
           To resolve this, use a valid width.
           """)) if _cm.alert and alert else None
-    
-    return np.median(np.diff(index))
+
+    return 1. if len(index) <= 1 else np.median(np.diff(index))
 
 def calc_day(interval:str = '1d', width:float = 1) -> float:
     """
@@ -407,25 +407,25 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     """
 
     color = data.apply(
-               lambda x: (color_n if x['Close'] == x['Open'] else
-                   color_up if x['Close'] >= x['Open'] else color_down), 
+               lambda x: (color_n if x['close'] == x['open'] else
+                   color_up if x['close'] >= x['open'] else color_down), 
                axis=1)
 
     # Drawing vertical lines.
     segments = [[(x, low), (x, high)] 
-                for x, low, high in zip(data.index, data['Low'], data['High'])]
+                for x, low, high in zip(data.index, data['low'], data['high'])]
     ax.add_collection(LineCollection(segments, colors=color, alpha=alpha, 
                                      linewidths=1, zorder=1))
 
-    x = data.index.to_numpy() - width / 2
-    y = np.minimum(data['Open'].to_numpy(), data['Close'].to_numpy())
-    height = np.abs(data['Close'].to_numpy() - data['Open'].to_numpy())
+    x = data.index.values - width / 2
+    y = np.minimum(data['open'].values, data['close'].values)
+    height = np.abs(data['close'].values - data['open'].values)
 
     # Bar drawing.
     patches = [Rectangle((xi, yi), width, hi) for xi, yi, hi in zip(x, y, height)]
     ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0, zorder=1))
 
-    ax.set_ylim(data['Low'].min()*0.98+1, data['High'].max()*1.02+1)
+    ax.set_ylim(data['low'].min()*0.98+1, data['high'].max()*1.02+1)
 
 def plot_position(trades:pd.DataFrame, ax:Axes, 
                   color_take:str = 'green', color_stop:str = 'red',
@@ -456,6 +456,14 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
         indicates where the stop loss is placed. If there is no take profit, its marker 
         will not be drawn; the same applies to the stop loss.
     """
+
+    # Corrections
+    if 'positionDate' not in trades.columns:
+        trades['positionDate'] = np.nan
+    if 'positionClose' not in trades.columns:
+        trades['positionClose'] = np.nan
+    if 'profitPer' not in trades.columns:
+        trades['profitPer'] = np.nan
 
     # Draw routes of the operations.
     if operation_route:

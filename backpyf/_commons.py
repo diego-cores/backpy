@@ -28,6 +28,7 @@ Hidden Variables:
         executing (hidden variable).
     __orders_nclose: If True, orders are not ordered to be executed based 
         on the closest one (hidden variable).
+    __chunk_size: Size of each chunk of the engine (hidden variable).
     __data_year_days: Number of operable days in 1 year (hidden variable).
     __data_width_day: Width of the day (hidden variable).
     __data_interval: Interval of the loaded data (hidden variable).
@@ -49,7 +50,7 @@ dots = True
 run_timer = True
 plt_style = None
 
-max_bar_updates = 1000
+max_bar_updates = 1_000
 
 lift = True
 
@@ -69,6 +70,7 @@ __spread_pct = None
 __slippage_pct = None
 __orders_order = None
 __orders_nclose = None
+__chunk_size = None
 
 _icon = None
 __custom_plot = {}

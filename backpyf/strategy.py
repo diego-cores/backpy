@@ -45,7 +45,7 @@ def idc_decorator(func:callable) -> Callable[..., flx.DataWrapper]:
     Usage:
         @idc_decorator
         def idc_test(data):
-            ema = data['Close'].ewm(span=20, adjust=False).mean()
+            ema = data['close'].ewm(span=20, adjust=False).mean()
             return ema # Will be wrapped in a DataWrapper automatically
 
     Important:
@@ -90,17 +90,22 @@ class StrategyClass(ABC):
     within the `StrategyClass.next()` structure.
 
     Attributes:
-        open: 'Open' values from `data`.
-        high: 'High' values from `data`.
-        low: 'Low' values from `data`.
-        close: 'Close' values from `data`.
-        volume: 'Volume' values from `data`.
+        open: 'open' values from `data`.
+        high: 'high' values from `data`.
+        low: 'low' values from `data`.
+        close: 'close' values from `data`.
+        volume: 'volume' values from `data`.
         date: Index list from `data`.
         width: Data width from `__data_width`.
         icon: Data icon from `__data_icon`.
         interval: Data interval from `__data_interval`.
 
     Private Attributes:
+        __data: DataWrapper containing cuted data.
+        __data_adf: DataFrame containing all data.
+        __data_awr: DataWrapper containing all data.
+        __data_index: Index to cut data.
+        __data_dates: DataWrapper with index of __data.
         __init_funds: Initial funds for the strategy.
         __spread_pct: Closing and opening spread.
         __slippage_pct: Closing and opening slippage.
@@ -114,9 +119,6 @@ class StrategyClass(ABC):
             'stopLimit' orders are sent to the next candle.
         __orders_nclose: If set True, the orders are not ordered so that 
             the closest ones are executed first.
-        __data: DataFrame containing cuted data.
-        __data_all: DataFrame containing all data.
-        __data_index: Index to cut data.
         __idc_data: Saved data from the indicators.
         __buffer: Buffer to concatenate DataFrame.
         __to_delate: Lists of indexes to remove from lists.
@@ -208,9 +210,12 @@ class StrategyClass(ABC):
         self.volume = None
         self.date = None
 
-        self.__data = pd.DataFrame()
-        self.__data_all = data
+        self.__data = None
+        self.__data_adf = data
+        self.__data_awr = flx.DataWrapper(data)
+
         self.__data_index = None
+        self.__data_dates = None
 
         self.__buffer = {}
         self.__idc_data = {}
@@ -226,6 +231,7 @@ class StrategyClass(ABC):
         self.__commission = cmattr('__commission') or flx.CostsValue(0)
         self.__spread_pct  = cmattr('__spread_pct') or flx.CostsValue(0)
         self.__slippage_pct = cmattr('__slippage_pct') or flx.CostsValue(0)
+        self.__chunk_size = cmattr('__chunk_size') or 10_000 
         self.__orders_order = {'op': 0, 'rd': 1, 'stopLimit': 2, 'stopLoss': 3, 
                                'takeLimit': 4, 'takeProfit': 5}
 
@@ -244,7 +250,7 @@ class StrategyClass(ABC):
 
         self.__orders = []
         self.__positions = []
-        self.__pos_record = np.array([])
+        self.__pos_record = flx.ChunkWrapper([], chunk_size=self.__chunk_size)
 
         self.__to_delate = {}
 
@@ -408,7 +414,7 @@ class StrategyClass(ABC):
             if id in self.__idc_data.keys():
                 return self.__uidc_cut(self.__idc_data[id])
 
-            result = flx.DataWrapper(func.__func__(self.__data_all, 
+            result = flx.DataWrapper(func.__func__(self.__data_adf, 
                                                    *args, **kwargs))
             self.__idc_data[id] = result
 
@@ -457,7 +463,7 @@ class StrategyClass(ABC):
             DataWrapper: Data cut.
         """
 
-        if len(data) != len(self.__data_all):
+        if len(data) != len(self.__data_adf):
             raise exception.UidcError('Length different from data.')
 
         result = flx.DataWrapper(data[:self.__data_index], data._columns)
@@ -481,9 +487,13 @@ class StrategyClass(ABC):
         """
 
         limit = self.__data_index
-        return flx.DataWrapper(data[limit-last:limit] 
-                if last is not None and last < limit
-                else data[:limit], columns=data._columns)
+
+        return flx.DataWrapper(
+            data[limit-last:limit] 
+            if last is not None and last < limit 
+            else data[:limit],
+            columns=data._columns, 
+            index=data._index)
 
     def __data_updater(self, index:int) -> None:
         """
@@ -495,18 +505,19 @@ class StrategyClass(ABC):
             index (int): Index at which the data must be cut.
         """
 
-        data = self.__data_all.iloc[:index]
-        data_ = data.values.T
+        data = flx.DataWrapper(self.__data_awr.unwrap()[:index])
+        dates = flx.DataWrapper(self.__data_adf.index.values[:index])
 
-        self.open = data_[0]
-        self.high = data_[1]
-        self.low = data_[2]
-        self.close = data_[3]
-        self.volume = data_[4]
-        self.date = data.index.values
+        self.open = data['open']
+        self.high = data['high']
+        self.low = data['low']
+        self.close = data['close']
+        self.volume = data['volume']
+        self.date = dates
 
         self.__data = data
         self.__data_index = index
+        self.__data_dates = dates
 
     def __before(self, index:int) -> None:
         """
@@ -526,12 +537,12 @@ class StrategyClass(ABC):
             self.__orders.sort(
             key=lambda x: (
                 self.__orders_order.get(x['order'], 99),
-                (abs(x['orderPrice'] - self.__data['Open'].values[-1]) 
+                (abs(x['orderPrice'] - self.__data['open'][-1]) 
                  if not self.__orders_nclose else None)
             ))
 
-            higher = self.__data['High'].values[-1]*(self.__spread_pct.get_taker()/100/2+1)
-            lower = self.__data['Low'].values[-1]*(1-self.__spread_pct.get_taker()/100/2)
+            higher = self.__data['high'][-1]*(self.__spread_pct.get_taker()/100/2+1)
+            lower = self.__data['low'][-1]*(1-self.__spread_pct.get_taker()/100/2)
 
             self.__to_delate.update({'__orders':set()})
 
@@ -567,24 +578,33 @@ class StrategyClass(ABC):
 
             self.__deli('__orders')
 
-        def psr_concat(values:list) -> None:
+        def cn_insert(vlist:flx.ChunkWrapper, values:list) -> None:
+            """
+            Chunk insert
+
+            Insert 'values' into the 'vlist' of chunks.
+            Generate a new chunk if necessary.
+
+            Args:
+                vlist (ChunkWrapper): Values with spaces.
+                values (list): Values to add.
+            """
+    
             dtype = [(key, type(v)) for key, v in values[0].items()]
-            psff_arr = np.array([tuple(d.values()) for d in values], dtype=dtype)
+            vl_arr = np.array([tuple(d.values()) for d in values], dtype=dtype)
 
-            self.__pos_record.dtype = dtype
-            self.__pos_record = np.concatenate(
-                [self.__pos_record, psff_arr], 
-                dtype=dtype
-            )
+            return vlist.append_rows(vl_arr, dtype)
 
-        if (psff:=self.__buff('__pos_record')): psr_concat(psff)
+        if (psff:=self.__buff('__pos_record')): 
+            self.__pos_record = cn_insert(self.__pos_record, psff)
 
         # Execute strategy
         self.next()
 
         # Concat buffer
         if (obff:=self.__buff('__orders')): self.__orders.extend(obff)
-        if (psff:=self.__buff('__pos_record')): psr_concat(psff)
+        if (psff:=self.__buff('__pos_record')): 
+            self.__pos_record = cn_insert(self.__pos_record, psff)
 
     def __buff(self, name:str) -> list | None:
         """
@@ -675,8 +695,8 @@ class StrategyClass(ABC):
         ui = self.unique_id()
 
         self.__put_pos(
-            price=self.__data["Close"].iloc[-1],
-            date=self.__data.index[-1],
+            price=self.__data["close"][-1],
+            date=self.__data_dates[-1],
             amount=amount,
             type_side=buy,
             union_id=ui
@@ -724,7 +744,7 @@ class StrategyClass(ABC):
             index (int): Real index of the position.
         """
 
-        self.__act_reduce(index, self.__data['Close'].iloc[-1], mode='taker')
+        self.__act_reduce(index, self.__data['close'][-1], mode='taker')
 
     def __act_reduce(self, index:int, price:float, 
                      amount:float | None = None, mode:str = 'taker') -> None:
@@ -768,7 +788,7 @@ class StrategyClass(ABC):
 
         # Fill data.
         position['positionClose'] = position_close_spread
-        position['positionDate'] = self.__data.index[-1]
+        position['positionDate'] = self.__data_dates[-1]
         open = position.get('positionOpen')
 
         if position.get('typeSide'):
@@ -829,18 +849,19 @@ class StrategyClass(ABC):
         """
 
         position_price = price
+        where_date = np.where(self.__data_dates.unwrap() == date)[0][0]
 
         if (
-            position_price > self.__data['Close'].loc[date]*(
+            position_price > self.__data['close'][where_date]*(
                 self.__spread_pct.get_taker()/100/2+1)
-            or position_price < self.__data['Close'].loc[date]*(
+            or position_price < self.__data['close'][where_date]*(
                 1-self.__spread_pct.get_taker()/100/2)
             ): # Maker
 
             position_open = position_price
             commission = self.__commission.get_maker()
         else: # Taker
-            position_price = self.__data['Close'].loc[date]
+            position_price = self.__data['close'][where_date]
 
             commission = self.__commission.get_taker()
             slippage = position_price*(self.__slippage_pct.get_taker()/100)
@@ -850,7 +871,7 @@ class StrategyClass(ABC):
                             if type_side else position_price-spread-slippage)
 
         position = {
-            'date':self.__data.index[-1],
+            'date':self.__data_dates[-1],
             'positionOpen':position_open,
             'commission':commission,
             'amount':amount,
@@ -940,13 +961,13 @@ class StrategyClass(ABC):
             case 'takeProfit' | 'stopLoss':
                 # Gap case
                 if not self.__ngap:
-                    min_gap = min(self.__data['Open'].values[-1], 
-                                self.__data['Close'].values[-2])
-                    max_gap = max(self.__data['Open'].values[-1], 
-                                self.__data['Close'].values[-2])
+                    min_gap = min(self.__data['open'][-1], 
+                                self.__data['close'][-2])
+                    max_gap = max(self.__data['open'][-1], 
+                                self.__data['close'][-2])
 
                     if order['orderPrice'] > min_gap and order['orderPrice'] < max_gap:
-                        order['orderPrice'] = self.__data['Open'].values[-1]
+                        order['orderPrice'] = self.__data['open'][-1]
 
                 self.__word_reduce(order, mode='taker')
  
@@ -954,14 +975,13 @@ class StrategyClass(ABC):
                 higher = order['orderPrice']*(self.__spread_pct.get_taker()/100/2+1)
                 lower = order['orderPrice']*(1-self.__spread_pct.get_taker()/100/2)
 
-                
                 if (higher <= order['limitPrice'] 
                     and lower >= order['limitPrice']
                     and not self.__limit_ig):
 
                     self.__word_reduce(order, mode='taker')
-                elif (order['limitPrice'] <= self.__data['High'].values[-1] 
-                    and order['limitPrice'] >= self.__data['Low'].values[-1]
+                elif (order['limitPrice'] <= self.__data['high'][-1]
+                    and order['limitPrice'] >= self.__data['low'][-1]
                     and not self.__limit_ig):
 
                     self.__word_reduce(order, mode='maker')
@@ -1152,7 +1172,7 @@ class StrategyClass(ABC):
 
         order = {
             'order':order_type,
-            'date':self.__data.index[-1],
+            'date':self.__data_dates[-1],
             'orderPrice':price,
             'limitPrice':limit_price if limit_price else price,
             'amount':amount,
@@ -1274,7 +1294,7 @@ class StrategyClass(ABC):
                 price=price, 
                 union_id=order['unionId'], 
                 type_side=order['typeSide'],
-                price_cn=self.__data['Close'].iloc[-1]
+                price_cn=self.__data['close'][-1]
             )
 
             if union:
@@ -1286,13 +1306,13 @@ class StrategyClass(ABC):
     def prev_positions_rec(self, label:str | None = None,
                            last:int | None = None) -> flx.DataWrapper:
         """
-        Prev of trades closed.
+        Prev of closed trades.
 
         This function returns the values of `pos_record`.
 
         Args:
             label (str | None, optional): Data column to return. If None, all columns 
-                are returned. If 'index' or 'rIndex' the index will be returned.
+                are returned. If 'index' or 'rIndex', only return the real index.
             last (int | None, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
 
@@ -1318,23 +1338,25 @@ class StrategyClass(ABC):
         if len(__pos_rec) == 0: 
             return flx.DataWrapper()
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data))): 
 
             raise ValueError(utils.text_fix("""
                             Last has to be less than the length of 
                             'data' and greater than 0.
                             """, newline_exclude=True))
 
-        if label in ('index', 'rIndex'):
+        if label and label in ('index', 'rIndex'):
             __pos_rec = np.arange(len(__pos_rec))
 
-        data = __pos_rec[
-            len(__pos_rec) - last if last is not None and last < len(__pos_rec) else 0:]
+        data = __pos_rec[:__pos_rec._pos]
+        data = data[
+            len(data) - last if last is not None and last < len(data) else 0:]
 
         if (label not in (None, 'index', 'rIndex') 
             and __pos_rec.dtype.names and data.size):
 
             data = data[label]
+
         return flx.DataWrapper(data)
 
     def prev_positions(self, label:str | None = None, 
@@ -1347,7 +1369,7 @@ class StrategyClass(ABC):
 
         Args:
             label (str | None, optional): Data column to return. If None, all columns 
-                are returned. If 'index', 'rIndex' return.
+                are returned. If 'index', only return the 'rIndex'.
             uid (int | None, optional): Filter by unionId.
             last (int | None, optional): Number of steps to return starting from the 
                 present. If None, data for all times is returned.
@@ -1372,12 +1394,17 @@ class StrategyClass(ABC):
         if not __pos or len(__pos) == 0: 
             return flx.DataWrapper()
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data))): 
 
             raise ValueError(utils.text_fix("""
                             Last has to be less than the length of 
                             'data' and greater than 0.
                             """, newline_exclude=True))
+
+        data_lf = lambda x: x[
+            len(x) - last if last is not None and last < len(x) else 0:]
+        if label and label.lower() == 'index':
+            return flx.DataWrapper(data_lf(np.arange(0, len(__pos))))
 
         keys = list(__pos[0].keys())
         data_columns = keys.copy()
@@ -1394,13 +1421,10 @@ class StrategyClass(ABC):
             data.append((i, *[v[k] for k in keys]))
         data = np.array(data, dtype=dtype)
 
-        data = data[
-            len(data) - last if last is not None and last < len(data) else 0:]
-
+        data = data_lf(data)
         if label != None and data_columns and data.size:
-            if label == 'index': label = 'rIndex'
-
             data = data[label]
+
         return flx.DataWrapper(data, columns=data_columns)
 
     def prev_orders(self, label:str | None = None, or_type:str | None = None,
@@ -1413,7 +1437,7 @@ class StrategyClass(ABC):
 
         Args:
             label (str | None, optional): Data column to return. If None, all columns 
-                are returned. If 'index', 'rIndex' return.
+                are returned. If 'index', only return the 'rIndex'.
             or_type (str | None, optional): If you want to filter only one type 
                 of operation you can do so with this argument.
                 Current types of orders: 'op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit'.
@@ -1446,7 +1470,7 @@ class StrategyClass(ABC):
         if not __ord or len(__ord) == 0: 
             return flx.DataWrapper()
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data))): 
 
             raise ValueError(utils.text_fix("""
                             Last has to be less than the length of 
@@ -1458,6 +1482,11 @@ class StrategyClass(ABC):
 
             raise ValueError(utils.text_fix(
                 "'ids' with bad format or incorrect.", newline_exclude=True))
+
+        data_lf = lambda x: x[
+            len(x) - last if last is not None and last < len(x) else 0:]
+        if label and label.lower() == 'index':
+            return flx.DataWrapper(data_lf(np.arange(0, len(__ord))))
 
         keys = list(__ord[0].keys())
         data_columns = keys.copy()
@@ -1477,13 +1506,10 @@ class StrategyClass(ABC):
             data.append((i, *[v[k] for k in keys]))
         data = np.array(data, dtype=dtype)
 
-        data = data[
-            len(data) - last if last is not None and last < len(data) else 0:]
-
+        data = data_lf(data)
         if label != None and data_columns and data.size:
-            if label == 'index': label = 'rIndex'
-
             data = data[label]
+
         return flx.DataWrapper(data, columns=data_columns)
 
     def idc_fibonacci(self, lv0:float = 10, lv1:float = 1) -> flx.DataWrapper:
@@ -1534,7 +1560,7 @@ class StrategyClass(ABC):
         return pd.DataFrame({'Level':fibo_levels,
                              'Value':lv0 - (lv0 - lv1) * fibo_levels})
 
-    def idc_ema(self, length:int, source:str = 'Close', 
+    def idc_ema(self, length:int, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
         """
         Exponential moving average (EMA).
@@ -1544,7 +1570,7 @@ class StrategyClass(ABC):
         Args:
             length (int): The length of the EMA.
             source (str, optional): The data source for the EMA calculation. Allowed 
-                parameters are 'Close', 'Open', 'High', 'Low', and 'Volume'.
+                parameters are 'close', 'open', 'high', 'low', and 'volume'.
             last (int | None, optional): Number of data points to return from the 
                 present backwards. If None, returns data for all time.
 
@@ -1552,18 +1578,19 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper containing the EMA values for each step.
         """
 
+        source = source.lower()
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
                              less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low','Volume'): 
+        elif not source in ('close','open','high','low','volume'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low','Volume'].
+                             ['close','open','high','low','volume'].
                              """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -1575,7 +1602,7 @@ class StrategyClass(ABC):
 
     @__store_decorator
     def __idc_ema(self, data:pd.Series | None = None, length:int = 10, 
-                  source:str = 'Close', last:int | None = None, 
+                  source:str = 'close', last:int | None = None, 
                   cut:bool = False) -> flx.DataWrapper:
         """
         Exponential Moving Average (EMA).
@@ -1594,12 +1621,12 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper containing the EMA values for each step.
         """
 
-        data = self.__data_all[source] if data is None else data
+        data = self.__data_adf[source] if data is None else data
         ema = data.ewm(span=length, adjust=False).mean()
 
         return ema
 
-    def idc_sma(self, length:int, source:str = 'Close', 
+    def idc_sma(self, length:int, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
         """
         Simple Moving Average (SMA).
@@ -1609,7 +1636,7 @@ class StrategyClass(ABC):
         Args:
             length (int): Length of the SMA.
             source (str, optional): Data source for SMA calculation. Allowed values are 
-                          ('Close', 'Open', 'High', 'Low', 'Volume').
+                          ('close', 'open', 'high', 'low', 'volume').
             last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
         
@@ -1617,18 +1644,19 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper containing the SMA values for each step.
         """
 
+        source = source.lower()
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
                              less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low','Volume'): 
+        elif not source in ('close','open','high','low','volume'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low','Volume'].
+                             ['close','open','high','low','volume'].
                              """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -1640,7 +1668,7 @@ class StrategyClass(ABC):
 
     @__store_decorator
     def __idc_sma(self, data:pd.Series | None = None, length:int = 10, 
-                  source:str = 'Close', last:int | None = None, 
+                  source:str = 'close', last:int | None = None, 
                   cut:bool = False) -> flx.DataWrapper:
         """
         Simple Moving Average (SMA).
@@ -1659,12 +1687,12 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper containing the SMA values for each step.
         """
 
-        data = self.__data_all[source] if data is None else data
+        data = self.__data_adf[source] if data is None else data
         sma = data.rolling(window=length).mean()
 
         return sma
 
-    def idc_wma(self, length:int, source:str = 'Close', 
+    def idc_wma(self, length:int, source:str = 'close', 
                 invt_weight:bool = False, last:int | None = None) -> flx.DataWrapper:
         """
         Weighted Moving Average (WMA).
@@ -1674,7 +1702,7 @@ class StrategyClass(ABC):
         Args:
             length (int): Length of the WMA.
             source (str, optional): Data source for WMA calculation. Allowed values are 
-                          ('Close', 'Open', 'High', 'Low', 'Volume').
+                          ('close', 'open', 'high', 'low', 'volume').
             invt_weight (bool, optional): If True, the distribution of weights is reversed.
             last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
@@ -1683,18 +1711,19 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper containing the WMA values for each step.
         """
 
+        source = source.lower()
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
                              less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low','Volume'): 
+        elif not source in ('close','open','high','low','volume'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low','Volume'].
+                             ['close','open','high','low','volume'].
                              """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -1706,7 +1735,7 @@ class StrategyClass(ABC):
 
     @__store_decorator
     def __idc_wma(self, data:pd.Series | None = None, 
-                  length:int = 10, source:str = 'Close', 
+                  length:int = 10, source:str = 'close', 
                   invt_weight:bool = False, last:int | None = None, 
                   cut:bool = False) -> flx.DataWrapper:
         """
@@ -1726,7 +1755,7 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper containing the WMA values for each step.
         """
 
-        data = self.__data_all[source] if data is None else data
+        data = self.__data_adf[source] if data is None else data
 
         weight = (np.arange(1, length+1)[::-1] 
                   if invt_weight else np.arange(1, length+1))
@@ -1735,7 +1764,7 @@ class StrategyClass(ABC):
 
         return wma
     
-    def idc_smma(self, length:int, source:str = 'Close', 
+    def idc_smma(self, length:int, source:str = 'close', 
                  last:int | None = None) -> flx.DataWrapper:
         """
         Smoothed Moving Average (SMMA).
@@ -1745,7 +1774,7 @@ class StrategyClass(ABC):
         Args:
             length (int): Length of the SMMA.
             source (str, optional): Data source for SMMA calculation. Allowed values are 
-                          ('Close', 'Open', 'High', 'Low', 'Volume').
+                          ('close', 'open', 'high', 'low', 'volume').
             last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
@@ -1753,18 +1782,19 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper containing the SMMA values for each step.
         """
 
+        source = source.lower()
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
                              less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low','Volume'): 
+        elif not source in ('close','open','high','low','volume'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low','Volume'].
+                             ['close','open','high','low','volume'].
                              """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data['close']))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -1776,7 +1806,7 @@ class StrategyClass(ABC):
 
     @__store_decorator
     def __idc_smma(self, data:pd.Series = None, length:int = 10, 
-                   source:str = 'Close', last:int = None, 
+                   source:str = 'close', last:int = None, 
                    cut:bool = False) -> flx.DataWrapper:
         """
         Smoothed Moving Average (SMMA).
@@ -1795,16 +1825,16 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper containing the SMMA values for each step.
         """
 
-        data = self.__data_all[source] if data is None else data
+        data = self.__data_adf[source] if data is None else data
 
         smma = data.ewm(alpha=1/length, adjust=False).mean()
         smma.shift(1)
 
         return smma
-    
+
     def idc_sema(self, length:int = 9, method:str = 'sma', 
                   smooth:int = 5, only:bool = False, 
-                  source:str = 'Close', last:int | None = None) -> flx.DataWrapper:
+                  source:str = 'close', last:int | None = None) -> flx.DataWrapper:
         """
         Smoothed Exponential Moving Average (SEMA).
 
@@ -1818,7 +1848,7 @@ class StrategyClass(ABC):
             only (bool, optional): If True, returns only a Series with the values of the 
                         'method'.
             source (str, optional): Data source for EMA calculation. Allowed values are 
-                          ('Close', 'Open', 'High', 'Low', 'Volume').
+                          ('close', 'open', 'high', 'low', 'volume').
             last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
@@ -1831,6 +1861,7 @@ class StrategyClass(ABC):
             - 'smoothed'
         """
 
+        source = source.lower()
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
@@ -1846,13 +1877,13 @@ class StrategyClass(ABC):
                              'smooth' it has to be greater than 0 and 
                              less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low','Volume'): 
+        elif not source in ('close','open','high','low','volume'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low','Volume'].
+                             ['close','open','high','low','volume'].
                              """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data['close']))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -1865,7 +1896,7 @@ class StrategyClass(ABC):
     @__store_decorator
     def __idc_sema(self, data:pd.Series | None = None, length:int = 9, 
                     method:str = 'sma', smooth:int = 5, only:bool = False, 
-                    source:str = 'Close', last:int | None = None, cut:bool = False) -> flx.DataWrapper:
+                    source:str = 'close', last:int | None = None, cut:bool = False) -> flx.DataWrapper:
         """
         Smoothed Exponential Moving Average (SEMA).
 
@@ -1888,7 +1919,7 @@ class StrategyClass(ABC):
             - 'smoothed'
         """
 
-        data = self.__data_all[source] if data is None else data
+        data = self.__data_adf[source] if data is None else data
         ema = data.ewm(span=length, adjust=False).mean()
 
         match method:
@@ -1906,7 +1937,7 @@ class StrategyClass(ABC):
         return smema
 
     def idc_bb(self, length:int = 20, std_dev:float = 2, ma_type:str = 'sma', 
-               source:str = 'Close', last:int | None = None) -> flx.DataWrapper:
+               source:str = 'close', last:int | None = None) -> flx.DataWrapper:
         """
         Bollinger Bands (BB).
 
@@ -1918,7 +1949,7 @@ class StrategyClass(ABC):
             ma_type (str, optional): Type of moving average. For example, 'sma' for simple 
                           moving average.
             source (str, optional): Data source for calculation. Allowed values are 
-                          ('Close', 'Open', 'High', 'Low').
+                          ('close', 'open', 'high', 'low').
             last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
@@ -1932,6 +1963,8 @@ class StrategyClass(ABC):
             - 'Lower'
         """
 
+        source = source.lower()
+        ma_type = ma_type.lower()
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
@@ -1942,10 +1975,10 @@ class StrategyClass(ABC):
                              'std_dev' it has to be greater than 0.001 and 
                              less than 50.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low'): 
+        elif not source in ('close','open','high','low'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low'].
+                             ['close','open','high','low'].
                              """, newline_exclude=True))
         elif not ma_type in ('sma','ema','wma','smma'): 
             raise ValueError(utils.text_fix("""
@@ -1953,7 +1986,7 @@ class StrategyClass(ABC):
                              'sma', 'ema', 'wma', 'smma'.
                              """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data['close']))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -1965,7 +1998,7 @@ class StrategyClass(ABC):
 
     @__store_decorator
     def __idc_bb(self, data:pd.Series | None = None, length:int = 20, 
-                 std_dev:float = 2, ma_type:str = 'sma', source:str = 'Close', 
+                 std_dev:float = 2, ma_type:str = 'sma', source:str = 'close', 
                  last:int | None = None, cut:bool = False) -> flx.DataWrapper:
         """
         Bollinger Bands (BB).
@@ -1991,7 +2024,7 @@ class StrategyClass(ABC):
             - 'Lower'
         """
 
-        data = self.__data_all[source] if data is None else data
+        data = self.__data_adf[source] if data is None else data
 
         match ma_type:
             case 'sma': ma = self.__idc_sma(data=data, length=length).to_series()
@@ -1999,15 +2032,15 @@ class StrategyClass(ABC):
             case 'wma': ma = self.__idc_wma(data=data, length=length).to_series()
             case 'smma': ma = self.__idc_smma(data=data, length=length).to_series()
         std_ = (std_dev * data.rolling(window=length).std())
-        bb = pd.DataFrame({'Upper':ma + std_,
+        bb = pd.DataFrame({'upper':ma + std_,
                            ma_type:ma,
-                           'Lower':ma - std_}, index=ma.index)
+                           'lower':ma - std_}, index=ma.index)
 
         return bb
 
     def idc_rsi(self, length_rsi:int = 14, length:int = 14, 
                 rsi_ma_type:str = 'smma', base_type:str = 'sma', 
-                bb_std_dev:float = 2, source:str = 'Close', 
+                bb_std_dev:float = 2, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
         """
         Relative Strength Index (RSI).
@@ -2025,7 +2058,7 @@ class StrategyClass(ABC):
                             'sma' for simple moving average.
             bb_std_dev (float, optional): Standard deviation for Bollinger Bands. Default is 2.
             source (str, optional): Data source for calculation. Allowed values are 
-                          ('Close', 'Open', 'High', 'Low').
+                          ('close', 'open', 'high', 'low').
             last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
@@ -2038,6 +2071,7 @@ class StrategyClass(ABC):
             - '{base_type}'
         """
 
+        source = source.lower()
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 0 and 
@@ -2053,10 +2087,10 @@ class StrategyClass(ABC):
                              'length_rsi' it has to be greater than 0 and 
                              less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low'): 
+        elif not source in ('close','open','high','low'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low'].
+                             ['close','open','high','low'].
                              """, newline_exclude=True))
         elif not rsi_ma_type in ('sma','ema','wma','smma'): 
             raise ValueError(utils.text_fix("""
@@ -2069,7 +2103,7 @@ class StrategyClass(ABC):
                              'sma', 'ema', 'wma', 'smma', 'bb'.
                              """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data['close']))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -2085,7 +2119,7 @@ class StrategyClass(ABC):
     def __idc_rsi(self, data:pd.Series | None = None, length_rsi:int = 14, 
                   length:int = 14, rsi_ma_type:str = 'smma', 
                   base_type:str = 'sma', bb_std_dev:float = 2, 
-                  source:str = 'Close', last:int | None = None, cut:bool = False)  -> flx.DataWrapper:
+                  source:str = 'close', last:int | None = None, cut:bool = False)  -> flx.DataWrapper:
         """
         Relative Strength Index (RSI).
 
@@ -2108,7 +2142,7 @@ class StrategyClass(ABC):
             - '{base_type}'
         """
 
-        delta = self.__data_all[source].diff() if data is None else data.diff()
+        delta = self.__data_adf[source].diff() if data is None else data.diff()
 
         match rsi_ma_type:
             case 'sma': ma = self.__idc_sma
@@ -2137,7 +2171,7 @@ class StrategyClass(ABC):
 
     def idc_stochastic(self, length_k:int = 14, smooth_k:int = 1, 
                        length_d:int = 3, d_type:str = 'sma', 
-                       source:str = 'Close', last:int | None = None) -> flx.DataWrapper:
+                       source:str = 'close', last:int | None = None) -> flx.DataWrapper:
         """
         Stochastic Oscillator.
 
@@ -2151,7 +2185,7 @@ class StrategyClass(ABC):
             d_type (str, optional): Type of moving average used for the stochastic oscillator. 
                           For example, 'sma' for simple moving average.
             source (str, optional): Data source for calculation. Allowed values are 
-                          ('Close', 'Open', 'High', 'Low').
+                          ('close', 'open', 'high', 'low').
             last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
@@ -2164,6 +2198,7 @@ class StrategyClass(ABC):
             - '{d_type}'
         """
 
+        source = source.lower()
         if length_k > 5000 or length_k <= 0: 
             raise ValueError(utils.text_fix("""
                              'length_k' it has to be greater than 0 and 
@@ -2179,10 +2214,10 @@ class StrategyClass(ABC):
                              'length_d' it has to be greater than 0 and 
                              less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low'): 
+        elif not source in ('close','open','high','low'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low'].
+                             ['close','open','high','low'].
                              """, newline_exclude=True))
         elif not d_type in ('sma','ema','wma','smma'): 
             raise ValueError(utils.text_fix("""
@@ -2190,7 +2225,7 @@ class StrategyClass(ABC):
                              'sma', 'ema', 'wma', 'smma'.
                              """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data['close']))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -2203,7 +2238,7 @@ class StrategyClass(ABC):
     @__store_decorator
     def __idc_stochastic(self, data:pd.Series | None = None, length_k:int = 14, 
                          smooth_k:int = 1, length_d:int = 3, d_type:int = 'sma', 
-                         source:str = 'Close', last:int | None = None, 
+                         source:str = 'close', last:int | None = None, 
                          cut:bool = False) -> flx.DataWrapper:
         """
         Stochastic Oscillator.
@@ -2227,10 +2262,10 @@ class StrategyClass(ABC):
             - '{d_type}'
         """
 
-        data = self.__data_all if data is None else data
+        data = self.__data_adf if data is None else data
 
-        low_data = data['Low'].rolling(window=length_k).min()
-        high_data = data['High'].rolling(window=length_k).max()
+        low_data = data['low'].rolling(window=length_k).min()
+        high_data = data['high'].rolling(window=length_k).max()
 
         match d_type:
             case 'sma': ma = self.__idc_sma
@@ -2280,7 +2315,7 @@ class StrategyClass(ABC):
                              less than 5000.
                              """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data['close']))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -2317,12 +2352,12 @@ class StrategyClass(ABC):
             - '-di'
         """
 
-        data = self.__data_all if data is None else data
+        data = self.__data_adf if data is None else data
 
         atr = self.__idc_atr(length=length_di, smooth='smma').unwrap()
 
-        dm_p_raw = data['High'].diff()
-        dm_n_raw = -data['Low'].diff()
+        dm_p_raw = data['high'].diff()
+        dm_n_raw = -data['low'].diff()
         
         dm_p = pd.Series(
             np.where((dm_p_raw > dm_n_raw) & (dm_p_raw > 0), dm_p_raw, 0), 
@@ -2347,7 +2382,7 @@ class StrategyClass(ABC):
     def idc_macd(self, short_len:int = 12, long_len:int = 26, 
                  signal_len:int = 9, macd_ma_type:str = 'ema', 
                  signal_ma_type:str = 'ema', histogram:bool = True, 
-                 source:str = 'Close', last:int | None = None) -> flx.DataWrapper:
+                 source:str = 'close', last:int | None = None) -> flx.DataWrapper:
         """
         Calculate the convergence/divergence of the moving average (MACD).
 
@@ -2360,8 +2395,8 @@ class StrategyClass(ABC):
             macd_ma_type (str, optional): Type of moving average used to calculate MACD.
             signal_ma_type (str, optional): Type of moving average used to smooth the MACD.
             histogram (bool, optional): If True, includes an additional 'histogram' column.
-            source (str, optional): Data source for calculations. Allowed values: 'Close', 
-                'Open', 'High', 'Low'.
+            source (str, optional): Data source for calculations. Allowed values: 'close', 
+                'open', 'high', 'low'.
             last (int | None, optional): Number of data points to return starting from the
                 present backward. If None, returns data for all available periods.
 
@@ -2374,6 +2409,7 @@ class StrategyClass(ABC):
             - 'histogram'      
         """
 
+        source = source.lower()
         if short_len > 5000 or short_len <= 0: 
             raise ValueError(utils.text_fix("""
                              'short_len' it has to be greater than 0 and 
@@ -2399,13 +2435,13 @@ class StrategyClass(ABC):
                              'signal_ma_typ' only one of these values: 
                              ['ema','sma'].
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low'): 
+        elif not source in ('close','open','high','low'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low'].
+                             ['close','open','high','low'].
                              """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data['close']))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -2421,7 +2457,7 @@ class StrategyClass(ABC):
     def __idc_macd(self, data:pd.Series | None = None, short_len:int = 12, 
                    long_len:int = 26, signal_len:int = 9, 
                    macd_ma_type:str = 'ema', signal_ma_type:str = 'ema', 
-                   histogram:bool = True, source:str = 'Close', 
+                   histogram:bool = True, source:str = 'close', 
                    last:int | None = None, cut:bool = False) -> flx.DataWrapper:
         """
         Calculate the convergence/divergence of the moving average (MACD).
@@ -2445,7 +2481,7 @@ class StrategyClass(ABC):
             - 'histogram'  
         """
 
-        data = self.__data_all if data is None else data
+        data = self.__data_adf if data is None else data
 
         match macd_ma_type:
             case 'ema':
@@ -2474,7 +2510,7 @@ class StrategyClass(ABC):
 
     def idc_sqzmom(self, bb_len:int = 20, bb_mult:float = 1.5, 
                    kc_len:int = 20, kc_mult:float = 1.5, 
-                   use_tr:bool = True, source:str = 'Close', 
+                   use_tr:bool = True, source:str = 'close', 
                    last:int | None = None) -> flx.DataWrapper:
         """
         Calculate Squeeze Momentum (SQZMOM).
@@ -2492,10 +2528,10 @@ class StrategyClass(ABC):
             bb_mult (float, optional): Bollinger band standard deviation.
             kc_len (int, optional): Keltner channel length.
             kc_mult (float, optional): Keltner channel standard deviation.
-            use_tr (bool, optional): If False, ('High' - 'Low') is used instead of the true 
+            use_tr (bool, optional): If False, ('high' - 'low') is used instead of the true 
                 range.
-            source (str, optional): Data source for calculations. Allowed values: 'Close', 
-                'Open', 'High', 'Low'.
+            source (str, optional): Data source for calculations. Allowed values: 'close', 
+                'open', 'high', 'low'.
             last (int | None, optional): Number of data points to return starting from the
                 present backward. If None, returns data for all available periods.
 
@@ -2508,6 +2544,7 @@ class StrategyClass(ABC):
             - 'histogram'
         """
 
+        source = source.lower()
         if bb_len > 5000 or bb_len <= 0: 
             raise ValueError(utils.text_fix("""
                                             'bb_len' it has to be greater than 
@@ -2528,13 +2565,13 @@ class StrategyClass(ABC):
                                             'bb_mult' it has to be greater than 
                                             0.001 and less than 50.
                                             """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low'): 
+        elif not source in ('close','open','high','low'): 
             raise ValueError(utils.text_fix("""
                                             'source' only one of these values: 
-                                            ['Close','Open','High','Low'].
+                                            ['close','open','high','low'].
                                             """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data['close']))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -2550,7 +2587,7 @@ class StrategyClass(ABC):
     def __idc_sqzmom(self, data:pd.Series | None = None, 
                      bb_len:int = 20, bb_mult:float = 1.5, 
                      kc_len:int = 20, kc_mult:float = 1.5, 
-                     use_tr:bool = True, source:str = 'Close', 
+                     use_tr:bool = True, source:str = 'close', 
                      last:int | None = None, cut:bool = False) -> flx.DataWrapper:
         """
         Calculate Squeeze Momentum (SQZMOM).
@@ -2580,7 +2617,7 @@ class StrategyClass(ABC):
             - 'histogram'
         """
 
-        data = self.__data_all if data is None else data
+        data = self.__data_adf if data is None else data
 
         basis = self.__idc_sma(length=bb_len).unwrap()
         dev = bb_mult * data[source].rolling(window=bb_len).std(ddof=0)
@@ -2590,7 +2627,7 @@ class StrategyClass(ABC):
 
         ma = self.__idc_sma(length=kc_len).unwrap()
         range_ = self.__idc_sma(data=self.__idc_trange().to_series()
-                                if use_tr else data['High']-data['Low'], 
+                                if use_tr else data['high']-data['low'], 
                                 length=kc_len).unwrap()
 
         upper_kc = ma + range_ * kc_mult
@@ -2598,8 +2635,8 @@ class StrategyClass(ABC):
 
         sqz = np.where((lower_bb > lower_kc) & (upper_bb < upper_kc), 1, 0)
 
-        d = data[source] - ((data['Low'].rolling(window=kc_len).min() + 
-                             data['High'].rolling(window=kc_len).max()) / 2 + 
+        d = data[source] - ((data['low'].rolling(window=kc_len).min() + 
+                             data['high'].rolling(window=kc_len).max()) / 2 + 
                              self.__idc_sma(length=kc_len).unwrap()) / 2
 
         histogram = self.__idc_rlinreg(data=d, length=kc_len, offset=0).unwrap()
@@ -2632,7 +2669,7 @@ class StrategyClass(ABC):
             DataWrapper: Array with the linear regression values for each window.
         """
 
-        data = self.__data if data is None else data
+        data = self.__data_adf  if data is None else data
 
         x = np.arange(length)
         y = data.rolling(window=length)
@@ -2642,7 +2679,7 @@ class StrategyClass(ABC):
 
         return m * (length - 1 - offset) + b
 
-    def idc_mom(self, length:int = 10, source:str = 'Close', 
+    def idc_mom(self, length:int = 10, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
         """
         Calculate momentum values (MOM).
@@ -2652,7 +2689,7 @@ class StrategyClass(ABC):
         Args:
             length (int, optional): Length for calculating momentum.
             source (str, optional): Data source for momentum calculation. Allowed values:
-                'Close', 'Open', 'High', 'Low'.
+                'close', 'open', 'high', 'low'.
             last (int | None, optional): Number of data points to return starting from the
                 present backward. If None, returns data for all available periods.
 
@@ -2660,18 +2697,19 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper with the momentum values for each step.
         """
 
+        source = source.lower()
         if length > 5000 or length <= 0: 
             raise ValueError(utils.text_fix("""
                              'length' it has to be greater than 
                              0 and less than 5000.
                              """, newline_exclude=True))
-        elif not source in ('Close','Open','High','Low'): 
+        elif not source in ('close','open','high','low'): 
             raise ValueError(utils.text_fix("""
                              'source' only one of these values: 
-                             ['Close','Open','High','Low'].
+                             ['close','open','high','low'].
                              """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data['close']))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -2683,7 +2721,7 @@ class StrategyClass(ABC):
 
     @__store_decorator
     def __idc_mom(self, data:pd.Series | None = None, length:int = 10, 
-                  source:str = 'Close', last:int | None = None,
+                  source:str = 'close', last:int | None = None,
                   cut:bool = False) -> flx.DataWrapper:
         """
         Calculate momentum values (MOM).
@@ -2702,7 +2740,7 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper with the momentum values for each step.
         """
 
-        data = self.__data_all if data is None else data
+        data = self.__data_adf if data is None else data
         mom = data[source] - data[source].shift(length)
 
         return mom
@@ -2752,7 +2790,7 @@ class StrategyClass(ABC):
                                             greater than 0 and less than 5000.
                                             """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data['close']))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -2795,17 +2833,17 @@ class StrategyClass(ABC):
             - 'ichimoku_lines'
         """
 
-        data = self.__data_all if data is None else data
+        data = self.__data_adf if data is None else data
 
-        tenkan_sen_val = (data['High'].rolling(window=tenkan_period).max() + 
-                          data['Low'].rolling(window=tenkan_period).min()) / 2
-        kijun_sen_val = (data['High'].rolling(window=kijun_period).max() + 
-                         data['Low'].rolling(window=kijun_period).min()) / 2
+        tenkan_sen_val = (data['high'].rolling(window=tenkan_period).max() + 
+                          data['low'].rolling(window=tenkan_period).min()) / 2
+        kijun_sen_val = (data['high'].rolling(window=kijun_period).max() + 
+                         data['low'].rolling(window=kijun_period).min()) / 2
 
         senkou_span_a_val = ((tenkan_sen_val + kijun_sen_val) / 2)
-        senkou_span_b_val = ((data['High'].rolling(
+        senkou_span_b_val = ((data['high'].rolling(
             window=senkou_span_b_period).max() + 
-            data['Low'].rolling(window=senkou_span_b_period).min()) / 2)
+            data['low'].rolling(window=senkou_span_b_period).min()) / 2)
         senkou_span = (pd.DataFrame({'senkou_a':senkou_span_a_val,
                                     'senkou_b':senkou_span_b_val, 
                                     'tenkan_sen':tenkan_sen_val,
@@ -2844,7 +2882,7 @@ class StrategyClass(ABC):
                              'smma', 'sma', 'ema', 'wma'.
                              """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > self.__data["Close"].shape[0])): 
+              (last <= 0 or last > len(self.__data['close']))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
@@ -2900,7 +2938,7 @@ class StrategyClass(ABC):
 
         Args:
             data (Series | None, optional): The data used to perform the calculation.
-            handle_na (bool, optional): Whether to handle NaN values in 'Close'.
+            handle_na (bool, optional): Whether to handle NaN values in 'close'.
             last (int | None, optional): Number of data points to return starting from the 
                 present backward. If None, returns data for all available periods.
             cut (bool, optional): True to return the trimmed data with current index.
@@ -2909,16 +2947,16 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper with the true range values for each step.
         """
 
-        data = self.__data_all if data is None else data
+        data = self.__data_adf if data is None else data
 
-        close = data['Close'].shift(1)
+        close = data['close'].shift(1)
 
         if handle_na:
-                close.fillna(data['Low'], inplace=True)
+                close.fillna(data['low'], inplace=True)
                      
-        hl = data['High'] - data['Low']
-        hyc = abs(data['High'] - close)
-        lyc = abs(data['Low'] - close)
+        hl = data['high'] - data['low']
+        hyc = abs(data['high'] - close)
+        lyc = abs(data['low'] - close)
         tr = pd.concat([hl, hyc, lyc], axis=1).max(axis=1)
 
         if not handle_na:

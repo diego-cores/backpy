@@ -116,22 +116,22 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
 
     if progress:
         print(end='\n')
-    
+
     data.columns = ['timestamp', 
-                    'Open', 
-                    'High', 
-                    'Low', 
-                    'Close', 
-                    'Volume', 
-                    'Close_time', 
-                    'Quote_asset_volume', 
-                    'Number_of_trades', 
-                    'Taker_buy_base', 
-                    'Taker_buy_quote', 
-                    'Ignore']
+                    'open', 
+                    'high', 
+                    'low', 
+                    'close', 
+                    'volume', 
+                    'close_time', 
+                    'quote_asset_volume', 
+                    'number_of_trades', 
+                    'taker_buy_base', 
+                    'taker_buy_quote', 
+                    '_']
 
     data.index = data['timestamp']
-    data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
+    data = data[['open', 'high', 'low', 'close', 'volume']]
 
     if data.empty: 
         raise exception.BinanceError('Data empty error.')
@@ -293,7 +293,7 @@ def load_yfinance_data(tickers:str = any,
         if data.empty: 
             raise exception.YfinanceError('The symbol does not exist.')
         
-        data.columns = data.columns.droplevel(1)
+        data.columns = data.columns.droplevel(1).str.lower()
         data.index = mpl.dates.date2num(data.index)
         data_width = utils.calc_width(data.index)
 
@@ -305,7 +305,7 @@ def load_yfinance_data(tickers:str = any,
                                   data_icon=tickers.strip(),
                                   data_interval=interval.strip())
 
-        data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
+        data = data[['open', 'high', 'low', 'close', 'volume']]
 
         if data_extract:
             return data, data_width
@@ -332,8 +332,8 @@ def load_data(data:pd.DataFrame, icon:str | None = None,
 
     Args:
         data (pd.DataFrame): DataFrame containing the data to load. Must have the 
-            following columns: ['Open', 'High', 'Low', 'Close', 
-            'Volume'].
+            following columns: ['open', 'high', 'low', 'close', 
+            'volume'].
         icon (str | None, optional): String representing the data icon.
         interval (str | None, optional): String representing the data interval.
         days_op (int, optional): Number of operable days in 1 year. This will be 
@@ -341,15 +341,17 @@ def load_data(data:pd.DataFrame, icon:str | None = None,
         statistics (bool): If True, prints statistics of the loaded data.
         progress (bool, optional): If True, shows a progress bar and timer.
     """
+
+    data.columns = data.columns.str.lower()
     # Exceptions.
     if not all(
         col in data.columns.to_list() 
-        for col in ['Open', 'High', 'Low', 'Close']): 
+        for col in ['open', 'high', 'low', 'close']): 
         
         raise exception.DataError(
             utils.text_fix("""
             Some columns are missing columns: 
-            ['Open', 'High', 'Low', 'Close']
+            ['open', 'high', 'low', 'close']
             """, newline_exclude=True))
 
     days_op = int(days_op)
@@ -360,15 +362,15 @@ def load_data(data:pd.DataFrame, icon:str | None = None,
         utils.load_bar(size=1, step=0)
         t = time()
 
-    if not 'Volume' in data.columns:
-        data['Volume'] = 0
+    if not 'volume' in data.columns:
+        data['volume'] = 0
 
     if progress: 
         utils.load_bar(size=1, step=1)
         print('| DataTimer:',utils.num_align(round(time()-t,2)))
 
-    _cm.__data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
-    _cm.__data.index.name = 'Date'
+    _cm.__data = data[['open', 'high', 'low', 'close', 'volume']]
+    _cm.__data.index.name = 'date'
     _cm.__data.index = utils.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index)
 
@@ -423,13 +425,14 @@ def load_data_bpd(path:str = 'data.bpd', start:int | None = None,
     with open(path, "rb") as file:
         data, icon, interval, days_op_load = pk.load(file)
 
+    data.columns = data.columns.str.lower()
     days_op = days_op or days_op_load
     days_op = int(days_op)
 
     if (not isinstance(data, pd.DataFrame)
         or not all(
         col in data.columns.to_list() 
-            for col in ['Open', 'High', 'Low', 'Close'])): 
+            for col in ['open', 'high', 'low', 'close'])): 
 
         raise exception.DataError("Bad data: 'data'.")
     elif not isinstance(icon, str): 
@@ -486,6 +489,7 @@ def save_data_bpd(file_name:str = 'data') -> None:
     elif _cm.__data_year_days is None:
         raise exception.RunError('Year days not loaded.')
 
+    _cm.__data.columns = _cm.__data.columns.str.lower()
     with open(f"{file_name}.bpd", "wb") as file:
         pk.dump((_cm.__data, 
                 _cm.__data_icon, 
@@ -495,7 +499,8 @@ def save_data_bpd(file_name:str = 'data') -> None:
 def run_config(initial_funds:int = 10000, commission:tuple | float = 0, 
         spread:tuple | float = 0, slippage:tuple | float = 0, 
         gaps:bool = True, ord_closer:bool = True, 
-        order_ord:dict | None = None, on_limit:bool = True) -> None:
+        order_ord:dict | None = None, on_limit:bool = True,
+        chunk_size:int | None = None) -> None:
     """
     Run Config
 
@@ -510,9 +515,9 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
 
     Args:
         initial_funds (int, optional): Initial amount of funds to start with. Used for 
-                            statistics. Default is 10,000.
+            statistics. Default is 10,000.
         commission (tuple | float, optional): The commission will be charged 
-        for each purchase/sale execution.
+            for each purchase/sale execution.
         spread (tuple | float, optional): The spread is the separation between 
             the bid and ask price and is used to mark the order book limits.
             There is no variation between maker and taker.
@@ -529,6 +534,11 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
             0 will execute before 99.
         on_limit (bool, optional): If True, the 'stopLimit' and 
             'takeLimit' orders are executed on the same candle if there is price.
+        chunk_size (int, optional): BackPy loads the variable space before 
+            executing your strategy in chunks, the size of these chunks 
+            can take up more memory or make the backtest faster, do not 
+            modify this variable if you do not need to, each value 
+            represents a saved space for positions and orders. Defualt is 10000.
     """
     # Exceptions
     if initial_funds < 0: 
@@ -537,6 +547,8 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
             [k not in ('takeProfit', 'takeLimit', 'stopLoss', 'stopLimit')
              or order_ord[k] <= 0 or order_ord[k] > 99 for k in order_ord])):
         raise exception.RunError("'order_ord' bad value or format.")
+    elif not chunk_size and (not isinstance(chunk_size, int) or chunk_size <= 0):
+        raise exception.RunError("'chunk_size' can only be 'int' greater than 0.")
 
     # Config
     _cm.__init_funds = initial_funds
@@ -553,6 +565,7 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
                                       cust_error="Error of 'commission'.")
     _cm.__slippage_pct = flx.CostsValue(slippage, cust_error="Error of 'slippage'.")
     _cm.__spread_pct = flx.CostsValue(spread, cust_error="Error of 'spread'.")
+    _cm.__chunk_size = chunk_size or None
 
 def run(cls:type, prnt:bool = True, progress:bool = True) -> str | None:
     """
@@ -597,6 +610,8 @@ def run(cls:type, prnt:bool = True, progress:bool = True) -> str | None:
 
     skip = max(1, _cm.__data.shape[0] // _cm.max_bar_updates)
 
+    if progress:
+        utils.load_bar(size=_cm.__data.shape[0], step=0)
     for f, _ in enumerate(_cm.__data.index):
         f += 1
 
@@ -630,7 +645,10 @@ def run(cls:type, prnt:bool = True, progress:bool = True) -> str | None:
             if _cm.run_timer and not progress else '') 
 
     act_trades = pd.DataFrame(instance._StrategyClass__positions).dropna(axis=1, how='all')
-    _cm.__trades = pd.DataFrame(instance._StrategyClass__pos_record).dropna(axis=1, how='all')
+    _cm.__trades = pd.DataFrame(
+        instance._StrategyClass__pos_record[
+            :instance._StrategyClass__pos_record._pos]
+    ).dropna(axis=1, how='all')
 
     if not act_trades.empty: _cm.__trades = pd.concat([
         _cm.__trades, act_trades
@@ -735,7 +753,7 @@ def plot(log:bool = False, progress:bool = True,
         text = f'| PlotTimer: {utils.num_align(time()-t)} '
         utils.load_bar(size=4, step=2, text=text)
 
-    utils.plot_volume(ax2, _cm.__data['Volume'], _cm.__data_width, 
+    utils.plot_volume(ax2, _cm.__data['volume'], _cm.__data_width, 
                       color=plt_colors.get('vol', 'tab:orange'))
 
     if position and position.lower() != 'none' and not _cm.__trades.empty:
@@ -909,11 +927,11 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
         ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
 
         pos_date = trades['positionDate']
-        ax.set_xlim(pos_date.iloc[0]-(_cm.__data_width*len(pos_date)/10), 
-                    pos_date.iloc[-2]+(_cm.__data_width*len(pos_date)/10))
+        ax.set_xlim(pos_date.dropna().iloc[0]-(_cm.__data_width*len(pos_date)/10), 
+                    pos_date.dropna().iloc[-1]+(_cm.__data_width*len(pos_date)/10))
 
-        y_limit = lambda values, comp=1: (values.min()-comp, 
-                                          values.max()*1.05+comp)
+        y_limit = lambda values, comp=1: (np.min(values)-comp, 
+                                          np.max(values)*1.05+comp)
 
         match v:
             case 'p':
@@ -936,12 +954,18 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
                         label='Winnings.', ds='steps-post')
                 ax.set_ylim(y_limit(values))
             case 'e':
-                values = np.cumprod(1 + trades['profitPer'] / 100)
+                with np.errstate(over='ignore'):
+                    values = np.cumprod(1 + trades['profitPer'] / 100)
+                if np.isinf(values).any():
+                    values = pd.Series(0, index=values.index)
+
                 color = (market_colors.get('u', 'g') if values.iloc[-2] > 1 
                          else market_colors.get('d', 'r'))
 
                 ax.plot(pos_date, values, c=color, 
                         label='Equity.', ds='steps-post')
+
+                values = y_limit(values, 0.01)
                 ax.set_ylim(y_limit(values, 0.01))
 
                 if log: ax.set_yscale('symlog')
@@ -1035,7 +1059,7 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None,
         data (DataFrame | None, optional): The data with which the statistics 
             are calculated, if left to None the loaded data will be used.
             The DataFrame must contain the following columns: 
-            ('Close', 'Open', 'High', 'Low', 'Volume').
+            ('close', 'open', 'high', 'low', 'volume').
         data_icon (str | None, optional): Icon shown in the statistics, 
             if you leave it at None the loaded data will be the one used.
         data_interval (str | None, optional): Interval shown in the statistics, 
@@ -1071,20 +1095,20 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None,
     else: r_date = ""
 
     text = utils.statistics_format({
-        'Last price':[utils.round_r(data['Close'].iloc[-1],2), 
+        'Last price':[utils.round_r(data['close'].iloc[-1],2), 
                       _cm.__COLORS['BOLD']],
-        'Maximum price':[utils.round_r(data['High'].max(),2),
+        'Maximum price':[utils.round_r(data['high'].max(),2),
                          _cm.__COLORS['GREEN']],
-        'Minimum price':[utils.round_r(data['Low'].min(),2),
+        'Minimum price':[utils.round_r(data['low'].min(),2),
                          _cm.__COLORS['RED']],
-        'Maximum volume':[utils.round_r(data['Volume'].max(), 2),
+        'Maximum volume':[utils.round_r(data['volume'].max(), 2),
                           _cm.__COLORS['CYAN']],
         'Sample size':[len(data.index)],
         'Standard deviation':[utils.round_r(
-            np.std(data['Close'].dropna(), ddof=1),2)],
-        'Average price':[utils.round_r(data['Close'].mean(),2),
+            np.std(data['close'].dropna(), ddof=1),2)],
+        'Average price':[utils.round_r(data['close'].mean(),2),
                          _cm.__COLORS['YELLOW']],
-        'Average volume':[utils.round_r(data['Volume'].mean(),2),
+        'Average volume':[utils.round_r(data['volume'].mean(),2),
                           _cm.__COLORS['YELLOW']],
         f"'{data_icon}'":[f'{r_date} ~ {data_interval}',
                           _cm.__COLORS['CYAN']],
@@ -1192,6 +1216,9 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str | None:
         raise exception.StatsError('There is no data to see.')
     elif np.isnan(_cm.__trades['profitPer'].mean()): 
         raise exception.StatsError('There is no data to see.') 
+    with np.errstate(over='ignore'):
+        if np.isinf(np.cumprod(1 + _cm.__trades['profitPer'] / 100)).any():
+            raise exception.StatsError('Data overflow.') 
 
     # Number of years operated.
     op_years = abs(

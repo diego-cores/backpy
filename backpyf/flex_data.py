@@ -7,6 +7,7 @@ Classes:
     DataWrapper: Class for storing dataframes, series, ndarrays, lists, and dictionaries in a single type.
     CostsValue: Class to calculate different commissions, spreads, etc. 
         depending on the user's input and whether they are a maker or taker.
+    ChunkWrapper: Class to preload data into your ndarray in chunks and save attributes.
 """
 
 from __future__ import annotations
@@ -24,9 +25,9 @@ T = TypeVar('T')
 
 class DataWrapper(MutableSequence, Generic[T]):
     """
-    DataWrapper.
+    Data wrapper.
 
-    Datawrapper unifies pd.dataframe, pd.series, np.ndarray, lists, and dictionaries.
+    Datawrapper unifies dataframe, series, ndarray, lists, and dictionaries.
 
     Private Attributes:
         _data: The stored data in np.ndarray type.
@@ -54,44 +55,58 @@ class DataWrapper(MutableSequence, Generic[T]):
     def __init__(
             self, data: (list | dict[str, list] | np.ndarray | pd.DataFrame
                           | pd.Series | pd.Index | DataWrapper | None) = None, 
-            columns: np.ndarray | pd.Index | list | tuple | "DataWrapper" | None = None
+            columns: np.ndarray | pd.Index | list | tuple | "DataWrapper" | None = None,
+            index: np.ndarray | pd.Index | list | tuple | "DataWrapper" | None = None
         ) -> None:
         """
         Builder method.
 
         Args:
-            data (list | dict[str, list] | np.ndarray | pd.DataFrame 
-                | pd.Series | pd.Index | DataWrapper | None, optional): Value to store.
-            columns (np.ndarray | pd.Index | list | tuple | "DataWrapper" | None, optional): Column names.
+            data (list | dict[str, list] | ndarray | DataFrame 
+                | Series | Index | DataWrapper | None, optional): Value to store.
+            columns (ndarray | Index | list | tuple | 
+                "DataWrapper" | None, optional): Column names.
+            index (ndarray | Index | list | tuple | 
+                "DataWrapper" | None, optional): Data index.
         """
 
-        if type(columns) != np.ndarray and not columns is None:
+        if not columns is None:
             columns = self.__get_columns(columns)
+        if not index is None:
+            index = self.__get_columns(columns, index=True)
 
         self._data = self.__set_convertible(data)
-        self._index = self.__set_index(data)
+        self._index = (self.__set_index(data) if index is None else index)
         self._columns = (self.__set_columns(data) if columns is None 
                          else columns)
 
         super().__init__()
 
-    def __get_columns(
-            self, columns:(np.ndarray | pd.Index 
-                           | list | tuple | "DataWrapper")) -> np.ndarray:
+    def __get_columns(self, 
+            columns:(np.ndarray | pd.Index 
+                | list | tuple | "DataWrapper"), 
+            index:bool = False) -> np.ndarray:
         """
         Get columns.
 
         This function converts its 'columns' argument to ndarray.
-        
+
         Args:
             columns (np.ndarray | pd.Index 
-            | list | tuple | "DataWrapper" | None, optional): Columns to convert.
+                | list | tuple | "DataWrapper" | None, optional): 
+                Columns to convert.
+            index (bool, optional): Instead of searching for 
+                the '_columns' attribute in 'DataWrapper' search for '_index'.
 
         Returns:
             ndarray: 'columns' in ndarray type.
         """
 
-        if type(columns) is DataWrapper:
+        if type(columns) is np.ndarray:
+            return columns
+        elif type(columns) is DataWrapper:
+            if index: return columns._index
+
             return columns._columns
         elif type(columns) is pd.Index:
             return columns.to_numpy()
@@ -124,10 +139,7 @@ class DataWrapper(MutableSequence, Generic[T]):
 
         match type(data):
             case pd.DataFrame:
-                data_ = data.values.T
-
-                dtype = [(v, data_[i].dtype) for i,v in enumerate(data.columns.values)]
-                return np.array(list(zip(*data_)), dtype=dtype)
+                return data.to_records(index=False)
             case pd.Series | pd.Index:
                 return data.values
             case np.ndarray:
@@ -489,3 +501,97 @@ class CostsValue:
         """
 
         return self.__taker()
+
+class ChunkWrapper(np.ndarray):
+    """
+    Chunk wrapper.
+
+    Preload memory space into your ndarray and save attributes.
+
+    Private Attributes:
+        _pos: Index where data will be added.
+        _chunk_size: Size of each chunk.
+
+    Methods:
+        append_rows: Add data and load chunks if needed.
+        chunk_loader: Load space to save more data.
+
+    Private Methods:
+        __new__: Constructor method.
+    """
+
+    def __new__(cls, data: np.ndarray, 
+                chunk_size: int | None = None) -> np.ndarray:
+        """
+        Constructor method.
+
+        Args:
+            data (ndarray): Value to store.
+            chunk_size (int, optional): Size of each chunk.
+        """
+
+        # exceptions
+        if chunk_size and (not isinstance(chunk_size, int) or chunk_size <= 0):
+            raise exception.ChunkWrapperError(
+                "'chunk_size' can only be 'int' greater than 0.")
+
+        obj = np.asarray(data).view(cls)
+        obj._pos = 0
+        obj._chunk_size = chunk_size or 10_000
+
+        return obj
+
+    def chunk_loader(
+            self, dtype:str | type | np.dtype | None = None) -> ChunkWrapper:
+        """
+        Chunk loader
+
+        Load space to save more data.
+
+        Args:
+            dtype (str | type | dtype | None, optional): 
+                Numpy dtype, None sets the dtype already set.
+
+        Return:
+            ChunkWrapper: Returns the ChunkWrapper with the new spaces.
+        """
+
+        if dtype is None:
+            dtype = self.dtype
+
+        self.dtype = dtype
+        new_data = np.concat(
+            [self, np.empty(self._chunk_size, dtype=dtype)]
+        , dtype=dtype)
+
+        new_data = new_data.view(ChunkWrapper)
+        new_data._pos = self._pos
+        new_data._chunk_size = self._chunk_size
+
+        return new_data
+
+    def append_rows(self, rows:np.ndarray, 
+                    dtype:str | type | np.dtype | None = None) -> ChunkWrapper:
+        """
+        Append rows
+
+        Add data and load chunks if needed.
+
+        Args:
+            rows (ndarray): Data to add.
+            dtype (str | type | dtype | None, optional): 
+                Numpy dtype, None sets the dtype already set.
+
+        Return:
+            ChunkWrapper: Returns the ChunkWrapper with the new data.
+        """
+
+        if self._pos + len(rows) > len(self):
+            new_val = self.chunk_loader(dtype=dtype)
+        else:
+            new_val = self
+
+        new_val[new_val._pos:new_val._pos + len(rows)] = rows
+        new_val._pos += len(rows)
+
+        return new_val
