@@ -12,7 +12,7 @@ Classes:
 
 from __future__ import annotations
 
-from typing import TypeVar, Generic, Union, Tuple
+from typing import TypeVar, Generic, Any
 from collections.abc import MutableSequence
 
 import pandas as pd
@@ -232,7 +232,7 @@ class DataWrapper(MutableSequence, Generic[T]):
                     and n_cols == len(self._columns) 
                 else list(range(n_cols)))
 
-    def insert(self, idx:int, value:any) -> None:
+    def insert(self, idx:int, value:Any) -> None:
         """
         Insert
 
@@ -241,7 +241,7 @@ class DataWrapper(MutableSequence, Generic[T]):
 
         Args:
             idx (bool): Index where it will be inserted.
-            value (any): Value to insert.
+            value (Any): Value to insert.
         """
 
         self._data = np.insert(self._data, idx, value)
@@ -462,7 +462,7 @@ class CostsValue:
         Args:
             val (tuple | int | float): Value to evaluate.
 
-        Return:
+        Returns:
             callable: The function that will return the random or fixed value.
         """
 
@@ -486,7 +486,7 @@ class CostsValue:
         """
         Get maker.
 
-        Return:
+        Returns:
             float: Maker value.
         """
 
@@ -496,7 +496,7 @@ class CostsValue:
         """
         Get taker.
         
-        Return:
+        Returns:
             float: Taker value.
         """
 
@@ -513,20 +513,27 @@ class ChunkWrapper(np.ndarray):
         _chunk_size: Size of each chunk.
 
     Methods:
-        append_rows: Add data and load chunks if needed.
+        get: Get value from your structured array with default.
+        delete: Removes an index from the array.
+        values: Returns the filled data.
+        append: Add data and load chunks if needed.
         chunk_loader: Load space to save more data.
 
     Private Methods:
         __new__: Constructor method.
+        __rewrap: Wraps an ndarray with this instance.
     """
 
-    def __new__(cls, data: np.ndarray, 
+    def __new__(cls, data: np.ndarray = np.array([]), 
+                dtype:str | type | np.dtype | None = None,
                 chunk_size: int | None = None) -> np.ndarray:
         """
         Constructor method.
 
         Args:
             data (ndarray): Value to store.
+            dtype (str | type | dtype | None, optional): 
+                Numpy dtype, None sets the dtype already set.
             chunk_size (int, optional): Size of each chunk.
         """
 
@@ -535,11 +542,31 @@ class ChunkWrapper(np.ndarray):
             raise exception.ChunkWrapperError(
                 "'chunk_size' can only be 'int' greater than 0.")
 
-        obj = np.asarray(data).view(cls)
-        obj._pos = 0
+        obj = np.asarray(data, dtype=dtype).view(cls)
+        obj._pos = len(data)
         obj._chunk_size = chunk_size or 10_000
 
         return obj
+
+    def __rewrap(self, new:np.ndarray) -> ChunkWrapper:
+        """
+        Rewrap
+
+        Wraps an ndarray with this instance.
+
+        Args:
+            new (ndarray): ndarray to rewrap.
+
+        Returns:
+            ChunkWrapper: Rewrapped array. 
+        """
+
+        new_data = new.view(ChunkWrapper)
+
+        new_data._pos = self._pos
+        new_data._chunk_size = self._chunk_size
+
+        return new_data
 
     def chunk_loader(
             self, dtype:str | type | np.dtype | None = None) -> ChunkWrapper:
@@ -552,7 +579,7 @@ class ChunkWrapper(np.ndarray):
             dtype (str | type | dtype | None, optional): 
                 Numpy dtype, None sets the dtype already set.
 
-        Return:
+        Returns:
             ChunkWrapper: Returns the ChunkWrapper with the new spaces.
         """
 
@@ -564,34 +591,87 @@ class ChunkWrapper(np.ndarray):
             [self, np.empty(self._chunk_size, dtype=dtype)]
         , dtype=dtype)
 
-        new_data = new_data.view(ChunkWrapper)
-        new_data._pos = self._pos
-        new_data._chunk_size = self._chunk_size
+        return self.__rewrap(new_data)
 
-        return new_data
-
-    def append_rows(self, rows:np.ndarray, 
+    def append(self, data:np.ndarray, 
                     dtype:str | type | np.dtype | None = None) -> ChunkWrapper:
         """
-        Append rows
+        Append
 
         Add data and load chunks if needed.
 
         Args:
-            rows (ndarray): Data to add.
+            data (ndarray): Data to add.
             dtype (str | type | dtype | None, optional): 
                 Numpy dtype, None sets the dtype already set.
 
-        Return:
+        Returns:
             ChunkWrapper: Returns the ChunkWrapper with the new data.
         """
 
-        if self._pos + len(rows) > len(self):
+        if self._pos + len(data) > len(self):
             new_val = self.chunk_loader(dtype=dtype)
         else:
             new_val = self
 
-        new_val[new_val._pos:new_val._pos + len(rows)] = rows
-        new_val._pos += len(rows)
+        new_val[new_val._pos:new_val._pos + len(data)] = data
+
+        new_val._pos += len(data)
 
         return new_val
+
+    def values(self) -> ChunkWrapper:
+        """
+        Values
+
+        Returns the filled data, equivalent to 'self[:self._pos]'
+        
+        Returns:
+            ChunkWrapper: The array without the empty data.
+        """
+
+        return self[:self._pos]
+
+    def get(self, name:str, 
+            default:Any | None = None) -> type | np.ndarray | None:
+        """
+        Get
+
+        Get a column from your structured array 
+            with a default if it doesn't exist.
+
+        Args:
+            name (str): Column name.
+            default (Any | None): Default value.
+
+        Returns:
+            type|ndarray|None: Value.
+        """
+        
+        if not hasattr(self.dtype, "names") or self.dtype.names is None:
+            raise exception.ChunkWrapperError(
+                'Only support structured ndarray.')
+
+        if name in self.dtype.names:
+            return self[name]
+        else:
+            return default
+
+    def delete(self, index:int) -> None:
+        """
+        Delete
+
+        Removes an element from the array.
+            Method inplace.
+
+        Args:
+            index (int): Index to delete.
+
+        Note:
+            This function messes up the array because to 'eliminate' 
+            the value it is replaced by the last one.
+        """
+
+        self._pos -= 1
+
+        self[index] = self[self._pos] 

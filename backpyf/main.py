@@ -25,6 +25,7 @@ Hidden Functions:
 """
 
 from datetime import datetime
+from typing import Any
 
 import matplotlib.pyplot
 import matplotlib as mpl
@@ -66,7 +67,7 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
             the module variables will not be assigned with them.
 
     Returns:
-        tuple[DataFrame, float] | None: If 'data_extract' is true, 
+        tuple[DataFrame,float]|None: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
 
@@ -179,7 +180,7 @@ def load_binance_data_futures(symbol:str = 'BTCUSDT', interval:str = '1d',
             the module variables will not be assigned with them.
 
     Returns:
-        tuple[DataFrame, float] | None: If 'data_extract' is true, 
+        tuple[DataFrame,float]|None: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
     try:
@@ -224,7 +225,7 @@ def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d',
                         the module variables will not be assigned with them.
 
     Returns:
-        tuple[DataFrame, float] | None: If 'data_extract' is true, 
+        tuple[DataFrame,float]|None: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
     try:
@@ -244,7 +245,7 @@ def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d',
     except: 
         raise exception.BinanceError('Binance parameters error.')
 
-def load_yfinance_data(tickers:str = any, 
+def load_yfinance_data(tickers:str = Any, 
                        start:str | None = None, end:str | None = None, 
                        interval:str = '1d', days_op:int = 365, 
                        statistics:bool = True, progress:bool = True, 
@@ -272,7 +273,7 @@ def load_yfinance_data(tickers:str = any,
                         the module variables will not be assigned with them.
 
     Returns:
-        tuple[DataFrame, float] | None: If 'data_extract' is true, 
+        tuple[DataFrame,float]|None: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
     days_op = int(days_op)
@@ -407,7 +408,7 @@ def load_data_bpd(path:str = 'data.bpd', start:int | None = None,
             the module variables will not be assigned with them.
 
     Returns:
-        tuple[DataFrame, float] | None: If 'data_extract' is true, 
+        tuple[DataFrame,float]|None: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
 
@@ -547,7 +548,7 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
             [k not in ('takeProfit', 'takeLimit', 'stopLoss', 'stopLimit')
              or order_ord[k] <= 0 or order_ord[k] > 99 for k in order_ord])):
         raise exception.RunError("'order_ord' bad value or format.")
-    elif not chunk_size and (not isinstance(chunk_size, int) or chunk_size <= 0):
+    elif chunk_size and (not isinstance(chunk_size, int) or chunk_size <= 0):
         raise exception.RunError("'chunk_size' can only be 'int' greater than 0.")
 
     # Config
@@ -567,7 +568,8 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
     _cm.__spread_pct = flx.CostsValue(spread, cust_error="Error of 'spread'.")
     _cm.__chunk_size = chunk_size or None
 
-def run(cls:type, prnt:bool = True, progress:bool = True) -> str | None:
+def run(cls:type, name:str|None = None, prnt:bool = True, 
+        progress:bool = True) -> str | None:
     """
     Run
 
@@ -580,12 +582,14 @@ def run(cls:type, prnt:bool = True, progress:bool = True) -> str | None:
     Args:
         cls (type): A class inherited from `StrategyClass` where the strategy is 
                     implemented.
+        name (str|None, optional): Backtest name, None = cls.__name__, 
+            if the name is duplicated a number will be added at the end.
         prnt (bool, optional): If True, prints trade statistics. If False, returns a string 
                     with the statistics. Default is True.
         progress (bool, optional): If True, shows a progress bar and timer. Default is True.
 
     Returns:
-        str | None: Statistics.
+        str|None: Statistics.
     """
     # Exceptions.
     if _cm.__data is None: 
@@ -644,21 +648,32 @@ def run(cls:type, prnt:bool = True, progress:bool = True) -> str | None:
             f'RunTimer: {utils.num_align(time()-t)}'
             if _cm.run_timer and not progress else '') 
 
-    act_trades = pd.DataFrame(instance._StrategyClass__positions).dropna(axis=1, how='all')
-    _cm.__trades = pd.DataFrame(
+    act_trades = pd.DataFrame(
+        instance._StrategyClass__positions).dropna(axis=1, how='all')
+
+    trades = pd.DataFrame(
         instance._StrategyClass__pos_record[
             :instance._StrategyClass__pos_record._pos]
     ).dropna(axis=1, how='all')
+    
+    if not act_trades.empty: 
+        trades = pd.concat([trades, act_trades], ignore_index=True)
 
-    if not act_trades.empty: _cm.__trades = pd.concat([
-        _cm.__trades, act_trades
-        ], ignore_index=True)
+    _cm.__backtests.append({
+        'name':_cm.__gen_fname(name or cls.__name__), 
+        'trades':trades, 
+        'init_funds':_cm.__init_funds,
+        'd_year_days':_cm.__data_year_days,
+        'd_width_day':_cm.__data_width_day,
+        'd_width':_cm.__data_width
+    })
 
     try: 
         return stats_trades(prnt=prnt)
     except: pass
 
 def plot(log:bool = False, progress:bool = True, 
+         name:list[str|int|None]|str|int|None = None,
          position:str = 'complex', style:str | None = 'last',
          style_c:dict | None = None, block:bool = True) -> None:
     """
@@ -673,15 +688,18 @@ def plot(log:bool = False, progress:bool = True,
 
     All color styles:
         'lightmode', 'darkmode', 'sunrise', 'mintfresh', 'skyday', 
-        'lavenderblush', 'peachpuff', 'sunrisedusk', 'embernight',
-        'obsidian', 'neonforge', 'carbonfire', 'datamatrix', 
-        'terminalblood', 'plasmacore'.
+        'emberday', 'lavenderblush', 'peachpuff', 'sunrisedusk', 
+        'embernight', 'obsidian', 'neonforge', 'carbonfire', 
+        'datamatrix', 'terminalblood', 'plasmacore'.
 
     Args:
         log (bool, optional): If True, plots data using a logarithmic scale. 
             Default is False.
         progress (bool, optional): If True, shows a progress bar and timer. 
             Default is True.
+        name (list[str|int|None]|str|int|None, optional): 
+            Backtest names to extract trades from, None = -1, 
+            you can add multiple by passing an list.
         position (str, optional): Specifies how positions are drawn. Options 
             are 'complex' or 'simple'. If None or 'none', positions will not 
             be drawn. Default is 'complex'. The "complex" option may take longer 
@@ -756,12 +774,15 @@ def plot(log:bool = False, progress:bool = True,
     utils.plot_volume(ax2, _cm.__data['volume'], _cm.__data_width, 
                       color=plt_colors.get('vol', 'tab:orange'))
 
-    if position and position.lower() != 'none' and not _cm.__trades.empty:
-        utils.plot_position(_cm.__trades, ax1, 
-                          color_take=market_colors.get('u', 'green'),
-                          color_stop=market_colors.get('d', 'red'),
-                          operation_route=position.lower() == 'complex',
-                          alpha=0.3, alpha_arrow=0.8)
+    if position and position.lower() != 'none' and len(_cm.get_names()) > 0:
+
+        trades = _cm.__get_trades(name)
+        if not trades.empty:
+            utils.plot_position(trades, ax1, 
+                            color_take=market_colors.get('u', 'green'),
+                            color_stop=market_colors.get('d', 'red'),
+                            operation_route=position.lower() == 'complex',
+                            alpha=0.3, alpha_arrow=0.8)
 
     if progress: 
         text = f'| PlotTimer: {utils.num_align(time()-t)} '
@@ -808,8 +829,9 @@ def plot(log:bool = False, progress:bool = True,
     mpl.pyplot.close(fig)
     window.show(block=block)
 
-def plot_strategy(log:bool = False, view:str = 'p/w/r/e', 
-                  custom_graph:dict = {}, style:str | None = 'last',
+def plot_strategy(name:list[str|int|None]|str|int|None = None, 
+                  log:bool = False, view:str = 'p/w/r/e',  
+                  custom_graph:dict = {}, style:str | None = 'last', 
                   style_c:dict | None = None, block:bool = True) -> None:
     """
     Plot Strategy Statistics.
@@ -823,16 +845,16 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
         - 'w' = Winnings graph.
 
     All color styles:
-        'lightmode', 'darkmode', 'sunrise', 'mintfresh', 'skyday', 
-        'lavenderblush', 'peachpuff', 'sunrisedusk', 'embernight',
-        'obsidian', 'neonforge', 'carbonfire', 'datamatrix', 
-        'terminalblood', 'plasmacore'.
+        Documentation of this in the 'plot' docstring.
 
     Args:
+        name (list[str|int|None]|str|int|None, optional): 
+            Backtest names to extract data from, None = -1, 
+            you can add multiple by passing an list.
         log (bool, optional): If True, plots data using a logarithmic scale. 
             Default is False.
         view (str, optional): Specifies which graphics to display. 
-            Each option occupies the entire window. Default is 'p/w/r/e'.
+            Default is 'p/w/r/e'. Maximum 8.
         custom_graph (dict, optional): Custom graph, a dictionary with 
             'name':'function' where the function will 
             be passed: 'ax', '_cm.__trades', '_cm.__data', 'log'.
@@ -850,22 +872,14 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
 
     for i in custom_graph: plot_strategy_add(custom_graph[i], i)
 
-    view = view.lower().strip().split('/')
-    view = [i for i in view if i in ('p','w','r','e') | _cm.__custom_plot.keys()]
+    trades_data = _cm.__get_strategy(name)
+    trades = _cm.__get_trades(name)
 
     # Exceptions.
-    if _cm.__trades.empty: 
+    if trades.empty: 
         return 'Trades not loaded.'
-    elif not 'profit' in _cm.__trades.columns:  
+    elif not 'profit' in trades.columns:  
         return 'No data to see.'
-    elif len(view) > 4 or len(view) < 1: 
-        raise exception.StatsError(utils.text_fix(f"""
-            'view' allowed format: 's/s/s/s' where s is the name of the graph.
-            Available graphics: 'p','w','r','e'{
-                (","+",".join(
-                    [f"'{i}'" for i in _cm.__custom_plot.keys()])) 
-                    if _cm.__custom_plot.keys() else ''}.
-            """, newline_exclude=True))
     elif (not style is None and not (style:=style.lower()) 
           in ('random', 'last', *_cm.__plt_styles.keys())):
         raise exception.StatsError(f"'{style}' Not a style.")
@@ -883,38 +897,25 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
     if isinstance(style_c, dict):
         plt_colors.update(style_c)
 
-    mpl.pyplot.style.use('ggplot')
     fig = mpl.pyplot.figure(figsize=(16,8))
 
-    loc = [(0,0), (3,0), (3,1), (0,1)]; ax = None
-
-    init_data = {col: 0 for col in _cm.__trades.columns}
-    init_data['positionDate'] = _cm.__data.index[0]
+    init_data = {col: 0 for col in trades.columns}
+    init_data['positionDate'] = trades['positionDate'].iloc[0]
     init_p = pd.DataFrame([init_data])
 
     trades = pd.concat([
-        init_p, _cm.__trades], ignore_index=True)
+        init_p, trades], ignore_index=True)
 
     gdir = plt_colors.get('gdir', False)
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
 
+    graphics = ['p','w','r','e']
+    graphics.extend(list(_cm.__custom_plot.keys()))
+
+    axes, view = cpl.ax_view(view=view, graphics=graphics)
+
     for i,v in enumerate(view):
-        match len(view):
-            case 1: 
-                ax = mpl.pyplot.subplot2grid((6,2), loc[0], 
-                                             rowspan=6, colspan=2)
-            case 2: 
-                ax = mpl.pyplot.subplot2grid((6,2), loc[i], 
-                                             rowspan=3, colspan=2, 
-                                             sharex=ax)
-            case 3: 
-                ax = mpl.pyplot.subplot2grid((6,2), loc[i], rowspan=3, 
-                                             colspan=2 if i==0 else 1, 
-                                             sharex=ax)
-            case 4: 
-                ax = mpl.pyplot.subplot2grid((6,2), loc[i], 
-                                             rowspan=3, colspan=1, 
-                                             sharex=ax)
+        ax = axes[i]
 
         cpl.custom_ax(ax, plt_colors['bg'], edge=gdir)
         ax.tick_params('x', which='both', bottom=False, 
@@ -923,12 +924,11 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
                        right=False, labelleft=False)
 
         ax.yaxis.set_major_formatter(lambda y, _: y.real)
-        ax.yaxis.set_major_formatter(lambda y, _: y.real)
         ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
 
         pos_date = trades['positionDate']
-        ax.set_xlim(pos_date.dropna().iloc[0]-(_cm.__data_width*len(pos_date)/10), 
-                    pos_date.dropna().iloc[-1]+(_cm.__data_width*len(pos_date)/10))
+        ax.set_xlim(pos_date.dropna().iloc[0]-(trades_data['d_width']*len(pos_date)/10), 
+                    pos_date.dropna().iloc[-1]+(trades_data['d_width']*len(pos_date)/10))
 
         y_limit = lambda values, comp=1: (np.min(values)-comp, 
                                           np.max(values)*1.05+comp)
@@ -983,7 +983,6 @@ def plot_strategy(log:bool = False, view:str = 'p/w/r/e',
                 _cm.__custom_plot[v](ax, trades, 
                                     _cm.__data, log)
             case _: pass
-
         ax.legend(loc='upper left')
 
     fig.autofmt_xdate()
@@ -1011,6 +1010,9 @@ def plot_strategy_decorator(name:str) -> callable:
     Use a decorator to add the function to 
         'custom_plot' so you can run it in 'plot_strategy'.
 
+    The function will be passed: 
+        'ax', 'trades', '_cm.__data', 'log' in order.
+
     To avoid visual problems, I suggest using 
         'trades.index' as the x-axis or normalizing the axis.
 
@@ -1031,7 +1033,7 @@ def plot_strategy_add(func:callable, name:str) -> callable:
 
     Args:
         func (callable): Function, to which this will be passed in order: 
-            'ax', '_cm.__trades', '_cm.__data', 'log'.
+            'ax', 'trades', '_cm.__data', 'log'.
             To avoid visual problems, I suggest using 
             'trades.index' as the x-axis or normalizing the axis.
         name (str): Name with which it will be called.
@@ -1066,7 +1068,7 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None,
             if you leave it at None the loaded data will be the one used.
 
     Returns:
-        str | None: Statistics.
+        str|None: Statistics.
     """
 
     data_interval = _cm.__data_interval if data_interval is None else data_interval
@@ -1118,7 +1120,8 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None,
     if prnt:print(text) 
     else: return text
 
-def stats_trades(data:bool = False, prnt:bool = True) -> str | None:
+def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None, 
+                 prnt:bool = True) -> str | None:
     """
     Trades Statistics.
 
@@ -1126,6 +1129,9 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str | None:
 
     Args:
         data (bool, optional): If True, `stats_icon` is also returned.
+        name (list[str|int|None]|str|int|None, optional): 
+            Backtest names to extract data from, None = -1, 
+            you can add multiple by passing an list.
         prnt (bool, optional): If True, prints the statistics. If False, returns 
             the statistics as a string. Default is True.
 
@@ -1206,46 +1212,45 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str | None:
         - Winnings: Percentage of operations won.
 
     Returns:
-        str | None: Statistics.
+        str|None: Statistics.
     """
 
+    trades = _cm.__get_trades(name)
+
+    name = list(name)[0] if type(name) in (tuple,set,list) else name
+    trades_data = _cm.__get_strategy(name=name)
+
     # Exceptions.
-    if _cm.__trades.empty: 
+    if trades.empty: 
         raise exception.StatsError('Trades not loaded.')
-    elif not 'profitPer' in _cm.__trades.columns:  
+    elif not 'profitPer' in trades.columns:  
         raise exception.StatsError('There is no data to see.')
-    elif np.isnan(_cm.__trades['profitPer'].mean()): 
+    elif np.isnan(trades['profitPer'].mean()): 
         raise exception.StatsError('There is no data to see.') 
-    with np.errstate(over='ignore'):
-        if np.isinf(np.cumprod(1 + _cm.__trades['profitPer'] / 100)).any():
-            raise exception.StatsError('Data overflow.') 
 
     # Number of years operated.
     op_years = abs(
-        (_cm.__trades['date'].iloc[-1] - _cm.__trades['date'].iloc[0])/
-        (_cm.__data_width_day*_cm.__data_year_days))
+        (trades['date'].iloc[-1] - trades['date'].iloc[0])/
+        (trades_data['d_width_day']*trades_data['d_year_days']))
 
     # Annualized trades calc.
-    trades_calc = _cm.__trades.copy()
+    trades_calc = trades.copy()
     trades_calc['year'] = ((trades_calc['date'] - trades_calc['date'].iloc[0]) / 
                   (trades_calc['date'].iloc[-1] - trades_calc['date'].iloc[0]) * 
                   op_years).astype(int)
 
     trades_calc['diary'] = ((trades_calc['date'] - trades_calc['date'].iloc[0]) / 
                 (trades_calc['date'].iloc[-1] - trades_calc['date'].iloc[0]) * 
-                op_years*_cm.__data_year_days).astype(int)
+                op_years*trades_data['d_year_days']).astype(int)
 
-    trades_calc['duration'] = (trades_calc['positionDate']-trades_calc['date'])/_cm.__data_width_day
-    trades_calc['multiplier'] = 1 + trades_calc['profitPer'] / 100
+    trades_calc['duration'] = (trades_calc['positionDate']
+                               -trades_calc['date'])/trades_data['d_width_day']
 
-    ann_return = trades_calc.groupby('year')['multiplier'].prod()
     ann_profit = trades_calc.groupby('year')['profit'].sum()
-
-    diary_return = trades_calc.groupby('diary')['multiplier'].prod()
     diary_profit = trades_calc.groupby('diary')['profit'].sum()
 
     # Consecutive trades calc.
-    trades_count_cs = _cm.__trades['profitPer'].apply(
+    trades_count_cs = trades['profitPer'].apply(
         lambda x: 1 if x > 0 else (-1 if x < 0 else 0)
         )
     trades_count_cs = pd.concat(
@@ -1263,8 +1268,17 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str | None:
     trades_streak = (trades_count_cs.cumsum() 
                      - np.maximum.accumulate(trades_count_cs.cumsum()))
 
-    text = utils.statistics_format({
-        'Trades':[len(_cm.__trades.index),
+    with np.errstate(over='ignore'):
+        trades_calc['multiplier'] = 1 + trades_calc['profitPer'] / 100
+
+        nan_inf = lambda x: x.where(~np.isinf(x), np.nan)
+        multiplier_cumprod = nan_inf(trades_calc['multiplier'].cumprod().dropna())
+
+        ann_return = nan_inf(trades_calc.groupby('year')['multiplier'].prod())
+        diary_return = nan_inf(trades_calc.groupby('diary')['multiplier'].prod())
+
+        text = utils.statistics_format({
+        'Trades':[len(trades.index),
                   _cm.__COLORS['BOLD']+_cm.__COLORS['CYAN']],
 
         'Op years':[utils.round_r(op_years, 2), _cm.__COLORS['CYAN']],
@@ -1272,29 +1286,28 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str | None:
         'Return':[str(_return:=utils.round_r((trades_calc['multiplier'].prod()-1)*100,2))+'%',
                   _cm.__COLORS['GREEN'] if float(_return) > 0 else _cm.__COLORS['RED'],],
 
-        'Profit':[str(_profit:=utils.round_r(_cm.__trades['profit'].sum(),2)),
+        'Profit':[str(_profit:=utils.round_r(trades['profit'].sum(),2)),
                 _cm.__COLORS['GREEN'] if float(_profit) > 0 else _cm.__COLORS['RED'],],
 
-        'Gross earnings':[utils.round_r((_cm.__trades['profit'][_cm.__trades['profit']>0].sum()
-                           if not pd.isna(_cm.__trades['profit']).all() else 0), 4),
+        'Gross earnings':[utils.round_r((trades['profit'][trades['profit']>0].sum()
+                           if not pd.isna(trades['profit']).all() else 0), 4),
                         _cm.__COLORS['GREEN']],
 
-        'Gross losses':[utils.round_r(abs(_cm.__trades['profit'][_cm.__trades['profit']<=0].sum())
-                           if not pd.isna(_cm.__trades['profit']).all() else 0, 4),
+        'Gross losses':[utils.round_r(abs(trades['profit'][trades['profit']<=0].sum())
+                           if not pd.isna(trades['profit']).all() else 0, 4),
                         _cm.__COLORS['RED']],
 
-        'Max return':[str(utils.round_r((
-            np.cumprod(trades_calc['multiplier'].dropna()).max()-1)*100,2))+'%'],
+        'Max return':[str(utils.round_r((multiplier_cumprod.max()-1)*100,2))+'%'],
 
         'Return from max':[str(utils.round_r(
-            -((np.cumprod(trades_calc['multiplier'].dropna()).max()-1)
+            -((multiplier_cumprod.max()-1)
             - (trades_calc['multiplier'].prod()-1))*100,2))+'%'],
 
         'Days from max':[str(utils.round_r(
             (trades_calc['date'].dropna().iloc[-1]
                 - trades_calc['date'].dropna().loc[
-                np.argmax(np.cumprod(trades_calc['multiplier'].dropna()))])
-            / _cm.__data_width_day, 2)),
+                np.argmax(multiplier_cumprod)])
+            / trades_data['d_width_day'], 2)),
             _cm.__COLORS['CYAN']],
 
         'Return ann':[str(_return_ann:=utils.round_r((ann_return.prod()**(1/op_years)-1)*100,2))+'%',
@@ -1304,24 +1317,24 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str | None:
                   _cm.__COLORS['GREEN'] if float(_profit_ann) > 0 else _cm.__COLORS['RED'],],
 
         'Return ann vol':[utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1)
-                                        *np.sqrt(_cm.__data_year_days), 2),
+                                        *np.sqrt(trades_data['d_year_days']), 2),
                           _cm.__COLORS['YELLOW']],
 
         'Profit ann vol':[utils.round_r(np.std(diary_profit.dropna(),ddof=1)
-                                    *np.sqrt(_cm.__data_year_days), 2),
+                                    *np.sqrt(trades_data['d_year_days']), 2),
                         _cm.__COLORS['YELLOW']],
 
-        'Average ratio':[utils.round_r(stats.average_ratio(_cm.__trades), 2),
+        'Average ratio':[utils.round_r(stats.average_ratio(trades), 2),
                         _cm.__COLORS['YELLOW'],],
 
         'Average return':[str(utils.round_r((
                 trades_calc['multiplier'].dropna().mean()-1)*100,2))+'%',
             _cm.__COLORS['YELLOW'],],
 
-        'Average profit':[str(utils.round_r(_cm.__trades['profit'].mean(),2))+'%',
+        'Average profit':[str(utils.round_r(trades['profit'].mean(),2))+'%',
                     _cm.__COLORS['YELLOW'],],
 
-        'Profit fact':[_profit_fact:=utils.round_r(stats.profit_fact(_cm.__trades['profit']), 3),
+        'Profit fact':[_profit_fact:=utils.round_r(stats.profit_fact(trades['profit']), 3),
                 _cm.__COLORS['GREEN'] if float(_profit_fact) > 1 else _cm.__COLORS['RED'],],
 
         'Return diary std':[(_return_std:=utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1), 2)),
@@ -1330,57 +1343,57 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str | None:
         'Profit diary std':[(_profit_std:=utils.round_r(np.std(diary_profit.dropna(),ddof=1), 2)),
                       _cm.__COLORS['YELLOW'] if float(_profit_std) > 1 else _cm.__COLORS['GREEN'],],
 
-        'Math hope':[_math_hope:=utils.round_r(stats.math_hope(_cm.__trades['profit']), 2),
+        'Math hope':[_math_hope:=utils.round_r(stats.math_hope(trades['profit']), 2),
             _cm.__COLORS['GREEN'] if float(_math_hope) > 0 else _cm.__COLORS['RED'],],
 
         'Math hope r':[_math_hope_r:=utils.round_r(
-                stats.math_hope_relative(_cm.__trades, _cm.__trades['profitPer']), 2),
+                stats.math_hope_relative(trades, trades['profitPer']), 2),
             _cm.__COLORS['GREEN'] if float(_math_hope_r) > 0 else _cm.__COLORS['RED'],],
 
-        'Historical var':[0 if _cm.__trades['profit'].dropna().empty else utils.round_r(
-                            stats.var_historical(_cm.__trades['profit'].dropna()), 2)],
+        'Historical var':[0 if trades['profit'].dropna().empty else utils.round_r(
+                            stats.var_historical(trades['profit'].dropna()), 2)],
 
-        'Parametric var':[0 if _cm.__trades['profit'].dropna().empty else utils.round_r(
-                            stats.var_parametric(_cm.__trades['profit'].dropna()), 2)],
+        'Parametric var':[0 if trades['profit'].dropna().empty else utils.round_r(
+                            stats.var_parametric(trades['profit'].dropna()), 2)],
 
         'Sharpe ratio':[utils.round_r(stats.sharpe_ratio(
             (ann_return.prod()**(1/op_years)-1)*100,
-            _cm.__data_year_days,
+            trades_data['d_year_days'],
             (diary_return.dropna()-1)*100), 2)],
 
         'Sharpe ratio$':[utils.round_r(stats.sharpe_ratio(
             np.average(ann_profit),
-            _cm.__data_year_days,
+            trades_data['d_year_days'],
             diary_profit), 2)],
 
         'Sortino ratio':[utils.round_r(stats.sortino_ratio(
             (ann_return.prod()**(1/op_years)-1)*100,
-            _cm.__data_year_days,
+            trades_data['d_year_days'],
             (diary_return.dropna()-1)*100), 2)],
 
         'Sortino ratio$':[utils.round_r(stats.sortino_ratio(
             np.average(ann_profit),
-            _cm.__data_year_days,
+            trades_data['d_year_days'],
             diary_profit), 2)],
 
         'Duration ratio':[utils.round_r(
-            trades_calc['duration'].sum()/len(_cm.__trades.index), 2),
+            trades_calc['duration'].sum()/len(trades.index), 2),
             _cm.__COLORS['CYAN']],
 
-        'Payoff ratio':[utils.round_r(stats.payoff_ratio(_cm.__trades['profitPer']))],
+        'Payoff ratio':[utils.round_r(stats.payoff_ratio(trades['profitPer']), 3)],
 
-        'Expectation':[utils.round_r(stats.expectation(_cm.__trades['profitPer']))],
+        'Expectation':[utils.round_r(stats.expectation(trades['profitPer']))],
 
         'Skewness':[utils.round_r((diary_return.dropna()-1).skew(), 2)],
 
         'Kurtosis':[utils.round_r((diary_return.dropna()-1).kurt(), 2)],
 
-        'Average winning op':[str(utils.round_r(_cm.__trades['profitPer'][
-                _cm.__trades['profitPer'] > 0].dropna().mean(), 2))+'%',
+        'Average winning op':[str(utils.round_r(trades['profitPer'][
+                trades['profitPer'] > 0].dropna().mean(), 2))+'%',
             _cm.__COLORS['GREEN']],
 
-        'Average losing op':[str(utils.round_r(_cm.__trades['profitPer'][
-                _cm.__trades['profitPer'] < 0].dropna().mean(), 2))+'%',
+        'Average losing op':[str(utils.round_r(trades['profitPer'][
+                trades['profitPer'] < 0].dropna().mean(), 2))+'%',
             _cm.__COLORS['RED']],
 
         'Average duration winn':[str(utils.round_r(trades_calc['duration'][
@@ -1392,7 +1405,7 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str | None:
                 _cm.__COLORS['CYAN']],
 
         'Daily frequency op':[utils.round_r(
-            len(_cm.__trades.index) / (op_years*_cm.__data_year_days), 2),
+            len(trades.index) / (op_years*trades_data['d_year_days']), 2),
             _cm.__COLORS['CYAN']],
 
         'Max consecutive winn':[trades_csct.max(),
@@ -1404,28 +1417,26 @@ def stats_trades(data:bool = False, prnt:bool = True) -> str | None:
         'Max losing streak':[abs(trades_streak.min())],
 
         'Max drawdown':[str(round(
-            stats.max_drawdown(np.cumprod(
-                trades_calc['multiplier'].dropna()))*100,1)) + '%'],
+            stats.max_drawdown(multiplier_cumprod)*100,1)) + '%'],
 
         'Average drawdown':[str(-round(np.mean(
-            stats.get_drawdowns(np.cumprod(
-                trades_calc['multiplier'].dropna())))*100, 1)) + '%'],
+            stats.get_drawdowns(multiplier_cumprod))*100, 1)) + '%'],
 
         'Max drawdown$':[str(round(
-            stats.max_drawdown(_cm.__trades['profit'].dropna().cumsum()+
-                               _cm.__init_funds)*100,1)) + '%'],
+            stats.max_drawdown(trades['profit'].dropna().cumsum()+
+                               trades_data['init_funds'])*100,1)) + '%'],
 
         'Average drawdown$':[str(-round(np.mean(
-            stats.get_drawdowns(_cm.__trades['profit'].dropna().cumsum()+
-                                _cm.__init_funds))*100, 1)) + '%'],
+            stats.get_drawdowns(trades['profit'].dropna().cumsum()+
+                                trades_data['init_funds']))*100, 1)) + '%'],
 
         'Long exposure':[str(round(
-            stats.long_exposure(_cm.__trades['typeSide'])*100)) + '%',
+            stats.long_exposure(trades['typeSide'])*100)) + '%',
             _cm.__COLORS['GREEN']],
 
-        'Winnings':[str(round(stats.winnings(_cm.__trades['profitPer'])*100)) + '%'],
+        'Winnings':[str(round(stats.winnings(trades['profitPer'])*100)) + '%'],
 
-    }, "---Statistics of strategy---")
+        }, f"---Statistics of '{trades_data['name']}'---")
 
     text = text if _cm.dots else text.replace('.', ',')
     if data: text += stats_icon(False)

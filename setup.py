@@ -7,7 +7,7 @@ with open("README.md", encoding="utf-8") as file:
 
 setup(
     name='backpyf',
-    version='0.9.71b4',
+    version='0.9.72b4',
     packages=find_packages(),
     package_data={"backpyf": ["assets/*"]},
     description='''BackPy is a library made in python for back testing in 

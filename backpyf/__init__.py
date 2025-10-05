@@ -4,7 +4,7 @@ Back Test Py
 BackPy is a library used to test strategies in the market.
 
 Version:
-    0.9.71b4
+    0.9.72b4
 
 Repository:
     https://github.com/Diego-Cores/BackPy
@@ -45,6 +45,7 @@ from .custom_plt import (
 )
 
 from .flex_data import (
+    ChunkWrapper,
     DataWrapper,
     CostsValue,
 )
@@ -67,8 +68,11 @@ from .main import (
 )
 
 from .stats import (
+    monte_carlo_chart,
+    monte_carlo_bsim,
     get_drawdowns,
     max_drawdown,
+    correlation
 )
 
 from . import utils
@@ -118,7 +122,9 @@ __all__ = [
     'load_binance_data_spot',
     'load_yfinance_data',
     '__binance_timeout',
+    'monte_carlo_chart',
     'plot_strategy_add',
+    'monte_carlo_bsim',
     'max_bar_updates',
     'StrategyClass',
     'idc_decorator',
@@ -128,7 +134,9 @@ __all__ = [
     'save_data_bpd',
     'max_drawdown',
     'stats_trades',
+    'ChunkWrapper',
     'DataWrapper',
+    'correlation',
     'stats_icon',
     'CostsValue',
     'run_config',

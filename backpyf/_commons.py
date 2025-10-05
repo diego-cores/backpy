@@ -35,15 +35,29 @@ Hidden Variables:
     __data_width: Width of the dataset (hidden variable).
     __data_icon: Data icon (hidden variable).
     __data: Loaded dataset (hidden variable).
-    __trades: List of trades executed during backtesting (hidden variable).
+    __backtests: List of data of each backtest, 
+        containing trades and data needed for statistics (hidden variable).
     __custom_plot: Dict of custom graphical statistics (hidden variable).
     __binance_timeout: Time out between each request to the binance api 
         (hidden variable).
     __COLORS: Dictionary with printable colors (hidden variable).
     __plt_styles: Styles for coloring trading charts (hidden variable).
+
+Functions:
+    get_names: Takes the names of the saved backtests.
+
+Hidden Functions:
+    __get_trades: Take trades from 1 or more saved backtests.
+    __get_dtrades: Does the same thing as '__get_trades' 
+        but saves each backtest in a different key in a dict.
+    __get_strategy: Take data from a backtest.
+    __gen_fname: Generates a name that is not duplicated in '__backtests'.
 """
 
+from typing import Any
 import pandas as pd
+
+from . import exception
 
 alert = True
 dots = True
@@ -60,7 +74,7 @@ __data_interval = None
 __data_width = None
 __data_icon = None
 __data = None
-__trades = pd.DataFrame()
+__backtests = []
 
 __min_gap = None
 __limit_ig = None
@@ -179,3 +193,119 @@ __plt_styles = {
         'vol': '#DA70D6', 'mk': {'u': '#E84FFF', 'd': '#9400D3'},
     }
 }
+
+def get_names() -> list[str]:
+    """
+    Get names
+
+    Takes the names of the saved backtests.
+
+    Returns:
+        list[str]: names
+    """
+
+    return [i['name'] for i in __backtests]
+
+def __get_dtrades(names:list[str|int|None]|str|int|None = None) -> dict:
+    """
+    Get trades dict
+
+    Take trades from 1 or more saved backtests.
+
+    Trades will be sorted ascending based on 'positionDate'.
+
+    One key per backtest.
+
+    Args:
+        names (list[str|int|None]|str|int|None, optional): You can pass an 
+            integer index, a name, or a list of both; duplicates 
+            are not allowed, None = -1.
+
+    Returns:
+        dict: trades.
+    """
+
+    trades = {
+        i: __get_strategy(i)['trades'].sort_values(
+            by="positionDate", ascending=True).reset_index(drop=True)
+        for i in (set(names or {None}) if not isinstance(names, str) else [names])
+    }
+
+    return trades
+
+def __get_trades(names:list[str|int|None]|str|int|None = None) -> pd.DataFrame:
+    """
+    Get trades
+
+    Take trades from 1 or more saved backtests.
+
+    Trades will be sorted ascending based on 'positionDate'.
+
+    Args:
+        names (list[str|int|None]|str|int|None, optional): You can pass an 
+            integer index, a name, or a list of both; duplicates 
+            are not allowed, None = -1.
+
+    Returns:
+        DataFrame: trades
+    """
+
+    trades = pd.DataFrame()
+    for i in (set(names or {None}) if not isinstance(names, str) else [names]):
+        trades = pd.concat([trades, __get_strategy(i)['trades']])
+
+    return trades.sort_values(
+        by="positionDate", ascending=True).reset_index(drop=True)
+
+def __get_strategy(name:str|int|Any|None = None) -> dict:
+    """
+    Get strategy
+
+    Take data from a backtest.
+
+    Args:
+        names (str|int|Any|None, optional): 
+            Strategy name or index, None and Any = -1.
+
+    Returns:
+        dict: Dictionary with the following keys: 'name', 'trades', 
+            'init_funds', 'd_year_days', 'd_width_day', 'd_width'.
+    """
+
+    if len(__backtests) == 0:
+        raise exception.DataError('There are no backtests saved.')
+    elif isinstance(name, int) or name is None:
+        return __backtests[name or -1]
+    elif not isinstance(name, str):
+        return __backtests[-1]
+
+    for i,v in enumerate(__backtests):
+        if v['name'] == name:
+            return __backtests[i]
+    raise exception.DataError('Name not found.')
+
+def __gen_fname(name:str) -> str:
+    """
+    Generate frame name
+
+    Generates a name based on 'name' that is not duplicated in '__backtests'.
+
+    Args:
+        names (str, optional): Strategy name.
+
+    Returns:
+        str: Name not duplicated.
+    """
+
+    if len(__backtests) == 0:
+        return name
+
+    names = get_names()
+    mname = name
+    nm = 1
+
+    while mname in names:
+        mname = f"{name}{nm}"
+        nm += 1
+
+    return mname

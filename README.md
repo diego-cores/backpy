@@ -1,5 +1,5 @@
 ![BackPy logo](images/logo.png)
-![Version](https://img.shields.io/badge/version-0.9.71b4-blue) ![Status](https://img.shields.io/badge/status-beta-orange)
+![Version](https://img.shields.io/badge/version-0.9.72b4-blue) ![Status](https://img.shields.io/badge/status-beta-orange)
 
 # BackPy
 
@@ -7,7 +7,34 @@
 You can provide your own historical data or use the built-in integration with the `yfinance` or `binance-connector` modules.
 
 With **BackPy-binance-connector** you can connect your strategy to the real market using Binance.
-Official repository: https://github.com/diego-cores/BackPy-binance-connector.
+Official repository: [BackPy-binance-connector](https://github.com/diego-cores/BackPy-binance-connector "BackPy-binance-connector").
+
+---
+
+## ❓ Why BackPy?
+
+BackPy integrates in one place:
+
+- **Backtesting**
+- **Data loading** from multiple sources (yfinance, Binance, your own files)
+- **Interactive charts**
+- **Advanced statistics**
+
+In tests performed locally on a personal computer (PC with AMD Ryzen 7 5800X, 32 GB of RAM, and Python 3.12), BackPy showed exceptional performance even with large volumes of data.
+
+Estimated time comparison for processing 50,000 candles:
+
+| Method           | Estimated time         |
+| ---------------- | ---------------------- |
+| Manual           | ~7.4 hours             |
+| **BackPy v0.9.72** | **~-.- seconds** |
+| Another module   | ~-.- seconds           |
+
+📌 These times are illustrative comparisons, performed locally. Results may vary depending on hardware, configuration, and data volume.
+
+💡 **Conclusion:** BackPy not only centralizes your workflow, but also accelerates your development and analysis.
+
+---
 
 ## ⚠️ Important Notices
 
@@ -17,6 +44,8 @@ Please make sure to read the following before using this software:
 - [License](LICENSE)
 
 By using this software, you acknowledge that you have read and agree to the terms outlined in these documents.
+
+---
 
 ## 📦 How to install backpy with pip
 
@@ -48,16 +77,52 @@ By using this software, you acknowledge that you have read and agree to the term
 
 - After you have verified that the module is working correctly, you can delete the downloaded ZIP file and unzipped folder if you wish.
 
+---
+
 ## 🚀 Code example
 
-With Backpy, you can design your strategies quickly, easily, and in just a few lines.
+BackPy allows you to design strategies quickly and easily:
 
-![simple code image](images/code.png "Code image")
+```python
 
-Don't forget to create a chart!
+import backpyf
 
-Draw a chart and visualize the results of your strategy. For example, your profit equity chart or whatever you like.
+backpyf.load_binance_data_spot(
+    symbol='BTCUSDT',
+    start_time='2023-01-01',
+    end_time='2024-01-01',
+    interval='1h'
+)
 
-![statistics graph image](images/graph.png "BackPy graph")![style image](https://file+.vscode-resource.vscode-cdn.net/c%3A/Users/workstation/Documents/.github/BackPy/images/styles.png "BackPy candle style")
+class macdStrategy(backpyf.StrategyClass):
+    def next(self):
+        if len(self.date) < 30 or len(self.prev_positions()) > 0:
+            return
 
-With BackPy you can customize as much as you want.
+        macd = self.idc_macd()[-1]
+        sma = self.idc_sma(42)[-1]
+
+        if (
+            self.close[-1] > sma
+            and macd['histogram'] > 0
+        ):
+            self.act_taker(True, amount=self.get_init_funds())
+
+            self.ord_put('takeProfit', self.close[-1]*1.06)
+            self.ord_put('stopLoss', self.close[-1]*0.98)
+
+backpyf.run_config(
+    initial_funds=10000,
+    commission=(0.04, 0.08),
+    spread=0.01,
+    slippage=0.01
+)
+backpyf.run(macdStrategy)
+
+backpyf.plot_strategy(style='darkmode', block=False)
+backpyf.plot(log=True)
+```
+
+Don't forget to view your results:
+
+![statistics graph image](images/graph.png "BackPy graph")

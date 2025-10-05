@@ -19,7 +19,7 @@ import numpy as np
 
 from abc import ABC, abstractmethod
 from functools import wraps
-from typing import Callable
+from typing import Callable, Any
 from uuid import uuid4
 from time import time
 
@@ -57,8 +57,8 @@ def idc_decorator(func:callable) -> Callable[..., flx.DataWrapper]:
     Args:
         func (callable): Function.
 
-    Return:
-        Callable[..., flx.DataWrapper]: Function.
+    Returns:
+        Callable[...,flx.DataWrapper]: Function.
     """
 
     func._uidc = True
@@ -71,7 +71,7 @@ def _data_info() -> tuple[str, str, float]:
     Returns all 'data' variables except `__data`.
 
     Returns:
-        tuple[str, str, float]: 
+        tuple[str,str,float]: 
             A tuple containing the following variables in order:
             - __data_interval (str): Data interval.
             - __data_icon (str): Data icon.
@@ -158,6 +158,7 @@ class StrategyClass(ABC):
         __del: Adds items to '__to_delete'.
         __deli: Removes indexes from '__to_delate'.
         __buff: Extracts values from '__buffer'.
+        __cn_insert: Insert values into a ChunkWrapper.
         __act_reduce: Reduce a position or close it.
         __put_pos: Put a position in the simulation.
         __put_ord: Place a new order.
@@ -268,7 +269,7 @@ class StrategyClass(ABC):
                 setattr(self, name, decorator)
 
     @abstractmethod
-    def next(self) -> any: ...
+    def next(self) -> Any: ...
 
     def get_spread(self) -> flx.CostsValue:
         """
@@ -331,7 +332,7 @@ class StrategyClass(ABC):
         Args:
             func (callable): Function.
 
-        Return:
+        Returns:
             callable: Function.
         """
 
@@ -347,7 +348,7 @@ class StrategyClass(ABC):
         Args:
             func (callable): Function.
 
-        Return:
+        Returns:
             callable: Wrapper function.
         """
 
@@ -358,7 +359,7 @@ class StrategyClass(ABC):
             Save the function return and, if already saved, 
                 return it from storage. Return in DataWrapper.
 
-            Return:
+            Returns:
                 DataWrapper: Function result.
             """
 
@@ -390,7 +391,7 @@ class StrategyClass(ABC):
         Args:
             func (callable): Function.
 
-        Return:
+        Returns:
             callable: Wrapper function.
         """
 
@@ -405,7 +406,7 @@ class StrategyClass(ABC):
 
             Sends '__data_all' to the 'data' argument.
 
-            Return:
+            Returns:
                 DataWrapper: Function result.
             """
 
@@ -431,8 +432,8 @@ class StrategyClass(ABC):
         Args:
             func (callable): Function.
 
-        Return:
-            tuple[str, dict]: Generated id and arguments.
+        Returns:
+            tuple[str,dict]: Generated id and arguments.
         """
 
         df = func.__defaults__ or () 
@@ -459,7 +460,7 @@ class StrategyClass(ABC):
         Args:
             data (DataWrapper): Data to cut.
 
-        Return:
+        Returns:
             DataWrapper: Data cut.
         """
 
@@ -482,7 +483,7 @@ class StrategyClass(ABC):
             data (DataWrapper): Data to cut.
             last (int | None, optional): You can get only the latest 'last' data.
 
-        Return:
+        Returns:
             DataWrapper: Data cut.
         """
 
@@ -551,7 +552,7 @@ class StrategyClass(ABC):
                     continue
 
                 # If the id contains 'w' it means that it waits for the position with the same id
-                if not isinstance(row['unionId'], float):
+                if isinstance(row['unionId'], str):
                     row_split = row['unionId'].split('/')
 
                     if (row_split[0] == 'w' and self.__positions
@@ -578,25 +579,8 @@ class StrategyClass(ABC):
 
             self.__deli('__orders')
 
-        def cn_insert(vlist:flx.ChunkWrapper, values:list) -> None:
-            """
-            Chunk insert
-
-            Insert 'values' into the 'vlist' of chunks.
-            Generate a new chunk if necessary.
-
-            Args:
-                vlist (ChunkWrapper): Values with spaces.
-                values (list): Values to add.
-            """
-    
-            dtype = [(key, type(v)) for key, v in values[0].items()]
-            vl_arr = np.array([tuple(d.values()) for d in values], dtype=dtype)
-
-            return vlist.append_rows(vl_arr, dtype)
-
         if (psff:=self.__buff('__pos_record')): 
-            self.__pos_record = cn_insert(self.__pos_record, psff)
+            self.__pos_record = self.__cn_insert(self.__pos_record, psff)
 
         # Execute strategy
         self.next()
@@ -604,7 +588,28 @@ class StrategyClass(ABC):
         # Concat buffer
         if (obff:=self.__buff('__orders')): self.__orders.extend(obff)
         if (psff:=self.__buff('__pos_record')): 
-            self.__pos_record = cn_insert(self.__pos_record, psff)
+            self.__pos_record = self.__cn_insert(self.__pos_record, psff)
+
+    def __cn_insert(self, vlist:flx.ChunkWrapper, 
+                    values:list) -> flx.ChunkWrapper:
+        """
+        Chunk insert
+
+        Insert 'values' into the 'vlist' of chunks.
+        Generate a new chunk if necessary.
+
+        Args:
+            vlist (ChunkWrapper): Values with spaces.
+            values (list): Values to add.
+
+        Returns:
+            ChunkWrapper: Array with the values.
+        """
+
+        dtype = [(key, ('U16' if (tp:=type(v)) is str else tp)) for key, v in values[0].items()]
+        vl_arr = np.array([tuple(d.values()) for d in values], dtype=dtype)
+
+        return vlist.append(vl_arr, dtype)
 
     def __buff(self, name:str) -> list | None:
         """
@@ -615,8 +620,8 @@ class StrategyClass(ABC):
         Args:
             name (str): Saved value name.
 
-        Return:
-            list | None: Returns the list of values or None if no values exist.
+        Returns:
+            list|None: Returns the list of values or None if no values exist.
         """
 
         result = None
@@ -670,7 +675,7 @@ class StrategyClass(ABC):
             self (optional): 
                 You can run the function from the instance.
 
-        Return:
+        Returns:
             str: An unique id.
         """
 
@@ -687,7 +692,7 @@ class StrategyClass(ABC):
             buy (bool, optional): Position type, True = buy.
             amount (float, optional): Position amount, np.nan equals 0.
 
-        Return:
+        Returns:
             str: unionId integer.
         """
 
@@ -717,7 +722,7 @@ class StrategyClass(ABC):
             buy (bool, optional): Position type, True = buy.
             amount (float, optional): Position amount, np.nan equals 0.
 
-        Return:
+        Returns:
             str: unionId integer.
         """
 
@@ -893,8 +898,8 @@ class StrategyClass(ABC):
         Args:
             union_id (str): Union id to filter with.
 
-        Return:
-            list | None: 
+        Returns:
+            list|None: 
                 Positions if none are found, None is returned.
         """
 
@@ -920,8 +925,8 @@ class StrategyClass(ABC):
             order (dict): Dict with the order.
             mode (str): Order type ('taker', 'maker').
 
-        Return:
-            bool | None: 
+        Returns:
+            bool|None: 
                 Returns True if the action was reduced, otherwise returns None.
         """
 
@@ -1014,7 +1019,7 @@ class StrategyClass(ABC):
             data (DataFrame): Data to put the mask. 
             union_id (str): unionId to filter.
 
-        Return:
+        Returns:
             DataFrame: Resulting dataframe with 
                 the rows that meet the mask.
         """
@@ -1048,8 +1053,8 @@ class StrategyClass(ABC):
                 if you want to compare it with another 
                 you can use this variable.
 
-        Return:
-            tuple[bool | None, bool]: Condition of 'typeSide' equals and 
+        Returns:
+            tuple[bool|None,bool]: Condition of 'typeSide' equals and 
                 True if correct False if not.
         """
 
@@ -1071,8 +1076,8 @@ class StrategyClass(ABC):
                 data: Data where to search. 
                 col_name (str): Column to pass through 'func'.
 
-            Return:
-                tuple[bool, float]: Condition of 'typeSide' equals and 
+            Returns:
+                tuple[bool,float]: Condition of 'typeSide' equals and 
                     result of 'func' on 'col_name'.
             """
 
@@ -1145,7 +1150,7 @@ class StrategyClass(ABC):
                 order if an order with the same closeId or id is closed.
             limit (bool, optional): Set to True if the order is Maker.
 
-        Return:
+        Returns:
             str: unionId integer.
         """
 
@@ -1210,7 +1215,7 @@ class StrategyClass(ABC):
             close_id (int | None, optional): closeId responsible for closing the 
                 order if an order with the same closeId or id is closed.
 
-        Return:
+        Returns:
             str: unionId integer.
         """
 
@@ -1334,7 +1339,7 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper containing the data from closed trades.
         """
 
-        __pos_rec = self.__pos_record
+        __pos_rec = self.__pos_record.values()
         if len(__pos_rec) == 0: 
             return flx.DataWrapper()
         elif (last != None and 
@@ -1348,9 +1353,8 @@ class StrategyClass(ABC):
         if label and label in ('index', 'rIndex'):
             __pos_rec = np.arange(len(__pos_rec))
 
-        data = __pos_rec[:__pos_rec._pos]
-        data = data[
-            len(data) - last if last is not None and last < len(data) else 0:]
+        data = __pos_rec[
+            len(__pos_rec) - last if last is not None and last < len(__pos_rec) else 0:]
 
         if (label not in (None, 'index', 'rIndex') 
             and __pos_rec.dtype.names and data.size):
@@ -1852,13 +1856,13 @@ class StrategyClass(ABC):
             last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
-        Returns:
-            DataWrapper: DataWrapper containing the 'ema' and 'smoothed' values for 
-                              each step.
-        
         Columns:
             - 'ema'
             - 'smoothed'
+
+        Returns:
+            DataWrapper: DataWrapper containing the 'ema' and 'smoothed' values for 
+                              each step
         """
 
         source = source.lower()
@@ -1910,13 +1914,13 @@ class StrategyClass(ABC):
             data (Series | None, optional): Series of data to perform the SEMA calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
-        Returns:
-            DataWrapper: DataWrapper containing 'ema' and 'smoothed' values for 
-                          each step.
-
         Columns:
             - 'ema'
             - 'smoothed'
+
+        Returns:
+            DataWrapper: DataWrapper containing 'ema' and 'smoothed' values for 
+                          each step.
         """
 
         data = self.__data_adf[source] if data is None else data
@@ -1953,14 +1957,14 @@ class StrategyClass(ABC):
             last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
-        Returns:
-            DataWrapper: DataWrapper containing 'Upper', '{ma_type}', and 'Lower' 
-                          values for each step.
-                 
         Columns:
-            - 'Upper'
+            - 'upper'
             - '{ma_type}'
-            - 'Lower'
+            - 'lower'
+
+        Returns:
+            DataWrapper: DataWrapper containing 'upper', '{ma_type}', and 'lower' 
+                          values for each step.
         """
 
         source = source.lower()
@@ -2014,14 +2018,14 @@ class StrategyClass(ABC):
                 calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
-        Returns:
-            DataWrapper: DataWrapper containing 'Upper', '{ma_type}', and 'Lower' 
-                          values for each step.
-              
         Columns:
-            - 'Upper'
+            - 'upper'
             - '{ma_type}'
-            - 'Lower'
+            - 'lower'
+
+        Returns:
+            DataWrapper: DataWrapper containing 'upper', '{ma_type}', and 'lower' 
+                          values for each step.
         """
 
         data = self.__data_adf[source] if data is None else data
@@ -2062,13 +2066,13 @@ class StrategyClass(ABC):
             last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
-        Returns:
-            DataWrapper: DataWrapper containing 'rsi' and '{base_type}' values for 
-                          each step.
-
         Columns:
             - 'rsi'
             - '{base_type}'
+
+        Returns:
+            DataWrapper: DataWrapper containing 'rsi' and '{base_type}' values for 
+                          each step.
         """
 
         source = source.lower()
@@ -2133,13 +2137,13 @@ class StrategyClass(ABC):
             data (Series | None, optional): Series of data to perform the RSI calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
-        Returns:
-            DataWrapper: DataWrapper containing 'rsi' and '{base_type}' values for 
-                          each step.
-
         Columns:
             - 'rsi'
             - '{base_type}'
+
+        Returns:
+            DataWrapper: DataWrapper containing 'rsi' and '{base_type}' values for 
+                          each step.
         """
 
         delta = self.__data_adf[source].diff() if data is None else data.diff()
@@ -2189,13 +2193,13 @@ class StrategyClass(ABC):
             last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
-        Returns:
-            DataWrapper: DataWrapper containing 'stoch' and '{d_type}' values for each 
-                          step.
-        
         Columns:
             - 'stoch'
             - '{d_type}'
+
+        Returns:
+            DataWrapper: DataWrapper containing 'stoch' and '{d_type}' values for each 
+                          step.
         """
 
         source = source.lower()
@@ -2253,13 +2257,13 @@ class StrategyClass(ABC):
             data (Series | None, optional): Series of data to perform the stochastic calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
-        Returns:
-            DataWrapper: DataWrapper containing 'stoch' and '{d_type}' values for each 
-                          step.
-
         Columns:
             - 'stoch'
             - '{d_type}'
+
+        Returns:
+            DataWrapper: DataWrapper containing 'stoch' and '{d_type}' values for each 
+                          step.
         """
 
         data = self.__data_adf if data is None else data
@@ -2294,14 +2298,14 @@ class StrategyClass(ABC):
             last (int | None, optional): Number of data points to return from the present 
                                   backwards. If None, returns data for all times.
 
-        Returns:
-            DataWrapper: DataWrapper containing 'adx', '+di', and '-di' values for 
-                          each step.
-
         Columns:
             - 'adx'
             - '+di'
             - '-di'
+
+        Returns:
+            DataWrapper: DataWrapper containing 'adx', '+di', and '-di' values for 
+                          each step.
         """
 
         if smooth > 5000 or smooth <= 0: 
@@ -2342,14 +2346,14 @@ class StrategyClass(ABC):
             data (Series | None, optional): Series of data to perform the ADX calculation.
             cut (bool, optional): True to return the trimmed data with current index.
 
-        Returns:
-            DataWrapper: DataWrapper containing 'adx', '+di', and '-di' values for 
-                          each step.
-
         Columns:
             - 'adx'
             - '+di'
             - '-di'
+
+        Returns:
+            DataWrapper: DataWrapper containing 'adx', '+di', and '-di' values for 
+                          each step.
         """
 
         data = self.__data_adf if data is None else data
@@ -2400,13 +2404,13 @@ class StrategyClass(ABC):
             last (int | None, optional): Number of data points to return starting from the
                 present backward. If None, returns data for all available periods.
 
-        Returns:
-            DataWrapper: A DataWrapper with MACD values and the signal line for each step.
-
         Columns:
             - 'macd'
             - 'signal'
-            - 'histogram'      
+            - 'histogram'
+
+        Returns:
+            DataWrapper: A DataWrapper with MACD values and the signal line for each step.
         """
 
         source = source.lower()
@@ -2472,13 +2476,13 @@ class StrategyClass(ABC):
             data (Series | None, optional): The data used for calculation of MACD.
             cut (bool, optional): True to return the trimmed data with current index.
 
-        Returns:
-            DataWrapper: A DataWrapper with MACD values and signal line for each step.
-
         Columns:
             - 'macd'
             - 'signal'
             - 'histogram'  
+
+        Returns:
+            DataWrapper: A DataWrapper with MACD values and signal line for each step.
         """
 
         data = self.__data_adf if data is None else data
@@ -2535,13 +2539,13 @@ class StrategyClass(ABC):
             last (int | None, optional): Number of data points to return starting from the
                 present backward. If None, returns data for all available periods.
 
-        Returns:
-            DataWrapper: A DataWrapper with Squeeze Momentum values and histogram for 
-                each step.
-
         Columns:
             - 'sqzmom'
             - 'histogram'
+
+        Returns:
+            DataWrapper: A DataWrapper with Squeeze Momentum values and histogram for 
+                each step.
         """
 
         source = source.lower()
@@ -2608,13 +2612,13 @@ class StrategyClass(ABC):
             data (Series | None, optional): The data used for calculating the Squeeze Momentum.
             cut (bool, optional): True to return the trimmed data with current index.
 
-        Returns:
-            DataWrapper: A DataWrapper with Squeeze Momentum values and histogram for 
-                each step.
-
         Columns:
             - 'sqzmom'
             - 'histogram'
+
+        Returns:
+            DataWrapper: A DataWrapper with Squeeze Momentum values and histogram for 
+                each step.
         """
 
         data = self.__data_adf if data is None else data
@@ -2762,16 +2766,16 @@ class StrategyClass(ABC):
             last (int | None, optional): Number of data points to return starting from the
                 present backwards. If None, returns data for all available periods.
 
-        Returns:
-            DataWrapper: A DataWrapper with Ichimoku cloud values and optionally
-                'tenkan_sen' and 'kijun_sen' columns if `ichimoku_lines` is True.
-
         Columns:
             - 'senkou_a'
             - 'senkou_b'
             - 'tenkan_sen'
             - 'kijun_sen'
             - 'ichimoku_lines'
+
+        Returns:
+            DataWrapper: A DataWrapper with Ichimoku cloud values and optionally
+                'tenkan_sen' and 'kijun_sen' columns if `ichimoku_lines` is True.
         """
 
         if tenkan_period > 5000 or tenkan_period <= 0: 
@@ -2821,16 +2825,16 @@ class StrategyClass(ABC):
             data (Series | None, optional): The data used to calculate the Ichimoku cloud values.
             cut (bool, optional): True to return the trimmed data with current index.
 
-        Returns:
-            DataWrapper: A DataWrapper with Ichimoku cloud values and optionally
-                'tenkan_sen' and 'kijun_sen' columns if `ichimoku_lines` is True.
-
         Columns:
             - 'senkou_a'
             - 'senkou_b'
             - 'tenkan_sen'
             - 'kijun_sen'
             - 'ichimoku_lines'
+
+        Returns:
+            DataWrapper: A DataWrapper with Ichimoku cloud values and optionally
+                'tenkan_sen' and 'kijun_sen' columns if `ichimoku_lines` is True.
         """
 
         data = self.__data_adf if data is None else data

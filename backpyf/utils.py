@@ -17,6 +17,7 @@ Functions:
         if it has not been calculated already.
     calc_day: Function to calculate the width of the index that each day has.
     text_fix: Function to fix or adjust text.
+    mult_color: Multiply a color.
     diff_color: Makes a color darker or lighter.
     diff_ccolor: Differentiate a color from another color.
     plot_volume: Function to plot volume on a give `Axes`.
@@ -31,6 +32,8 @@ from matplotlib.collections import PatchCollection, LineCollection
 from matplotlib.patches import Rectangle 
 from matplotlib.axes._axes import Axes
 import matplotlib.colors
+
+from typing import Any
 from time import sleep
 
 import matplotlib as mpl
@@ -182,7 +185,7 @@ def round_r(num:float, r:int = 1) -> float:
             
     return num
 
-def not_na(x:any, y:any, f:callable = max) -> any:
+def not_na(x:Any, y:Any, f:callable = max) -> Any:
     """
     If not np.nan.
 
@@ -191,13 +194,13 @@ def not_na(x:any, y:any, f:callable = max) -> any:
     `np.nan`, `np.nan` is returned.
 
     Args:
-        x (any): The first value.
-        y (any): The second value.
+        x (Any): The first value.
+        y (Any): The second value.
         f (callable, optional): Function to apply to `x` and `y` if neither is 
             `np.nan`. Defaults to `max`.
 
     Returns:
-        any: The result of applying `f` to `x` and `y`, or the non-`np.nan` value, 
+        Any: The result of applying `f` to `x` and `y`, or the non-`np.nan` value, 
             or `np.nan` if both are `np.nan`.
     """
 
@@ -297,6 +300,21 @@ def text_fix(text:str, newline_exclude:bool = True) -> str:
     return ''.join(line.lstrip() + ('\n' if not newline_exclude else '')  
                         for line in text.split('\n'))
 
+def mult_color(color:str, multiplier:float = 1) -> tuple[float, float, float]:
+    """
+    Multiply a color
+
+    Args:
+        color (str): String allowed by Matplotlib as color.
+        multiplier (float): multiplier.
+
+    Return:
+        tuple[float,float,float]: Rgb color.
+    """
+
+    rgb = mpl.colors.to_rgb(color)
+    return tuple(min(1, max(c*multiplier, 0)) for c in rgb)
+
 def diff_color(color:str, factor:float = 1, 
                line:float = 0.2) -> tuple[float, float, float]:
     """
@@ -315,7 +333,7 @@ def diff_color(color:str, factor:float = 1,
             number the opposite will be done (lightening).
 
     Returns:
-        tuple[float, float, float]: Rgb color.
+        tuple[float,float,float]: Rgb color.
     """
 
     if line > 1 or line < 0:
@@ -345,7 +363,7 @@ def diff_ccolor(color:str, dcolor:str, factor:float = 1,
             modified, otherwise it is not modified.
 
     Returns:
-        tuple[float, float, float]: Rgb color.
+        tuple[float,float,float]: Rgb color.
     """
 
     if line > 1 or line < 0:

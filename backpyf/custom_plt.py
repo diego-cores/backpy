@@ -12,13 +12,16 @@ Functions:
     def_style: Define a new style to plot your graphics.
     gradient_ax: Create a diagonal background gradient on the 'ax' with 'ax.imshow'.
     custom_ax: Aesthetically configures an axis.
+    ax_view: Based on a str generates axes.
 """
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from PIL import Image, ImageTk, ImageOps
+from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
 from importlib import resources
 import matplotlib.colors
+import matplotlib.pyplot
 import matplotlib as mpl
 import tkinter as tk
 import numpy as np
@@ -26,6 +29,7 @@ import os
 
 from . import _commons as _cm
 from . import exception
+from . import utils
 
 class CustomToolbar(NavigationToolbar2Tk):
     """
@@ -290,7 +294,7 @@ class CustomWin:
         Args:
             fig (Figure): Figure from matplotlib.
 
-        Return:
+        Returns:
             FigureCanvasTkAgg: Resulting canvas figure.
         """
 
@@ -334,7 +338,7 @@ class CustomWin:
             mpl_place (bool, optional): If you want 'mpl_canvas' not to change shape, 
                 leave it set to False.
 
-        Return:
+        Returns:
             CustomToolbar: Toolbar.
         """
 
@@ -500,3 +504,54 @@ def custom_ax(ax:matplotlib.axes._axes.Axes,
     for spine in ax.spines.values():
         spine.set_color(semi_transparent_white)
         spine.set_linewidth(1.2)
+
+def ax_view(view:str, graphics:list[str], 
+            sharex:bool = False) -> tuple[Axes, list[str]]:
+    """
+    Axes view
+
+    Based on a str generates axes.
+        Generates up to 8 axes and places them covering the entire canvas.
+
+    Args:
+        view (str): String with format: s/s/s/s each value is a graph.
+        graphics (list[str]): Name of each graph, needed to process 'view'.
+        sharex (bool): Shares the x-axis with all the axes.
+
+    Returns:
+        tuple[list[Axes],list[str]]: List of axes and list of view values.
+    """
+
+    view = view.lower().strip().split('/')
+    view = [i for i in view if i in graphics]
+
+    if len(view) > 8 or len(view) < 1: 
+        raise exception.StatsError(utils.text_fix(f"""
+            'view' allowed format: 's/s/s/s' where s is the name of the graph.
+            Available graphics: {(",".join([f"'{i}'" for i in graphics]))}.
+            """, newline_exclude=True))
+
+    loc = [(0,0), (1,0), (1,4), (0,4), (1,2), (1,6), (0,2), (0,6)]
+    layout_rules = {
+        1: lambda i: (2, 8, 2, 8),
+        2: lambda i: (2, 8, 1, 8),
+        3: lambda i: (2, 8, 1, 8 if i==0 else 4),
+        4: lambda i: (2, 8, 1, 4),
+        5: lambda i: (2, 8, 1, 2 if i in [1,4] else 4),
+        6: lambda i: (2, 8, 1, 4 if i in [0,3] else 2),
+        7: lambda i: (2, 8, 1, 4 if i==3 else 2),
+        8: lambda i: (2, 8, 1, 2),
+    }
+
+    axes = []
+    for i in range(len(view)):
+        sharex_=axes[-1] if axes and sharex else None
+        nrows, ncols, rowspan, colspan = layout_rules[len(view)](i)
+        axes.append(
+            mpl.pyplot.subplot2grid(
+                (nrows, ncols), loc[i],
+                rowspan=rowspan, colspan=colspan,
+                sharex=sharex_
+        ))
+
+    return axes, view

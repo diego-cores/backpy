@@ -23,10 +23,22 @@ Functions:
     var_parametric: Calculate the parametric var.
     max_drawdown: Function to return the maximum drawdown from the given data.
     get_drawdowns: Calculate the drawdowns from the given.
+    monte_carlo_chart: Displays graphs with Monte Carlo statistics.
+    monte_carlo_bsim: Calculates Monte Carlo simulations.
+    correlation: Measure correlation between strategies.
 """
 
+import matplotlib.pyplot
+import matplotlib as mpl
 import pandas as pd
 import numpy as np
+
+import random as rd
+
+from . import custom_plt as cpl
+from . import _commons as _cm
+from . import exception
+from . import utils
 
 def average_ratio(trades:pd.DataFrame) -> float:
     """
@@ -266,7 +278,7 @@ def max_drawdown(values:pd.Series) -> float:
     """
 
     if values.empty: return 0
-    max_drdwn, max_val = 0, values[values.index[0]]
+    max_drdwn, max_val = 0, values.iloc[0]
 
     def calc(x):
         nonlocal max_drdwn, max_val
@@ -303,3 +315,287 @@ def get_drawdowns(
     drawdowns = (values - max_values) / max_values
 
     return drawdowns
+
+def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
+                      n_trades:int|None = None, col:str|None = 'profitPer',
+                      style:str|None = 'last', style_c:dict|None = None, 
+                      block:bool = True) -> None:
+    """
+    Monte Carlo chart
+
+    Takes data from a Monte Carlo simulation 
+    and generates graphs with statistics.
+
+    Available Graphics:
+    - 's' = Simulation chart.
+    - 'd' = Distribution of results with this you can see 
+        what percentage of simulations win.
+
+    All color styles:
+        Documentation of this in the 'plot' docstring.
+
+    Args:
+        data (list[pd.DataFrame]): Data extracted from a Monte Carlo simulation.
+            You can extract data from 'monte_carlo_bsim' function.
+        view (str, optional): Specifies which graphics to display. 
+            Default is 'd/p/b'. Maximum 8.
+        n_trades (int|None, optional): For graph 'd' how many simulations 
+            will be shown.
+        col (str|None, optional): Column to display statistics, 
+            only 'profit' and 'profitPer' are supported, 
+            None uses 'profitPer' and calculates equity curve.
+        style (str | None, optional): Color style. 
+            If you leave it as 'last' the last one will be used.
+        style_c (dict | None, optional): Customize the defined style by 
+            modifying the dictionary. To know what to modify, 
+            read the docstring of 'def_style'.
+        block (bool, optional): If True, pauses script execution until all figure 
+            windows are closed. If False, the script continues running after 
+            displaying the figures. Default is True.
+    """
+    # Exceptions.
+    if n_trades and n_trades <= 1 and n_trades > len(data):
+        raise exception.StatsError(utils.text_fix("""
+                        'n_trades' can only be greater than 1 and 
+                        less than or equal to the length of 'data'.
+                        """, newline_exclude=True))
+    elif (not style is None and not (style:=style.lower()) 
+          in ('random', 'last', *_cm.__plt_styles.keys())):
+        raise exception.StatsError(f"'{style}' Not a style.")
+
+    if style == 'last':
+        style = _cm.plt_style
+    if style is None:
+        style = list(_cm.__plt_styles.keys())[0]
+    elif style == 'random':
+        style = rd.choice(list(_cm.__plt_styles.keys()))
+
+    plt_colors = _cm.__plt_styles[style]
+    _cm.plt_style = style
+
+    if isinstance(style_c, dict):
+        plt_colors.update(style_c)
+
+    gdir = plt_colors.get('gdir', False)
+    market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
+
+    fig = mpl.pyplot.figure(figsize=(16,8))
+    fig.subplots_adjust(left=0, right=1, top=1, 
+                        bottom=0, wspace=0, hspace=0)
+
+    graphics = ['s','d']
+    axes, view = cpl.ax_view(view=view, graphics=graphics)
+
+    for i,v in enumerate(view):
+        ax = axes[i]
+    
+        cpl.custom_ax(ax, plt_colors['bg'], edge=gdir)
+        ax.tick_params('x', which='both', bottom=False, 
+                        top=False, labelbottom=False)
+        ax.tick_params('y', which='both', left=False, 
+                        right=False, labelleft=False)
+
+        ax.yaxis.set_major_formatter(lambda y, _: y.real)
+        ax.xaxis.set_major_formatter(lambda x, _: x.real)
+
+        match v:
+            case 's':
+                for i in range(n_trades if n_trades else len(data)):
+                    curve = (data[i][col].cumsum().dropna() 
+                             if isinstance(col, str) else 
+                             np.cumprod(1 + data[i]['profitPer'] / 100).dropna()-1 )
+                    ax.plot(range(0, len(data[i].index)), curve, alpha=0.5)
+
+                ax.legend(['Simulations.'], loc='upper left')
+                ax.set_xlim(-1, len(data[0].index))
+            case 'd':
+                data_last = lambda df: (df[col].cumsum().dropna().iloc[-1] 
+                                    if isinstance(col, str) else 
+                                    (np.cumprod(1 + df[i]['profitPer'] / 100).dropna()-1).iloc[-1])
+                last_result = np.array([data_last(df) for df in data])
+
+                parts = np.array_split(np.sort(last_result), 100)
+                means = [np.mean(part) for part in parts]
+
+                color_u = lambda x: utils.mult_color(
+                    color=market_colors['u'], factor=x)
+                color_d = lambda x: utils.mult_color(
+                    color=market_colors['d'], factor=x)
+                colors = np.array([
+                    color_u(val/np.max(means)+1) if val >= 0 else color_d(1-val/np.min(means))
+                    for val in means if val != 0
+                ])
+
+                ax.bar(list(range(len(means))), means, 
+                       width=0.8, color=colors)
+                ax.legend(['Distribution.'], loc='upper left')
+            case _: pass
+
+    window = cpl.CustomWin(
+        'Monte Carlo simulation',
+        frame_color=plt_colors['fr'],
+        buttons_color=plt_colors['btn'],
+        button_act=plt_colors.get('btna', '#333333'))
+
+    mpl_canvas = window.mpl_canvas(fig=fig)
+    window.mpl_toolbar(mpl_canvas=mpl_canvas)
+
+    mpl.pyplot.close(fig)
+    window.show(block=block)
+
+def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None, 
+                    n_trades:int|None = None, n_sim:int|None = 10000, 
+                    percentiles:list[int|float] = [1,5,10,24,50,75], 
+                    col:str|None = 'profitPer', prnt:bool = True 
+                    ) -> tuple[list[pd.DataFrame], str]:
+    """
+    Monte Carlo bootstrap simulation
+
+    Calculate a Monte Carlo bootstrap simulation and gives statistics.
+
+    For documentation of statistics, read the 'stats_trades' docstring.
+
+    Args:
+        names (list[str|int|None]|str|int|None, optional): 
+            Backtest names to extract data from, None = -1, 
+            you can add multiple by passing an list.
+        n_trades (int|None, optional): Number of trades per simulation, 
+            None = length of loaded trades.
+        n_sim (int|None, optional): Number of simulations.
+        percentiles (list[int|float], optional): Percentiles for statistics.
+        col (str|None, optional): Column to do the simulation, 
+            only 'profit' and 'profitPer' are supported, 
+            None uses 'profitPer' and calculates equity curve.
+        prnt (bool, optional): If True, the statistics are 
+            printed on the console.
+
+    Return:
+        tuple[list[DataFrame],str]: 
+            Tuple with: list with all simulations and statistics test.
+    """
+
+    # Exceptions.
+    if col and col not in ('profit', 'profitPer'):
+        raise exception.StatsError(
+            "'col' only 'profit', 'profitPer' or None is supported.")
+    elif n_trades and n_trades <= 1:
+        raise exception.StatsError(
+            "'n_trades' can only be greater than 1.")
+    elif n_sim and n_sim <= 0:
+        raise exception.StatsError(
+            "'n_trades' can only be greater than 0.")
+
+    trades = _cm.__get_trades(names=names)
+    name = list(names)[0] if type(names) in (tuple,set,list) else names
+    trades_data = _cm.__get_strategy(name=name)
+    sim = []
+
+    if trades.empty:
+        raise exception.StatsError('Trades not loaded.')
+
+    stats = {
+        'profit_fact':[],
+        'max_drawdown':[],
+        'avg_drawdown':[],
+        'max_drawdown$':[],
+        'avg_drawdown$':[],
+        'expectation':[],
+        'winrate':[],
+    }
+
+    for i in range(n_sim or 10000):
+        trades_s = trades.sample(
+            n=n_trades or len(trades), replace=True)
+
+        trades_calc = trades_s
+        trades_calc['multiplier'] = 1 + trades_calc['profitPer'] / 100
+
+        stats['profit_fact'].append(profit_fact(trades['profit']))
+        stats['expectation'].append(expectation(trades_s['profitPer']))
+        stats['max_drawdown'].append(
+            max_drawdown(np.cumprod(trades_s['multiplier'].dropna())))
+        stats['avg_drawdown'].append(
+            np.mean(get_drawdowns(np.cumprod(trades_s['multiplier'].dropna()))))
+        stats['max_drawdown$'].append(
+            max_drawdown(trades['profit'].cumsum().dropna()
+                         +trades_data['init_funds']))
+        stats['avg_drawdown$'].append(
+            np.mean(get_drawdowns(trades['profit'].cumsum().dropna()
+                                  +trades_data['init_funds'])))
+        stats['winrate'].append(winnings(trades['profitPer'])*100)
+
+        sim.append(trades_s)
+
+    data_last = lambda df: (df[col].cumsum().dropna().iloc[-1] 
+                        if isinstance(col, str) else 
+                        (np.cumprod(1 + df[i]['profitPer'] / 100).dropna()-1).iloc[-1])
+    last_result = np.array([data_last(df) for df in sim])
+    percentiles_r = np.percentile(last_result, percentiles)
+
+    percentiles_t = {
+        f'Percentile {percentiles[i]}':[
+            round(v, 2), _cm.__COLORS['GREEN'] if v > 0 else _cm.__COLORS['RED']
+        ] for i,v in enumerate(percentiles_r)}
+
+    text = {
+        'Median return':[(md_rtrn:=round(np.median(last_result), 1)),
+                         _cm.__COLORS['GREEN'] if md_rtrn > 0 else _cm.__COLORS['RED']],
+        'Profit fact median':[(prft_fact:=utils.round_r(np.median(stats['profit_fact']), 3)),
+                              _cm.__COLORS['GREEN'] if prft_fact > 1 else _cm.__COLORS['RED']],
+        'Max drawdown median':[str(round(np.median(stats['max_drawdown']*100), 1)) + '%'],
+        'Average drawdown median':[str(-round(np.median(stats['avg_drawdown']*100), 1)) + '%'],
+        'Max drawdown$ median':[str(round(np.median(stats['max_drawdown$']*100),1)) + '%'],
+        'Average drawdown$ median':[str(-round(np.median(stats['avg_drawdown$']*100), 1)) + '%'],
+        'Expectation median':[utils.round_r(np.median(stats['expectation']))],
+        'Winnings median':[str(round(np.median(stats['winrate']), 1)) + '%',
+                           _cm.__COLORS['GREEN']],
+        f'\n{_cm.__COLORS['CYAN']}Percentiles{_cm.__COLORS['RESET']}':['']
+    }
+    text.update(percentiles_t)
+
+    text = utils.statistics_format(text, f"---Statistics of Monte Carlo---")
+
+    text = text if _cm.dots else text.replace('.', ',')
+    if prnt:print(text) 
+
+    return (sim, text)
+
+def correlation(names:list[str|int|None], col:str|None = None, 
+                method:str|None = None) -> pd.DataFrame:
+    """
+    Correlation
+
+    Measures correlation with DataFrame.corr.
+
+    Args:
+        names (list[str|int|None]): Backtest names which measure correlation.
+        col (str|None, optional): Column used to measure correlation, 
+            only 'profit' and 'profitPer' are supported, None = 'profitPer'.
+        method (str|None, optional): Correlation method: 'pearson', 
+            'kendall', 'spearman'. None = 'pearson'.
+
+    Returns:
+        DataFrame: Correlation.
+    """
+
+    # Exceptions.
+    if col and col not in ('profit', 'profitPer'):
+        raise exception.StatsError(
+            "'col' only 'profit', 'profitPer' or None is supported.")
+    elif method and method.lower() not in ('pearson', 'kendall', 'spearman'):
+        raise exception.StatsError(
+            "'method' only 'pearson', 'kendall', 'spearman' or None is supported.")
+
+    trades = _cm.__get_dtrades(names=names)
+
+    daily_profit = {
+        k: v.groupby('positionDate')[col or 'profitPer'].sum().cumsum()
+        for k, v in trades.items()
+    }
+
+    returns = pd.concat(
+        daily_profit, 
+        axis=1, 
+        join='outer').sort_index().ffill().pct_change().dropna()
+
+    return returns.corr(method=method.lower() or 'pearson')
