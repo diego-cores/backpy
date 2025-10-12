@@ -418,9 +418,9 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
                 means = [np.mean(part) for part in parts]
 
                 color_u = lambda x: utils.mult_color(
-                    color=market_colors['u'], factor=x)
+                    color=market_colors['u'], multiplier=x)
                 color_d = lambda x: utils.mult_color(
-                    color=market_colors['d'], factor=x)
+                    color=market_colors['d'], multiplier=x)
                 colors = np.array([
                     color_u(val/np.max(means)+1) if val >= 0 else color_d(1-val/np.min(means))
                     for val in means if val != 0
@@ -528,7 +528,7 @@ def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None,
 
     data_last = lambda df: (df[col].cumsum().dropna().iloc[-1] 
                         if isinstance(col, str) else 
-                        (np.cumprod(1 + df[i]['profitPer'] / 100).dropna()-1).iloc[-1])
+                        (np.cumprod(1 + df['profitPer'] / 100).dropna()-1).iloc[-1])
     last_result = np.array([data_last(df) for df in sim])
     percentiles_r = np.percentile(last_result, percentiles)
 
@@ -538,16 +538,16 @@ def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None,
         ] for i,v in enumerate(percentiles_r)}
 
     text = {
-        'Median return':[(md_rtrn:=round(np.median(last_result), 1)),
+        'Average return':[(md_rtrn:=round(np.average(last_result), 1)),
                          _cm.__COLORS['GREEN'] if md_rtrn > 0 else _cm.__COLORS['RED']],
-        'Profit fact median':[(prft_fact:=utils.round_r(np.median(stats['profit_fact']), 3)),
+        'Profit fact avg':[(prft_fact:=utils.round_r(np.average(stats['profit_fact']), 3)),
                               _cm.__COLORS['GREEN'] if prft_fact > 1 else _cm.__COLORS['RED']],
-        'Max drawdown median':[str(round(np.median(stats['max_drawdown']*100), 1)) + '%'],
-        'Average drawdown median':[str(-round(np.median(stats['avg_drawdown']*100), 1)) + '%'],
-        'Max drawdown$ median':[str(round(np.median(stats['max_drawdown$']*100),1)) + '%'],
-        'Average drawdown$ median':[str(-round(np.median(stats['avg_drawdown$']*100), 1)) + '%'],
-        'Expectation median':[utils.round_r(np.median(stats['expectation']))],
-        'Winnings median':[str(round(np.median(stats['winrate']), 1)) + '%',
+        'Max drawdown avg':[str(round(np.average(stats['max_drawdown'])*100, 1)) + '%'],
+        'Average drawdown avg':[str(-round(np.average(stats['avg_drawdown'])*100, 1)) + '%'],
+        'Max drawdown$ avg':[str(round(np.average(stats['max_drawdown$'])*100,1)) + '%'],
+        'Average drawdown$ avg':[str(-round(np.average(stats['avg_drawdown$'])*100, 1)) + '%'],
+        'Expectation avg':[utils.round_r(np.average(stats['expectation']))],
+        'Winnings avg':[str(round(np.average(stats['winrate']), 1)) + '%',
                            _cm.__COLORS['GREEN']],
         f'\n{_cm.__COLORS['CYAN']}Percentiles{_cm.__COLORS['RESET']}':['']
     }

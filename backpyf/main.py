@@ -245,7 +245,7 @@ def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d',
     except: 
         raise exception.BinanceError('Binance parameters error.')
 
-def load_yfinance_data(tickers:str = Any, 
+def load_yfinance_data(ticker:str = Any, 
                        start:str | None = None, end:str | None = None, 
                        interval:str = '1d', days_op:int = 365, 
                        statistics:bool = True, progress:bool = True, 
@@ -257,7 +257,7 @@ def load_yfinance_data(tickers:str = Any,
     Loads data using the yfinance module.
 
     Args:
-        tickers (str): String of ticker symbols to download.
+        ticker (str): String of ticker symbols to download.
         start (str | None, optional): Start date for download in YYYY-MM-DD format. 
                               Default is 99 years ago.
         end (str | None, optional): End date for download in YYYY-MM-DD format. 
@@ -286,8 +286,8 @@ def load_yfinance_data(tickers:str = Any,
         t = time() if progress else None
 
         yf.set_tz_cache_location('.\\yfinance_cache')
-        
-        data = yf.download(tickers, start=start, 
+
+        data = yf.download(ticker, start=start, 
                            end=end, interval=interval, 
                            progress=progress, auto_adjust=False)
         
@@ -303,7 +303,7 @@ def load_yfinance_data(tickers:str = Any,
 
         if statistics: stats_icon(prnt=True, 
                                   data=data, 
-                                  data_icon=tickers.strip(),
+                                  data_icon=ticker.strip(),
                                   data_interval=interval.strip())
 
         data = data[['open', 'high', 'low', 'close', 'volume']]
@@ -313,7 +313,7 @@ def load_yfinance_data(tickers:str = Any,
 
         _cm.__data = data
         _cm.__data_width = data_width
-        _cm.__data_icon = tickers.strip()
+        _cm.__data_icon = ticker.strip()
         _cm.__data_interval = interval.strip()
         _cm.__data_year_days = days_op
         _cm.__data_width_day = utils.calc_day(interval, data_width)
@@ -538,8 +538,8 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
         chunk_size (int, optional): BackPy loads the variable space before 
             executing your strategy in chunks, the size of these chunks 
             can take up more memory or make the backtest faster, do not 
-            modify this variable if you do not need to, each value 
-            represents a saved space for positions and orders. Defualt is 10000.
+            modify this variable if you do not need to, each value represents
+            a space saved for position logs. The default value is 10,000.
     """
     # Exceptions
     if initial_funds < 0: 
