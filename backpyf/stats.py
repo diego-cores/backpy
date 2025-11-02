@@ -23,6 +23,7 @@ Functions:
     var_parametric: Calculate the parametric var.
     max_drawdown: Function to return the maximum drawdown from the given data.
     get_drawdowns: Calculate the drawdowns from the given.
+    perf_tzone_chart: Chart the best and worst hours/minutes of your strategy.
     monte_carlo_chart: Displays graphs with Monte Carlo statistics.
     monte_carlo_bsim: Calculates Monte Carlo simulations.
     correlation: Measure correlation between strategies.
@@ -38,6 +39,7 @@ import random as rd
 from . import custom_plt as cpl
 from . import _commons as _cm
 from . import exception
+from . import strategy
 from . import utils
 
 def average_ratio(trades:pd.DataFrame) -> float:
@@ -316,10 +318,150 @@ def get_drawdowns(
 
     return drawdowns
 
+def perf_tzone_chart(names:list[str|int|None]|str|int|None = None,
+                     view:str = 'p/d', col:str|None = 'profitPer', 
+                     panel:str = 'new', style:str|None = 'last', 
+                     style_c:dict|None = None, block:bool = True) -> None:
+    """
+    Performance time zones chart
+
+    See how your strategy performs based on the opening or closing time of each trade.
+
+    Available Graphics:
+    - 'p' = Sum of profit per hour depending on the closing date.
+    - 'd' = Sum of profit per hour depending on the opening date.
+    - 'mp' = Sum of profit per minute depending on the closing date.
+    - 'md' = Sum of profit per minute depending on the opening date.
+
+    All color styles:
+        Documentation of this in the 'plot' docstring.
+
+    Args:
+        names (list[str|int|None]|str|int|None, optional): 
+            Backtest names to extract data from, None = -1, 
+            you can add multiple by passing an list.
+        view (str, optional): Specifies which graphics to display. 
+            Default is 'p/d'. Maximum 8.
+        col (str|None, optional): Column to display statistics, 
+            only 'profit' and 'profitPer' are supported, 
+            None uses 'profitPer'.
+        panel (str, optional): To create a new window or add a panel, 
+            only 'new' or 'add' are possible.
+        style (str | None, optional): Color style. 
+            If you leave it as 'last' the last one will be used.
+        style_c (dict | None, optional): Customize the defined style by 
+            modifying the dictionary. To know what to modify, 
+            read the docstring of 'def_style'.
+        block (bool, optional): If True, pauses script execution until all figure 
+            windows are closed. If False, the script continues running after 
+            displaying the figures. Default is True.
+    """
+
+    # Exceptions.
+    panel = panel.lower()
+
+    if col and col not in ('profit', 'profitPer'):
+        raise exception.StatsError(
+            "'col' only 'profit', 'profitPer' or None is supported.")
+    elif panel not in ('new', 'add'):
+        raise exception.StatsError(
+            f"'{panel}' Not a valid option for: 'panel'.")
+    elif (not style is None and not (style:=style.lower()) 
+          in ('random', 'last', *_cm.__plt_styles.keys())):
+        raise exception.StatsError(f"'{style}' Not a style.")
+    col = col or 'profitPer'
+
+    trades = _cm.__get_trades(names=names)
+    name = list(names)[0] if type(names) in (tuple,set,list) else names
+    trades_data = _cm.__get_strategy(name=name)
+
+    if trades.empty:
+        raise exception.StatsError('Trades not loaded.')
+
+    hour = lambda index: ((index % trades_data['d_width_day']) 
+                          / trades_data['d_width_day'] * 24).astype(int)
+    minute = lambda index: ((index % (trades_data['d_width_day']/60)) 
+                          / (trades_data['d_width_day']/60) * 60).astype(int)
+
+    if style == 'last':
+        style = _cm.plt_style
+    if style is None:
+        style = list(_cm.__plt_styles.keys())[0]
+    elif style == 'random':
+        style = rd.choice(list(_cm.__plt_styles.keys()))
+
+    plt_colors = _cm.__plt_styles[style]
+    _cm.plt_style = style
+
+    if isinstance(style_c, dict):
+        plt_colors.update(style_c)
+
+    gdir = plt_colors.get('gdir', False)
+    market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
+
+    fig = mpl.pyplot.figure(figsize=(16,8))
+    fig.subplots_adjust(left=0, right=1, top=1, 
+                        bottom=0, wspace=0, hspace=0)
+
+    graphics = ['p', 'd', 'mp', 'md']
+    axes, view = cpl.ax_view(view=view, graphics=graphics)
+
+    def time_graph(legend:str, time_col:str, func:callable) -> None:
+        """
+        Time graph
+
+        Bar chart with the specific time.
+
+        Args:
+            legend (str): Graph name.
+            time_col (str): Column for statistics, 'positionDate' or 'date'.
+            func (callable): Function to obtain the time of each trade.
+        """
+
+        trades['time_close'] = func(trades[time_col].dropna())
+        hourly_sums = trades.groupby('time_close')[col].sum()
+        colors = np.where(hourly_sums>0, market_colors.get('u'), 
+                                            market_colors.get('d'))
+
+        ax.bar(hourly_sums.index+1, hourly_sums, color=colors)
+        ax.legend([legend], loc='upper left')
+
+    for i,v in enumerate(view):
+        ax = axes[i]
+    
+        cpl.custom_ax(ax, plt_colors['bg'], edge=gdir)
+        ax.tick_params('x', which='both', bottom=False, 
+                        top=False, labelbottom=False)
+        ax.tick_params('y', which='both', left=False, 
+                        right=False, labelleft=False)
+
+        ax.yaxis.set_major_formatter(lambda y, _: y.real)
+        ax.xaxis.set_major_formatter(lambda x, _: x.real)
+
+        match v:
+            case 'p':
+                time_graph('Position close hours.', 'positionDate', hour)
+            case 'd':
+                time_graph('Position opening hours.', 'date', hour)
+            case 'mp':
+                time_graph('Position close minutes.', 'positionDate', minute)
+            case 'md':
+                time_graph('Position opening minutes.', 'date', minute)
+            case _: pass
+
+    cpl.add_window(
+        fig=fig,
+        title=f'Performance in time - {style}',
+        block=block,
+        style=plt_colors,
+        new=True if panel == 'new' else False,
+        toolbar='total'
+    )
+
 def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
                       n_trades:int|None = None, col:str|None = 'profitPer',
-                      style:str|None = 'last', style_c:dict|None = None, 
-                      block:bool = True) -> None:
+                      panel:str = 'new', style:str|None = 'last', 
+                      style_c:dict|None = None, block:bool = True) -> None:
     """
     Monte Carlo chart
 
@@ -344,6 +486,8 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
         col (str|None, optional): Column to display statistics, 
             only 'profit' and 'profitPer' are supported, 
             None uses 'profitPer' and calculates equity curve.
+        panel (str, optional): To create a new window or add a panel, 
+            only 'new' or 'add' are possible.
         style (str | None, optional): Color style. 
             If you leave it as 'last' the last one will be used.
         style_c (dict | None, optional): Customize the defined style by 
@@ -354,7 +498,15 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
             displaying the figures. Default is True.
     """
     # Exceptions.
-    if n_trades and n_trades <= 1 and n_trades > len(data):
+    panel = panel.lower()
+
+    if col and col not in ('profit', 'profitPer'):
+        raise exception.StatsError(
+            "'col' only 'profit', 'profitPer' or None is supported.")
+    elif panel not in ('new', 'add'):
+        raise exception.StatsError(
+            f"'{panel}' Not a valid option for: 'panel'.")
+    elif n_trades and n_trades <= 1 and n_trades > len(data):
         raise exception.StatsError(utils.text_fix("""
                         'n_trades' can only be greater than 1 and 
                         less than or equal to the length of 'data'.
@@ -404,7 +556,7 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
                     curve = (data[i][col].cumsum().dropna() 
                              if isinstance(col, str) else 
                              np.cumprod(1 + data[i]['profitPer'] / 100).dropna()-1 )
-                    ax.plot(range(0, len(data[i].index)), curve, alpha=0.5)
+                    ax.plot(range(0, len(curve)), curve, alpha=0.5)
 
                 ax.legend(['Simulations.'], loc='upper left')
                 ax.set_xlim(-1, len(data[0].index))
@@ -415,7 +567,7 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
                 last_result = np.array([data_last(df) for df in data])
 
                 parts = np.array_split(np.sort(last_result), 100)
-                means = [np.mean(part) for part in parts]
+                means = [np.mean(part) for part in parts if len(part) > 0]
 
                 color_u = lambda x: utils.mult_color(
                     color=market_colors['u'], multiplier=x)
@@ -431,17 +583,14 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
                 ax.legend(['Distribution.'], loc='upper left')
             case _: pass
 
-    window = cpl.CustomWin(
-        'Monte Carlo simulation',
-        frame_color=plt_colors['fr'],
-        buttons_color=plt_colors['btn'],
-        button_act=plt_colors.get('btna', '#333333'))
-
-    mpl_canvas = window.mpl_canvas(fig=fig)
-    window.mpl_toolbar(mpl_canvas=mpl_canvas)
-
-    mpl.pyplot.close(fig)
-    window.show(block=block)
+    cpl.add_window(
+        fig=fig,
+        title=f'Monte Carlo simulation - {style}',
+        block=block,
+        style=plt_colors,
+        new=True if panel == 'new' else False,
+        toolbar='total'
+    )
 
 def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None, 
                     n_trades:int|None = None, n_sim:int|None = 10000, 
@@ -598,4 +747,4 @@ def correlation(names:list[str|int|None], col:str|None = None,
         axis=1, 
         join='outer').sort_index().ffill().pct_change().dropna()
 
-    return returns.corr(method=method.lower() or 'pearson')
+    return returns.corr(method=method.lower() if method else 'pearson')

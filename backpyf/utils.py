@@ -378,8 +378,8 @@ def diff_ccolor(color:str, dcolor:str, factor:float = 1,
                  else min(1, v*(1+factor)) for i,v in enumerate(rgb))
 
 def plot_volume(ax:Axes, data:pd.Series, 
-                 width:float = 1, color:str = 'tab:orange', 
-                 alpha:float = 1) -> None:
+                width:float = 1, color:str = 'tab:orange', 
+                alpha:float = 1) -> None:
     """
     Volume draw.
 
@@ -399,7 +399,7 @@ def plot_volume(ax:Axes, data:pd.Series,
     patches = [Rectangle((xi, 0), width, vol) for xi, vol in zip(x, volume)]
 
     ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0))
-    ax.set_ylim(None, data.max()*1.1)
+    ax.set_ylim(None, data.max()*1.1 or 1)
     ax.set_xlim(data.index[0]-(width*len(data.index)/10), data.index[-1]+(width*len(data.index)/10))
 
 def plot_candles(ax:Axes, data:pd.DataFrame, 
@@ -445,10 +445,10 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
 
     ax.set_ylim(data['low'].min()*0.98+1, data['high'].max()*1.02+1)
 
-def plot_position(trades:pd.DataFrame, ax:Axes, 
-                  color_take:str = 'green', color_stop:str = 'red',
-                  alpha:float = 1, alpha_arrow:float = 1,  
-                  arrow_fact:float = 0.2, operation_route:bool = True) -> None:
+def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green', 
+                  color_stop:str = 'red', alpha:float = 1, 
+                  alpha_arrow:float = 1, arrow_fact:float = 0.2, 
+                  operation_route:bool | None = True) -> None:
     """
     Position Draw.
 
@@ -461,7 +461,8 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
         color_stop (str, optional): Color for negative positions. Default is 'red'.
         alpha (float, optional): Opacity of the elements. Default is 1.
         alpha_arrow (float, optional): Opacity of arrow, type marker, and close marker. Default is 1.
-        operation_route (bool, optional): If True, traces the route of the operation. Default is True.
+        operation_route (bool | None, optional): If True, traces the route of the operation. Default is True.
+            None, it doesn't draw the color but it does draw the arrow.
         arrow_fact (float, optional): Indicates how much the colors of the arrows darken or lighten.
             If you don't want this to happen, leave it at 0.
         width_exit (callable, optional): Function that specifies how many time points the position 
@@ -484,7 +485,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
         trades['profitPer'] = np.nan
 
     # Draw routes of the operations.
-    if operation_route:
+    if operation_route or operation_route is None:
         segments = trades.apply(lambda row: [
             (row['date'], row['positionOpen']), 
             (row['positionDate'], row['positionClose'])], axis=1)
@@ -504,18 +505,19 @@ def plot_position(trades:pd.DataFrame, ax:Axes,
             if x['profitPer'] >= 0 
             else diff_ccolor('#f23651', color_stop, factor=0.2)), axis=1).to_list()
 
-    routes = [
-        Rectangle(
-            (xi, yi), (pdi - xi), hi)
-        for xi, yi, hi, pdi in zip(
-            trades['date'],
-            trades['positionOpen'],
-            trades['positionClose'] - trades['positionOpen'],
-            trades['positionDate']
-    )]
+    if operation_route:
+        routes = [
+            Rectangle(
+                (xi, yi), (pdi - xi), hi)
+            for xi, yi, hi, pdi in zip(
+                trades['date'],
+                trades['positionOpen'],
+                trades['positionClose'] - trades['positionOpen'],
+                trades['positionDate']
+        )]
 
-    ax.add_collection(PatchCollection(routes, color=color_close, 
-                                      alpha=alpha, linewidth=0, zorder=0.8))
+        ax.add_collection(PatchCollection(routes, color=color_close, 
+                                        alpha=alpha, linewidth=0, zorder=0.8))
 
     # Drawing of the closing marker of the operations.
     if ('positionDate' in trades.columns and 

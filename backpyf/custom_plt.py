@@ -13,17 +13,22 @@ Functions:
     gradient_ax: Create a diagonal background gradient on the 'ax' with 'ax.imshow'.
     custom_ax: Aesthetically configures an axis.
     ax_view: Based on a str generates axes.
+    new_paneledw: Generate a window with panels using 'CustomWin'.
+    add_window: Add a tkinter window with 'CustomWin'.
 """
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.animation import FuncAnimation
 from PIL import Image, ImageTk, ImageOps
 from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
 from importlib import resources
+from typing import Callable
 import matplotlib.colors
 import matplotlib.pyplot
 import matplotlib as mpl
 import tkinter as tk
+import random as rd
 import numpy as np
 import os
 
@@ -48,10 +53,16 @@ class CustomToolbar(NavigationToolbar2Tk):
         icon_dir: Directions to matplotlib icons.
         custom_img: Custom icons saved.
 
+    Private Attributes:
+        _org_zoom: Original 'zoom' function used to connect with other toolbars.
+        _org_pan: Original 'pan' function used to connect with other toolbars.
+
     Methods:
         config_colors: Configure the colors of the buttons and frame.
         select: Changes the style of the button when selected.
         deselect: Changes the style of the button when deselect.
+        run_zoom: Function responsible for executing 'zoom' on all toolbars.
+        run_pan: Function responsible for executing 'pan' on all toolbars.
     """
 
     toolitems = (
@@ -75,7 +86,8 @@ class CustomToolbar(NavigationToolbar2Tk):
 
     def __init__(self, canvas:FigureCanvasTkAgg, window:tk.Tk, 
                  color_btn:str = '#000000', color_bg:str = 'SystemButtonFace', 
-                 color_act:str = '#333333') -> None:
+                 color_act:str = '#333333', movement:bool = True, 
+                 link:bool = False) -> None:
         """
         __init__
 
@@ -87,7 +99,22 @@ class CustomToolbar(NavigationToolbar2Tk):
             color_btn (str, optional): Button color.
             color_bg (str, optional): Frame color.
             color_act (str, optional): Color of the sunken buttons.
+            movement (bool, optional): Enable user movement buttons.
+            link (bool, optional): If it is True, the toolbar connects 
+                to all other toolbars with a link; only the pan and 
+                zoom button is connected.
         """
+
+        if not movement:
+            self.toolitems = (
+                ('Home', 'Reset original view', 'home', 'home'),
+                (None, None, None, None),
+                ('Save', 'Save the figure', 'filesave', 'save_figure'),
+            )
+            self.icon_map = {
+                'Home': 'home.png',
+                'Save': 'filesave.png'
+            }
 
         super().__init__(canvas, window)
 
@@ -96,10 +123,48 @@ class CustomToolbar(NavigationToolbar2Tk):
         self.color_btn = color_btn
         self.color_bg = color_bg
 
+        self._org_zoom = super().zoom
+        self._org_pan = super().pan
+
         self.icon_dir = os.path.join(mpl.get_data_path(), "images")
 
         self.custom_img = {}
         self.config_colors()
+
+        if link and movement:
+            linked_toolbars = getattr(_cm, '__linked_toolbars')
+            linked_toolbars.append(self)
+
+            setattr(_cm, '__linked_toolbars', linked_toolbars)
+        else:
+            self.run_zoom = self._org_zoom
+            self.run_pan = self._org_pan
+
+    def run_zoom(self, *args):
+        """
+        Run zoom
+
+        Execute '_org_zoom' in '__linked_toolbars'.
+        """
+
+        for i in getattr(_cm, '__linked_toolbars'):
+            i._org_zoom(*args)
+
+    def run_pan(self, *args):
+        """
+        Run pan
+
+        Execute '_org_pan' in '__linked_toolbars'.
+        """
+
+        for i in getattr(_cm, '__linked_toolbars'):
+            i._org_pan(*args)
+
+    def zoom(self, *args):
+        return self.run_zoom(*args)
+
+    def pan(self, *args):
+        return self.run_pan(*args)
 
     def config_colors(self) -> None:
         """
@@ -177,41 +242,53 @@ class CustomWin:
     Attributes:
         root: Tkinter window.
         icon: Window icon.
+        title: Window title, can be called.
         color_frame: Frames color.
         color_buttons: Buttons color.
         color_button_act: Color of the sunken buttons.
 
     Private Attributes:
-        _after_id: 'root.after' id used to avoid errors by not blocking the process.
+        _regen_title: If 'title' is callable, it is called again every 5s.
+        _after_id_lift: After id that lifts the window with 'lift'.
+        _main_after_id: 'root.after' id used to avoid errors by not blocking the process.
 
     Methods:
+        gen_title: Generate and put the title to the window.
         config_icon: Put the icon on the application and change its color.
         lift: Focus on the window and jump over the others.
         mpl_canvas: Put your matplotlib figure inside the window.
+        mpl_animation: Configure the window and run an animation.
         mpl_update: Updates the position of the toolbar and the canvas.
         mpl_toolbar: Put the matplotlib toolbar in the window.
+        mpl_toolbar_config: Configure the toolbar, but don't 
+            do this if you're going to use 'tk_panels'.
+        tk_panels: Generates 'PanedWindow' panels.
+        mpl_panels_config: Configure the panels.
         show: Show the window.
 
     Private Methods:
         _quit: Closes the window without errors.
     """
 
-    def __init__(self, title:str = 'BackPy interface', 
+    def __init__(self, title:str|Callable|None = 'BackPy interface', 
                  frame_color:str = 'SystemButtonFace', 
                  buttons_color:str = '#000000', 
                  button_act:str = '#333333', 
-                 geometry:str = '1200x600') -> None:
+                 geometry:str = '1200x600',
+                 regen_title:bool = True) -> None:
         """
         __init__
 
         Builder for initializing the class.
 
         Args:
-            title (str, optional): Window title.
+            title (str|Callable|None, optional): Window title.
             frame_color (str, optional): Color of the toolbar and other frames.
             buttons_color (str, optional): Button color.
             button_act (str, optional): Color of the sunken buttons.
             geometry (str, optional): Window geometry.
+            regen_title(bool, optional): If 'title' is callable, 
+                it is called again every 5s.
         """
 
         self.root = tk.Tk()
@@ -219,17 +296,48 @@ class CustomWin:
         self.root.config(bg=frame_color)
 
         self.icon = None
-        self._after_id = None
+        self.title = title if title else lambda: rd.choice(
+            _cm._random_titles if _cm._random_titles else ['BackPy'])
+
+        self._main_after_id = None
+        self._regen_title = regen_title
 
         self.color_frame = frame_color
         self.color_buttons = buttons_color
         self.color_button_act = button_act
 
         self.config_icon()
-        self.root.title(title)
+        self.gen_title(title=self.title)
         self._after_id_lift = self.root.after(100, self.lift)
+        self.root.minsize(int(self.root.winfo_screenwidth()*0.4), 
+                          int(self.root.winfo_screenheight()*0.4))
 
         self.root.protocol('WM_DELETE_WINDOW', self._quit)
+
+    def gen_title(self, title:str|Callable|None = None):
+        """
+        Gen title
+
+        Add a title to the window.
+        It is generated if title is callable.
+
+        Args:
+            title (str|Callable|None, optional): Title.
+        """
+
+        try:
+            if self.title_after:
+                self.root.after_cancel(self.title_after)
+                self.title_after = None
+        except AttributeError:
+            pass
+
+        if callable(title):
+            self.title_after = self.root.after(
+                10000, lambda: self.gen_title(self.title))
+            title = title()
+
+        self.root.title(title)
 
     def config_icon(self) -> None:
         """
@@ -275,44 +383,262 @@ class CustomWin:
         Closes the window without errors.
         """
 
-        if self._after_id:
-            self.root.after_cancel(self._after_id)
-            self._after_id = None
+        if self._main_after_id:
+            self.root.after_cancel(self._main_after_id)
+            self._main_after_id = None
         if self._after_id_lift:
-            self.root.after_cancel(self._after_id)
+            self.root.after_cancel(self._after_id_lift)
             self._after_id_lift = None
 
         if self.root.winfo_exists():
             self.root.destroy()
 
-    def mpl_canvas(self, fig:Figure) -> FigureCanvasTkAgg:
+    def mpl_canvas(self, fig:Figure, 
+                   master:tk.PanedWindow|None = None) -> FigureCanvasTkAgg:
         """
-        Matplotlib canvas.
+        Matplotlib canvas
 
         Put your matplotlib figure inside the window.
 
         Args:
             fig (Figure): Figure from matplotlib.
+            master (PanedWindow|None, optional): Where the canvas is drawn.
 
         Returns:
             FigureCanvasTkAgg: Resulting canvas figure.
         """
 
-        canvas = FigureCanvasTkAgg(fig, master=self.root)
-        canvas.draw()
-        canvas.get_tk_widget().place(relx=0, rely=0, relwidth=1, relheight=1)
+        master = master or self.root
+
+        canvas = FigureCanvasTkAgg(fig, master=master)
+        widget = canvas.get_tk_widget()
+        widget.config(bg=self.color_button_act)
+        widget.place(x=0, y=0, relwidth=1, relheight=1)
+
+        if isinstance(master, tk.PanedWindow):
+            master.add(canvas.get_tk_widget(), minsize=100)
+
+        last_size = ()
+        _in_rdraw = False
+        re_draw = canvas.draw
+        _resize_after_id = None
+
+        def on_redraw(call_rdraw:bool = True) -> None:
+            """
+            On redraw
+
+            Redraws the canvas and resets the method to the original 'canvas.draw'.
+
+            Args:
+                call_rdraw (bool, optioanl): It's called 'canvas.draw' when redefining the function.
+            """
+
+            try:
+                if call_rdraw:
+                    re_draw()
+                canvas.draw = re_draw
+                setattr(_cm, '__anim_run', True)
+            except AttributeError:
+                self.root.after(1000, on_redraw)
+
+        def on_resize(event:tk.Event|None = None) -> None:
+            """
+            On resize
+    
+            Does a '.after' to the redraw and modifies the 'canvas.draw' method.
+
+            If the event size does not change, nothing is done.
+
+            Args:
+                event (Event | None, optional): Event.
+            """
+            nonlocal _resize_after_id, _in_rdraw, last_size
+
+            setattr(_cm, '__anim_run', False)
+            canvas.draw = lambda: None
+
+            if _resize_after_id is not None:
+                widget.after_cancel(_resize_after_id)
+
+            def before_redraw() -> None:
+                """
+                Before redraw
+
+                Before calling 'on_redraw', the variable '_in_rdraw' is set to False.
+                """
+                nonlocal _in_rdraw
+
+                _in_rdraw = False
+                on_redraw()
+
+            func = before_redraw
+            size = ()
+
+            if (event and (size:=(event.width, event.height)) == last_size 
+                and not _in_rdraw):
+
+                func = lambda: on_redraw(call_rdraw=False)
+            last_size = size
+
+            _resize_after_id = _in_rdraw = widget.after(400, func)
+
+        last_pos = (0,0)
+        last_state = 'normal'
+        _state_after_id = None
+        _anim_run_after_id = None
+
+        def on_state(event:tk.Event|None = None) -> None:
+            """
+            On state
+    
+            If the window changes state it does a '.after' to redraw 
+                and modifies the 'canvas.draw' method.
+
+            Args:
+                event (Event | None, optional): Event.
+            """
+            nonlocal _anim_run_after_id, _state_after_id, _resize_after_id, last_state, last_pos
+
+            if _state_after_id is not None:
+                widget.after_cancel(_state_after_id)
+
+            def on_state_resize():
+                nonlocal last_state
+
+                last_state = 'normal'
+                on_redraw()
+
+            if self.root.state() == 'zoomed':
+                last_state = 'zoomed'
+            elif self.root.state() == 'normal' and last_state == 'zoomed':
+                canvas.draw = lambda: None
+                setattr(_cm, '__anim_run', False)
+
+                widget.after_cancel(_resize_after_id)
+                _state_after_id = widget.after(400, on_state_resize)
+
+            pos = (self.root.winfo_x(), self.root.winfo_y())
+            if last_pos != pos:
+                last_pos = pos
+
+                if _anim_run_after_id is not None:
+                    widget.after_cancel(_anim_run_after_id)
+
+                setattr(_cm, '__anim_run', False)
+                _anim_run_after_id = self.root.after(400, lambda: setattr(_cm, '__anim_run', True))
+
+        def on_click(event:tk.Event|None = None) -> None:
+            """
+            On click
+    
+            Cancel '_anim_run_after_id' and change the state of '__anim_run' to False.
+
+            Args:
+                event (Event | None, optional): Event.
+            """
+            nonlocal _anim_run_after_id
+
+            if _anim_run_after_id is not None:
+                widget.after_cancel(_anim_run_after_id)
+
+            setattr(_cm, '__anim_run', False)
+
+        def on_unclick(event:tk.Event|None = None) -> None:
+            """
+            On unclick
+    
+            When you stop hold the canvas, '__anim_run' is changed to True.
+
+            Args:
+                event (Event | None, optional): Event.
+            """
+            nonlocal _anim_run_after_id
+
+            _anim_run_after_id = self.root.after(400, lambda: setattr(_cm, '__anim_run', True))
+
+        widget.bind('<Button-1>', on_click, add='+')
+        widget.bind('<Button-3>', on_click, add='+')
+        widget.bind('<ButtonRelease-1>', on_unclick, add='+')
+        widget.bind('<ButtonRelease-3>', on_unclick, add='+')
+    
+        widget.bind('<Configure>', on_resize, add='+')
+        self.root.bind('<Configure>', on_state, add='+')
 
         return canvas
 
-    def mpl_update(self, canvas:FigureCanvasTkAgg, toolbar:CustomToolbar, 
+    def mpl_animation(self, anim:FuncAnimation, mpl_canvas:FigureCanvasTkAgg, 
+                      interval:int = 100) -> None:
+        """
+        Matplotlib animation
+
+        Configure the window and run the animation.
+
+        Args:
+            anim (FuncAnimation): Matplotlib animation.
+            mpl_canvas: Canvas figure.
+            interval (int, optional): interval between frames, minimum 100 to prevent 
+                the window from blocking when moving it, if that happens increase the interval.
+        """
+
+        if anim.event_source:
+            anim.event_source.stop()
+
+        def on_anim() -> None:
+            """
+            On animation
+
+            Update the animation without blocking the thread.
+            """
+            nonlocal anim_after_id
+
+            if not self.root.winfo_exists():
+                return
+
+            if (self.root.winfo_ismapped()
+                and getattr(mpl_canvas.draw, "__func__", None) 
+                    is type(mpl_canvas).draw
+                and getattr(_cm, '__anim_run')):
+                try:
+                    frame = next(anim.frame_seq)
+                    anim._draw_next_frame(frame, anim._blit)
+                except:
+                    pass
+
+            anim_after_id = self.root.after(
+                interval if interval >= 100 else 100, on_anim)
+
+        anim_after_id = self.root.after(1000, on_anim)
+        last_pos = (0,0)
+
+        def on_resize(event:tk.Event) -> None:
+            """
+            On resize
+    
+            If the window moves, the after that 
+                generates the next frame will be canceled.
+
+            Args:
+                event (Event): Tkinter event.
+            """
+            nonlocal anim_after_id, last_pos
+
+            pos = (self.root.winfo_x(), self.root.winfo_y())
+            if last_pos != pos:
+                last_pos = pos
+
+                self.root.after_cancel(anim_after_id)
+                anim_after_id = self.root.after(400, on_anim)
+        self.root.bind('<Configure>', on_resize, add='+')
+
+    def mpl_update(self, canvas:tk.Canvas, toolbar:CustomToolbar, 
                    height:int = 32, mpl_place:bool = True) -> None:
         """
-        Matplotlib update.
+        Matplotlib update
 
         Updates the position of the toolbar and the canvas.
 
         Args:
-            canvas (FigureCanvasTkAgg): Canvas figure.
+            canvas (Canvas): Tkinter canvas.
             toolbar (CustomToolbar): Toolbar object.
             height (int, optional): Toolbar height in pixels.
             mpl_place (bool, optional): If you want 'mpl_canvas' not to change shape, 
@@ -323,37 +649,201 @@ class CustomWin:
         toolbar.place(relx=0, rely=1-final_height, relwidth=1, relheight=final_height)
 
         if mpl_place:
-            canvas.get_tk_widget().place(relx=0, rely=0, relwidth=1, relheight=1-final_height)
+            canvas.place(relx=0, rely=0, relwidth=1, relheight=1-final_height)
 
-    def mpl_toolbar(self, mpl_canvas:FigureCanvasTkAgg, 
-                    height:int = 32, mpl_place:bool = True) -> CustomToolbar:
+    def mpl_toolbar(self, mpl_canvas:FigureCanvasTkAgg,
+                    movement:bool = True, link:bool = False) -> CustomToolbar:
         """
-        Matplotlib toolbar.
+        Matplotlib toolbar
 
         Put the matplotlib toolbar in the window.
 
+        If you are going to use a single toolbar, 
+            run the 'mpl_toolbar_config' function before 'show'.
+        If you use 'tk_panels', do not run 'mpl_toolbar_config'.
+
         Args:
             mpl_canvas (FigureCanvasTkAgg): Canvas figure.
-            height (int, optional): Toolbar height in pixels.
-            mpl_place (bool, optional): If you want 'mpl_canvas' not to change shape, 
-                leave it set to False.
+            movement (bool, optional): Activate the movement buttons.
+            link (bool, optional): If it is True, the toolbar connects 
+                to all other toolbars with a link; only the pan and 
+                zoom button is connected.
 
         Returns:
             CustomToolbar: Toolbar.
         """
 
         toolbar = CustomToolbar(mpl_canvas, self.root, color_btn=self.color_buttons, 
-                                color_bg=self.color_frame, color_act=self.color_button_act)
+                                color_bg=self.color_frame, color_act=self.color_button_act,
+                                movement=movement, link=link)
         toolbar.config(bg=self.color_frame)
-        self.mpl_update(mpl_canvas, toolbar, height=height, mpl_place=mpl_place)
-
-        self.root.bind("<Configure>", 
-                       lambda x: self.mpl_update(mpl_canvas, 
-                                                toolbar, 
-                                                height=height, 
-                                                mpl_place=mpl_place))
 
         return toolbar
+
+    def mpl_toolbar_config(self, toolbar:CustomToolbar, mpl_canvas:FigureCanvasTkAgg, 
+                           height:int = 32, mpl_place:bool = True) -> None:
+        """
+        Matplotlib toolbar config
+
+        Configure the height and update of the toolbar.
+
+        If you use 'tk_panels', do not run this.
+
+        Args:
+            mpl_canvas (FigureCanvasTkAgg): Canvas figure.
+            height (int, optional): Toolbar height in pixels.
+            mpl_place (bool, optional): If you want 'mpl_canvas' not to change shape, 
+                leave it set to False.
+        """
+
+        self.toolbar_config = True
+        self.mpl_update(mpl_canvas.get_tk_widget(), toolbar, 
+                        height=height, mpl_place=mpl_place)
+
+        self.root.bind('<Configure>', 
+                       lambda x: self.mpl_update(mpl_canvas.get_tk_widget(), 
+                                                toolbar, 
+                                                height=height, 
+                                                mpl_place=mpl_place), add=['+'])
+
+    def tk_panels(self, minsize:int = 200) -> None:
+        """
+        Tkinter panels
+    
+        Create attributes with PanedWindows
+        Run 'mpl_panels_config' to configure.
+
+        Args:
+            minsize (int, optional): Minimum size per panel.
+
+        Attributes created:
+            main_frame: Frame with the panels.
+            main_pane: Panel in frame.
+            left_pane: Panel in main panel.
+            right_pane: Panel in main panel.
+
+        To use the panels correctly, put 2 canvases in 'left_pane' and 'right_pane'.
+        """
+
+        self.main_frame = tk.Frame(self.root, background=self.color_frame)
+        self.main_frame.place(x=0, y=0, relwidth=1, relheight=1)
+
+        self.main_pane = tk.PanedWindow(self.main_frame, orient=tk.HORIZONTAL, 
+                                        border=0, sashwidth=3)
+        self.left_pane = tk.PanedWindow(self.main_pane, orient=tk.VERTICAL, 
+                                        border=0, sashwidth=3)
+        self.right_pane = tk.PanedWindow(self.main_pane, orient=tk.VERTICAL, 
+                                         border=0, sashwidth=3)
+
+        self.main_pane.pack(fill="both", expand=True)
+        self.main_pane.add(self.left_pane)
+        self.main_pane.add(self.right_pane)
+
+        self.main_pane.add(self.left_pane, minsize=minsize)
+        self.main_pane.add(self.right_pane, minsize=minsize)
+        self.root.update_idletasks()
+
+    def mpl_panels_config(self, canvases:dict, titles:list = [], 
+                          height:int = 32, alert:bool = True) -> None:
+        """
+        Matplotlib panels config
+
+        Configure the panels, canvas, and toolbars for the panels.
+
+        Args:
+            canvases (dict): Dictionary where each key must be the 
+                matplotlib canvas and the value the toolbar; if you 
+                don't want a toolbar you can put None
+            titles (list, optional): Title of each panel, leave 
+                list empty if you don't want titles.
+            height (int, optional): Toolbar height in pixels.
+            alert (bool, optional): If a toolbar is configured 
+                with the same instance, an alert is generated.
+        """
+
+        # Exceptions
+        if titles and len(titles) != len(canvases):
+            raise exception.CustomWinError(
+                "'titles' can only be empty or the same size as 'canvases'.")
+
+        try:
+            if self.toolbar_config and alert:
+                print(utils.text_fix("""
+                    In this instance a toolbar was configured, 
+                    if so you will have visual problems with the panels, 
+                    if you want to disable this alert set the 'alert' argument to False.
+                """))
+        except AttributeError:
+            pass
+
+        title_after = None
+        act_canvas = list(canvases.keys())[-1]
+        def active_canvas(canvas:FigureCanvasTkAgg, graph_n:int) -> None:
+            """
+            Active canvas
+
+            Change canvas focus.
+            Hide the toolbar and place the new one.
+
+            Args:
+                canvas (FigureCanvasTkAgg): Focused canvas.
+                graph_n (int): Graph number.
+            """
+            nonlocal act_canvas, title_after
+
+            if act_canvas != canvas:
+                if canvases[act_canvas]:
+                    canvases[act_canvas].place_forget()
+                    canvases[act_canvas].pack_forget()
+
+                if canvases[canvas]:
+                    final_height = 32/self.root.winfo_height()
+                    canvases[canvas].place(relx=0, rely=1-final_height, relwidth=1, relheight=final_height)
+                act_canvas = canvas
+
+            if titles:
+                if title_after:
+                    self.root.after_cancel(title_after)
+                
+                self.gen_title(titles[graph_n-1])
+                title_after = self.root.after(5000, lambda: self.gen_title(self.title))
+
+        def toolbar_update(height:int) -> None:
+            """
+            Toolbar update
+
+            Update the space for the toolbar.
+
+            Args:
+                height (int): Toolbar height in pixels.
+            """
+
+            final_height = height/self.root.winfo_height()
+            if canvases[act_canvas] and canvases[act_canvas].winfo_manager():
+                canvases[act_canvas].place(relx=0, rely=1-final_height, 
+                                           relwidth=1, relheight=final_height)
+
+            self.main_frame.place(relx=0, rely=0, relwidth=1, relheight=1-final_height)
+
+        for i, (key, value) in enumerate(canvases.items()):
+            if value and key != act_canvas:
+                value.place_forget()
+                value.pack_forget()
+
+            graph_n = i + 1
+            key.get_tk_widget().bind(
+                "<Button-1>", lambda e, c=key, n=graph_n: active_canvas(c, n), add='+')
+            key.get_tk_widget().bind(
+                "<Button-3>", lambda e, c=key, n=graph_n: active_canvas(c, n), add='+')
+
+        self.root.bind(
+            '<Configure>', lambda x: toolbar_update(height=height), add=['+'])
+        try:
+            self.main_pane.sash_place(0, int(self.root.winfo_width() * 0.5), 0)
+            self.left_pane.sash_place(0, 0, int(self.root.winfo_height() * 0.5))
+            self.right_pane.sash_place(0, 0, int(self.root.winfo_height() * 0.5))
+        except tk.TclError:
+            pass
 
     def show(self, block:bool = True) -> None:
         """
@@ -375,7 +865,7 @@ class CustomWin:
             if not self.root.winfo_exists():
                 return
 
-            self._after_id = self.root.after(50, lambda: self.show(block=False))
+            self._main_after_id = self.root.after(50, lambda: self.show(block=False))
 
 def def_style(name:str, 
               background:str | tuple[str, ...] | list[str] = '#e5e5e5', 
@@ -555,3 +1045,125 @@ def ax_view(view:str, graphics:list[str],
         ))
 
     return axes, view
+
+def new_paneledw(block:bool, style:dict = {}) -> None:
+    """
+    New paneled window
+
+    Generate a window with panels using 'CustomWin'.
+
+    To add a canvas, add a dictionary to the '__panel_list' list with these values:
+        fig: Matplotlib Figure.
+        title: Panel title.
+        anim: Matplotlib FuncAnimation.
+        interval: Only necessary if have an animation.
+        toolbar: None, 'total' or 'limited'.
+    All except fig can be None.
+
+    Args:
+        block (bool): If True, the window with the loaded panels will be displayed.
+        style (dict, optional): Style used with 'fr', 'btn' and 'btna'.
+    """
+
+    # Exceptions
+    if len(_cm.__panel_list) > 4:
+        raise exception.CustomWinError("Maximum 4 panels")
+
+    if len(_cm.__panel_list) != _cm.__panel_wmax and not block:
+        return
+
+    window = CustomWin(
+        title=_cm.__panel_list[-1].get('title', None) if len(_cm.__panel_list) == 1 else None,
+        frame_color=style.get('fr', 'SystemButtonFace'),
+        buttons_color=style.get('btn', '#000000'),
+        button_act=style.get('btna', '#333333'))
+
+    window.tk_panels()
+    if len(_cm.__panel_list) == 1:
+        panels = [window.main_frame]
+    else:
+        panels = [window.left_pane, window.right_pane, 
+                window.left_pane, window.right_pane]
+
+    titles = []
+    canvases = {}
+
+    for i,panel_dict in enumerate(_cm.__panel_list):
+        titles.append(panel_dict.get('title', None))
+        mpl_canvas = window.mpl_canvas(fig=panel_dict['fig'], master=panels[i])
+
+        if (anim:=panel_dict.get('anim', None)):
+            window.mpl_animation(anim=anim, mpl_canvas=mpl_canvas, 
+                                 interval=panel_dict.get('interval', 100))
+  
+        toolbar = None
+        if panel_dict.get('toolbar', None):
+            toolbar = window.mpl_toolbar(mpl_canvas=mpl_canvas, 
+                                         movement=False 
+                                            if panel_dict.get('toolbar', 'limited') == 'limited' 
+                                            else True,
+                                         link=True)
+
+        canvases[mpl_canvas] = toolbar
+    _cm.__panel_list = _cm.__panel_list[:-_cm.__panel_wmax]
+
+    window.mpl_panels_config(canvases=canvases, titles=titles)
+    window.show(block=block)
+
+def add_window(fig:Figure, title:str|Callable|None = None, block:bool = True, 
+              anim:FuncAnimation|None = None, interval:int|None = None, 
+              style:dict|None = None, toolbar:str|None = 'total', 
+              new:bool = True) -> None:
+    """
+    Add window
+
+    Add a tkinter window with 'CustomWin'.
+
+    Args:
+        fig (Figure): Matplotlib Figure.
+        title (str|Callable|None, optional): Window/panel title.
+        block (bool, optional): Lock the thread and create 
+            the window with the panels.
+        anim (FuncAnimation|None, optional): Matplotlib FuncAnimation.
+        interval (int|None, optional): Animation interval, 
+            only necessary if there is an animation.
+        style (dict|None, optional): Style to use with 'fr', 'btn' and 'btna'.
+        toolbar (str|None): None, 'total' or 'limited'.
+        new (bool): Create a new window or add it as a panel. True = create new.
+    """
+
+    new = False
+    style = style or {}
+
+    if not new:
+        if anim and anim.event_source: 
+            anim.event_source.stop()
+
+        _cm.__panel_list.append({
+            'fig':fig,
+            'title':title,
+            'anim':anim,
+            'interval':interval,
+            'toolbar':toolbar,
+        })
+
+        mpl.pyplot.close(fig)
+        new_paneledw(block=block, style=style)
+    else:
+        window = CustomWin(
+            title=title,
+            frame_color=style.get('fr', 'SystemButtonFace'),
+            buttons_color=style.get('btn', '#000000'),
+            button_act=style.get('btna', '#333333'))
+
+        mpl_canvas = window.mpl_canvas(fig=fig)
+        mpl.pyplot.close(fig)
+
+        if anim:
+            window.mpl_animation(anim=anim, mpl_canvas=mpl_canvas, interval=interval|100)
+        if toolbar:
+            toolbar = window.mpl_toolbar(
+                mpl_canvas=mpl_canvas, movement=False if toolbar == 'limited' else True)
+            window.mpl_toolbar_config(toolbar=toolbar, mpl_canvas=mpl_canvas)
+
+        window.show(block=block)

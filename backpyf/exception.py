@@ -31,3 +31,5 @@ class UidcError(Exception):pass
 class StyleError(Exception):pass
 
 class OrderError(Exception):pass
+
+class CustomWinError(Exception):pass

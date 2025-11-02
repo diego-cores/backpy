@@ -13,6 +13,7 @@ Functions:
     save_data_bpd: Saves 'data' to a '.bpd' file.
     run_config: Configure the module to execute the strategy as you prefer.
     run: Executes the backtesting process.
+    run_animation: Run an animation with your strategy and data.
     plot: Plots your data, highlighting the trades made.
     plot_strategy: Plots statistics for your strategy.
     plot_strategy_decorator: Decorator function for the 'plot_strategy_add' function.
@@ -24,9 +25,12 @@ Hidden Functions:
     __load_binance_data: Load data from Binance using a client.
 """
 
+from matplotlib.axes._axes import Axes
+
 from datetime import datetime
 from typing import Any
 
+import matplotlib.animation
 import matplotlib.pyplot
 import matplotlib as mpl
 
@@ -568,8 +572,8 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
     _cm.__spread_pct = flx.CostsValue(spread, cust_error="Error of 'spread'.")
     _cm.__chunk_size = chunk_size or None
 
-def run(cls:type, name:str|None = None, prnt:bool = True, 
-        progress:bool = True) -> str | None:
+def run(cls:type|list[type], name:str|None = None, prnt:bool = True, 
+        progress:bool = True, trades_r:bool = False) -> str | None:
     """
     Run
 
@@ -580,13 +584,14 @@ def run(cls:type, name:str|None = None, prnt:bool = True,
         function as expected.
 
     Args:
-        cls (type): A class inherited from `StrategyClass` where the strategy is 
-                    implemented.
+        cls (type|list[type]): A class inherited from `StrategyClass` where the strategy is implemented.
         name (str|None, optional): Backtest name, None = cls.__name__, 
             if the name is duplicated a number will be added at the end.
         prnt (bool, optional): If True, prints trade statistics. If False, returns a string 
                     with the statistics. Default is True.
         progress (bool, optional): If True, shows a progress bar and timer. Default is True.
+        trades_r (bool, optional): If True, the dictionary with the backtest 
+            data is returned and will not be saved.
 
     Returns:
         str|None: Statistics.
@@ -594,20 +599,26 @@ def run(cls:type, name:str|None = None, prnt:bool = True,
     # Exceptions.
     if _cm.__data is None: 
         raise exception.RunError('Data not loaded.')
-    elif not issubclass(cls, strategy.StrategyClass):
-        raise exception.RunError(
-            f"'{cls.__name__}' is not a subclass of 'strategy.StrategyClass'.")
-    elif cls.__abstractmethods__:
-        raise exception.RunError(
-            "The implementation of the 'next' abstract method is missing.")
+    elif not type(cls) in (tuple, list):
+        cls = [cls]
+
+    instances = []
+    for st in cls:
+        if not issubclass(st, strategy.StrategyClass):
+            raise exception.RunError(
+                f"'{st.__name__}' is not a subclass of 'strategy.StrategyClass'.")
+        elif st.__abstractmethods__:
+            raise exception.RunError(
+                "The implementation of the 'next' abstract method is missing.")
+
+        instances.append(st(data=_cm.__data))
 
     # Corrections.
     _cm.__data.index = utils.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index, True)
 
-    instance = cls(data=_cm.__data)
     t = time()
-    
+    balance_rec = []
     step_t = time()
     step_history = np.zeros(10)
     steph_index = 0
@@ -642,39 +653,257 @@ def run(cls:type, name:str|None = None, prnt:bool = True,
             utils.load_bar(size=_cm.__data.shape[0], step=f, text=text) 
         step_t = time()
 
-        instance._StrategyClass__before(index=f)
+        for i in instances:
+            i._StrategyClass__before(index=f, balance=balance_rec)
+            if len(balance_rec) == f:
+                balance_rec[f-1] = i._StrategyClass__balance
+            else:
+                balance_rec.append(i._StrategyClass__balance)
     if progress or _cm.run_timer:
         print(
             f'RunTimer: {utils.num_align(time()-t)}'
             if _cm.run_timer and not progress else '') 
 
-    act_trades = pd.DataFrame(
-        instance._StrategyClass__positions).dropna(axis=1, how='all')
+    positions_list = None
+    positions_open_list = []
+    for i in instances:
+        positions_open_list.extend(i._StrategyClass__positions)
 
-    trades = pd.DataFrame(
-        instance._StrategyClass__pos_record[
-            :instance._StrategyClass__pos_record._pos]
-    ).dropna(axis=1, how='all')
-    
+        if not positions_list is None:
+            positions_list = np.concatenate((positions_list, i._StrategyClass__pos_record[
+                :i._StrategyClass__pos_record._pos]))
+        else:
+            positions_list = np.array(i._StrategyClass__pos_record[
+                :i._StrategyClass__pos_record._pos])
+
+    act_trades = pd.DataFrame(positions_open_list).dropna(axis=1, how='all')
+    trades = pd.DataFrame(positions_list).dropna(axis=1, how='all')
+
     if not act_trades.empty: 
         trades = pd.concat([trades, act_trades], ignore_index=True)
 
-    _cm.__backtests.append({
-        'name':_cm.__gen_fname(name or cls.__name__), 
+    backtest = {
+        'name':_cm.__gen_fname(name or cls[0].__name__, _cm.__backtests), 
         'trades':trades, 
+        'balance_rec':pd.Series(balance_rec, index=_cm.__data.index),
         'init_funds':_cm.__init_funds,
         'd_year_days':_cm.__data_year_days,
         'd_width_day':_cm.__data_width_day,
         'd_width':_cm.__data_width
-    })
+    }
+
+    if trades_r:
+        return backtest
+    elif not trades.empty:
+        _cm.__backtests.append(backtest)
 
     try: 
         return stats_trades(prnt=prnt)
     except: pass
 
-def plot(log:bool = False, progress:bool = True, 
-         name:list[str|int|None]|str|int|None = None,
-         position:str = 'complex', style:str | None = 'last',
+def run_animation(cls:type, candles:int = 100, interval:int = 100, 
+                  operation_route:bool | None = True, pad:bool = False,
+                  panel:str = 'new', style:str | None = 'last', 
+                  style_c:dict | None = None, block:bool = True) -> None:
+    """
+    Run animation
+
+    Run an animation with your strategy and data.
+
+    All color styles:
+        Documentation of this in the 'plot' docstring.
+
+    Args:
+        cls (type): A class inherited from `StrategyClass` where the strategy is implemented.
+        candles (int, optional): Number of candles the animation will have.
+        interval (int, optional): Delay between frames in milliseconds. Only greater or equal than 100.
+        operation_route (bool | None, optional): True draws the entire operation, 
+            False only draws open/close, and None draws the entire position 
+            except the colored rectangle.
+        pad (bool, optional): If it is True, a pad is added to the right 
+            and the end of the candles is more in the center.
+        panel (str, optional): To create a new window or add a panel, 
+            only 'new' or 'add' are possible.
+        style (str | None, optional): Color style. 
+            If you leave it as 'last' the last one will be used.
+        style_c (dict | None, optional): Customize the defined style by 
+            modifying the dictionary. To know what to modify, 
+            read the docstring of 'def_style'.
+        block (bool, optional): If True, pauses script execution until all 
+            figure windows are closed. If False, the script continues running 
+            after displaying the figures. Default is True.
+    """
+    # Exceptions.
+    panel = panel.lower()
+
+    if _cm.__data is None: 
+        raise exception.RunError('Data not loaded.')
+    elif panel not in ('new', 'add'):
+        raise exception.RunError(
+            f"'{panel}' Not a valid option for: 'panel'.")
+    elif not issubclass(cls, strategy.StrategyClass):
+        raise exception.RunError(
+            f"'{cls.__name__}' is not a subclass of 'strategy.StrategyClass'.")
+    elif cls.__abstractmethods__:
+        raise exception.RunError(
+            "The implementation of the 'next' abstract method is missing.")
+    elif (not style is None and not (style:=style.lower()) 
+          in ('random', 'last', *_cm.__plt_styles.keys())):
+        raise exception.PlotError(f"'{style}' Not a style.")
+    elif interval < 100:
+        raise exception.PlotError(f"'interval' it can only be greater or equal than 100.")
+
+    # Corrections.
+    _cm.__data.index = utils.correct_index(_cm.__data.index)
+    _cm.__data_width = utils.calc_width(_cm.__data.index, True)
+
+    if style == 'last':
+        style = _cm.plt_style
+    if style is None:
+        style = list(_cm.__plt_styles.keys())[0]
+    elif style == 'random':
+        style = rd.choice(list(_cm.__plt_styles.keys()))
+
+    plt_colors = _cm.__plt_styles[style]
+    _cm.plt_style = style
+
+    if isinstance(style_c, dict):
+        plt_colors.update(style_c)
+
+    instance = cls(data=_cm.__data)
+    fig = mpl.pyplot.figure(figsize=(16,8))
+    ax1 = mpl.pyplot.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
+    ax2 = mpl.pyplot.subplot2grid((6,1), (5,0), rowspan=1, 
+                                  colspan=1, sharex=ax1)
+
+    gdir = plt_colors.get('gdir', False)
+    cpl.custom_ax(ax1, plt_colors['bg'], edge=gdir)
+    cpl.custom_ax(ax2, plt_colors['bg'], edge=gdir)
+
+    market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
+
+    # Init.
+    f = 0
+    utils.plot_candles(ax1, _cm.__data.iloc[[f]], _cm.__data_width*0.9,
+                       color_up=market_colors.get('u', 'g'),
+                       color_down=market_colors.get('d', 'r'))
+    utils.plot_volume(ax2, _cm.__data.iloc[[f]]['volume'], _cm.__data_width, 
+                      color=plt_colors.get('vol', 'tab:orange'))
+    instance._StrategyClass__before(index=f)
+    trades_last = pd.DataFrame(
+        instance._StrategyClass__positions).dropna(axis=1, how='all')
+
+    def update(_):
+        """
+        Update
+
+        Update animation.
+        """
+
+        nonlocal f, trades_last, pad
+
+        if f+1 >= len(_cm.__data):
+            return
+
+        f += 1
+        if (l:=f-candles) <= 0: l = 0
+
+        utils.plot_candles(ax1, _cm.__data.iloc[[f]], _cm.__data_width*0.9,
+                        color_up=market_colors.get('u', 'g'),
+                        color_down=market_colors.get('d', 'r'))
+        utils.plot_volume(ax2, _cm.__data.iloc[[f]]['volume'], _cm.__data_width, 
+                      color=plt_colors.get('vol', 'tab:orange'))
+        instance._StrategyClass__before(index=f)
+
+        act_trades = pd.DataFrame(
+            instance._StrategyClass__positions).dropna(axis=1, how='all')
+        trades = pd.DataFrame(
+            instance._StrategyClass__pos_record[
+                :instance._StrategyClass__pos_record._pos]
+        ).dropna(axis=1, how='all')
+        
+        if not act_trades.empty: 
+            trades = pd.concat([trades, act_trades], ignore_index=True)
+
+
+        dupl_trades = pd.concat([trades, trades_last]).drop_duplicates(keep=False)
+        trades_mask = trades.apply(tuple, axis=1).isin(dupl_trades.apply(tuple, axis=1))
+        trades_uniq = trades[trades_mask].copy()
+        trades_last = pd.concat([trades, trades_last]).drop_duplicates()
+
+        if not trades_uniq.empty:
+            utils.plot_position(trades_uniq, ax1, 
+                            color_take=market_colors.get('u', 'g'),
+                            color_stop=market_colors.get('d', 'r'),
+                            operation_route=operation_route, alpha=0.3, 
+                            alpha_arrow=0.8)
+
+        pad_l = (abs(_cm.__data.index[l:f][-1]-_cm.__data.index[l:f][0])/2 if pad else 0)
+        ax1.set_ylim(_cm.__data.iloc[l:f]['low'].min()*0.99,
+                     _cm.__data.iloc[l:f]['high'].max()*1.01,)
+        ax1.set_xlim(_cm.__data.index[l:f][0]-_cm.__data_width*(candles*0.03), 
+                    _cm.__data.index[l:f][-1]+_cm.__data_width*2*(candles*0.03)+pad_l)
+        ax2.set_ylim(None, _cm.__data.iloc[l:f]['volume'].max()*1.1 or 1)
+
+        def axes_xlim(ax:Axes) -> None:
+            """
+            Axes xlim
+
+            Delete: 'LineCollection', 'PatchCollection' and 'PathCollection'
+                if x value is less than 'data.index[l:f][0]-data_width/2'.
+
+            Args:
+                ax (Axes): Axis.
+            """
+
+            for coll in ax.collections:
+                if isinstance(coll, matplotlib.collections.LineCollection):
+                    segs = coll.get_segments()[0]
+                    xs = segs[0][0]
+                elif isinstance(coll, matplotlib.collections.PatchCollection):
+                    paths = coll.get_paths()[0]
+                    xs = np.max(paths.vertices[:, 0])
+                elif isinstance(coll, matplotlib.collections.PathCollection):
+                    xs = coll.get_offsets()[:, 0][0]
+                else:
+                    continue
+
+                if xs < _cm.__data.index[l:f][0]-_cm.__data_width/2:
+                    coll.remove()
+
+        axes_xlim(ax1); axes_xlim(ax2)
+
+    date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
+
+    ax2.yaxis.set_major_formatter(lambda y, _: y.real)
+    ax1.yaxis.set_major_formatter(lambda y, _: y.real)
+    ax1.xaxis.set_major_formatter(date_format)
+
+    ax1.tick_params(axis='x', labelbottom=False)
+    ax1.tick_params(axis='y', labelleft=False)
+
+    ax2.tick_params(axis='x', labelbottom=False)
+    ax2.tick_params(axis='y', labelleft=False)
+
+    fig.autofmt_xdate()
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0, hspace=0)
+
+    anim = mpl.animation.FuncAnimation(fig, update, frames=len(_cm.__data),
+                                       interval=interval, blit=False)
+
+    cpl.add_window(
+        fig=fig,
+        title=f'Run animation - {style}',
+        block=block,
+        anim=anim,
+        interval=interval,
+        style=plt_colors,
+        new=True if panel == 'new' else False,
+        toolbar='limited'
+    )
+
+def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int|None = None,
+         position:str = 'complex', panel:str = 'new', style:str | None = 'last',
          style_c:dict | None = None, block:bool = True) -> None:
     """
     Plot Graph with Trades.
@@ -704,6 +933,8 @@ def plot(log:bool = False, progress:bool = True,
             are 'complex' or 'simple'. If None or 'none', positions will not 
             be drawn. Default is 'complex'. The "complex" option may take longer 
             to process.
+        panel (str, optional): To create a new window or add a panel, 
+            only 'new' or 'add' are possible.
         style (str | None, optional): Color style. 
             If you leave it as 'last' the last one will be used.
         style_c (dict | None, optional): Customize the defined style by 
@@ -715,11 +946,16 @@ def plot(log:bool = False, progress:bool = True,
     """
 
     # Exceptions.
+    panel = panel.lower()
+
     if _cm.__data is None or not type(_cm.__data) is pd.DataFrame or _cm.__data.empty: 
         raise exception.PlotError('Data not loaded.')
     elif position and not position.lower() in ('complex', 'simple', 'none'):
         raise exception.PlotError(
             f"'{position}' Not a valid option for: 'position'.")
+    elif panel not in ('new', 'add'):
+        raise exception.PlotError(
+            f"'{panel}' Not a valid option for: 'panel'.")
     elif (not style is None and not (style:=style.lower()) 
           in ('random', 'last', *_cm.__plt_styles.keys())):
         raise exception.PlotError(f"'{style}' Not a style.")
@@ -774,7 +1010,7 @@ def plot(log:bool = False, progress:bool = True,
     utils.plot_volume(ax2, _cm.__data['volume'], _cm.__data_width, 
                       color=plt_colors.get('vol', 'tab:orange'))
 
-    if position and position.lower() != 'none' and len(_cm.get_names()) > 0:
+    if position and position.lower() != 'none' and len(_cm.get_backtest_names()) > 0:
 
         trades = _cm.__get_trades(name)
         if not trades.empty:
@@ -817,28 +1053,27 @@ def plot(log:bool = False, progress:bool = True,
         text = f'| PlotTimer: {utils.num_align(time()-t)} \n'
         utils.load_bar(size=4, step=4, text=text)
 
-    window = cpl.CustomWin(
-        f"Back testing: '{_cm.__data_icon}' {s_date}~{e_date} - {style}",
-        frame_color=plt_colors['fr'],
-        buttons_color=plt_colors['btn'],
-        button_act=plt_colors.get('btna', '#333333'))
-
-    mpl_canvas = window.mpl_canvas(fig=fig)
-    window.mpl_toolbar(mpl_canvas=mpl_canvas)
-
-    mpl.pyplot.close(fig)
-    window.show(block=block)
+    cpl.add_window(
+        fig=fig,
+        title=f"Back testing: '{_cm.__data_icon}' {s_date}~{e_date} - {style}",
+        block=block,
+        style=plt_colors,
+        new=True if panel == 'new' else False,
+        toolbar='total',
+    )
 
 def plot_strategy(name:list[str|int|None]|str|int|None = None, 
-                  log:bool = False, view:str = 'p/w/r/e',  
-                  custom_graph:dict = {}, style:str | None = 'last', 
-                  style_c:dict | None = None, block:bool = True) -> None:
+                  log:bool = False, view:str = 'b/w/r/e',  
+                  custom_graph:dict = {}, panel:str = 'new',
+                  style:str | None = 'last', style_c:dict | None = None, 
+                  block:bool = True) -> None:
     """
     Plot Strategy Statistics.
 
     Plots statistics for your strategy.
 
     Available Graphics:
+        - 'b' = Balance graph.
         - 'e' = Equity graph.
         - 'p' = Profit graph.
         - 'r' = Return graph.
@@ -854,12 +1089,14 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
         log (bool, optional): If True, plots data using a logarithmic scale. 
             Default is False.
         view (str, optional): Specifies which graphics to display. 
-            Default is 'p/w/r/e'. Maximum 8.
+            Default is 'b/w/r/e'. Maximum 8.
         custom_graph (dict, optional): Custom graph, a dictionary with 
             'name':'function' where the function will 
             be passed: 'ax', '_cm.__trades', '_cm.__data', 'log'.
             To avoid visual problems, I suggest using 
             'trades.index' as the x-axis or normalizing the axis.
+        panel (str, optional): To create a new window or add a panel, 
+            only 'new' or 'add' are possible.
         style (str | None, optional): Color style. 
             If you leave it as 'last' the last one will be used.
         style_c (dict | None, optional): Customize the defined style by 
@@ -876,6 +1113,8 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
     trades = _cm.__get_trades(name)
 
     # Exceptions.
+    panel = panel.lower()
+
     if trades.empty: 
         return 'Trades not loaded.'
     elif not 'profit' in trades.columns:  
@@ -883,6 +1122,9 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
     elif (not style is None and not (style:=style.lower()) 
           in ('random', 'last', *_cm.__plt_styles.keys())):
         raise exception.StatsError(f"'{style}' Not a style.")
+    elif panel not in ('new', 'add'):
+        raise exception.StatsError(
+            f"'{panel}' Not a valid option for: 'panel'.")
 
     if style == 'last':
         style = _cm.plt_style
@@ -909,7 +1151,7 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
     gdir = plt_colors.get('gdir', False)
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
 
-    graphics = ['p','w','r','e']
+    graphics = ['p','w','r','e','b']
     graphics.extend(list(_cm.__custom_plot.keys()))
 
     axes, view = cpl.ax_view(view=view, graphics=graphics)
@@ -934,9 +1176,19 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
                                           np.max(values)*1.05+comp)
 
         match v:
+            case 'b':
+                values = trades_data['balance_rec'].values
+                color = (market_colors.get('u', 'g') 
+                         if values[-1] > trades_data['init_funds']
+                         else market_colors.get('d', 'r'))
+                ax.plot(trades_data['balance_rec'].index, values, c=color, 
+                        label='Balance.', ds='steps-post')
+
+                ax.set_ylim(y_limit(values))
+                if log: ax.set_yscale('symlog')
             case 'p':
                 values = trades['profit'].cumsum()
-                color = (market_colors.get('u', 'g') if values.iloc[-2] > 0 
+                color = (market_colors.get('u', 'g') if sum(trades['profit']) > 0 
                          else market_colors.get('d', 'r'))
 
                 ax.plot(pos_date, values, c=color, 
@@ -959,7 +1211,8 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
                 if np.isinf(values).any():
                     values = pd.Series(0, index=values.index)
 
-                color = (market_colors.get('u', 'g') if values.iloc[-2] > 1 
+                color = (market_colors.get('u', 'g') 
+                         if (1 + trades['profitPer'] / 100).prod() > 1 
                          else market_colors.get('d', 'r'))
 
                 ax.plot(pos_date, values, c=color, 
@@ -971,7 +1224,7 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
                 if log: ax.set_yscale('symlog')
             case 'r':
                 values = trades['profitPer'].cumsum()
-                color = (market_colors.get('u', 'g') if values.iloc[-2] > 0 
+                color = (market_colors.get('u', 'g') if trades['profitPer'].sum() > 0 
                          else market_colors.get('d', 'r'))
 
                 ax.plot(pos_date, values, c=color, 
@@ -991,17 +1244,15 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
 
     mpl.pyplot.xticks([])
 
-    window = cpl.CustomWin(
-        f'Strategy statistics - {style}',
-        frame_color=plt_colors['fr'],
-        buttons_color=plt_colors['btn'],
-        button_act=plt_colors.get('btna', '#333333'))
-
-    mpl_canvas = window.mpl_canvas(fig=fig)
-    window.mpl_toolbar(mpl_canvas=mpl_canvas)
-
-    mpl.pyplot.close(fig)
-    window.show(block=block)
+    import random
+    cpl.add_window(
+        fig=fig,
+        title=f'Strategy statistics - {style}',
+        block=block,
+        style=plt_colors,
+        new=True if panel == 'new' else False,
+        toolbar='total'
+    )
 
 def plot_strategy_decorator(name:str) -> callable:
     """
@@ -1160,7 +1411,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
                 which indicates the variability in performance.
         - Math hope: The mathematical expectation (or expected value) of returns, 
                 calculated as (Win rate * Average win) - (Loss rate * Average loss).
-        - Math hope r: The relative mathematical expectation, 
+        - Math hope r: The mathematical expectation, 
                 calculated as (Win rate * Average ratio) - (Loss rate * 1).
         - Historical var: The Value at Risk (VaR) estimated using historical data, 
                 calculated as the profit at the (100 - confidence level) percentile.

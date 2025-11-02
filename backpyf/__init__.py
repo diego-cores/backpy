@@ -56,6 +56,7 @@ from .main import (
     load_binance_data_spot,
     load_yfinance_data, 
     plot_strategy_add,
+    run_animation,
     plot_strategy,
     load_data_bpd,
     save_data_bpd,
@@ -70,6 +71,7 @@ from .main import (
 from .stats import (
     monte_carlo_chart,
     monte_carlo_bsim,
+    perf_tzone_chart,
     get_drawdowns,
     max_drawdown,
     correlation
@@ -125,6 +127,7 @@ __all__ = [
     'monte_carlo_chart',
     'plot_strategy_add',
     'monte_carlo_bsim',
+    'perf_tzone_chart',
     'max_bar_updates',
     'StrategyClass',
     'idc_decorator',
@@ -132,6 +135,7 @@ __all__ = [
     'get_drawdowns',
     'load_data_bpd',
     'save_data_bpd',
+    'run_animation',
     'max_drawdown',
     'stats_trades',
     'ChunkWrapper',

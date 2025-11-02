@@ -96,14 +96,19 @@ class StrategyClass(ABC):
         close: 'close' values from `data`.
         volume: 'volume' values from `data`.
         date: Index list from `data`.
+        hour: Hour from 0 to 23 float value, based on '__day_width'.
         width: Data width from `__data_width`.
         icon: Data icon from `__data_icon`.
         interval: Data interval from `__data_interval`.
 
     Private Attributes:
+        __balance: Balance based on initial funds.
+        __balance_rec: List with all balances by date.
         __data: DataWrapper containing cuted data.
         __data_adf: DataFrame containing all data.
         __data_awr: DataWrapper containing all data.
+        __day_width: 1-day width of the index, calculated on an 
+            interval basis, global variable '__data_width_day'.
         __data_index: Index to cut data.
         __data_dates: DataWrapper with index of __data.
         __init_funds: Initial funds for the strategy.
@@ -124,6 +129,10 @@ class StrategyClass(ABC):
         __to_delate: Lists of indexes to remove from lists.
 
     Methods:
+        tz_london: Return True if its London time zone.
+        tz_tokyo: Return True if its Tokyo time zone.
+        tz_sydney: Return True if its Sydney time zone.
+        tz_new_york: Return True if its New York time zone.
         unique_id: Generates a random id quickly.
         act_taker: Open a position.
         act_limit: Open a limit order.
@@ -132,7 +141,9 @@ class StrategyClass(ABC):
         ord_rmv: Remove the order you want.
         ord_mod: Modify the order you want.
         get_spread: Get __spread_pct.
+        get_balance: Get actual balance.
         get_slippage: Get __slippage_pct.
+        get_balance_rec: Get balance record.
         get_commission: Returns the commission per trade.
         get_init_funds: Returns the initial funds for the strategy.
         prev_orders: Return '__orders' values.
@@ -210,6 +221,7 @@ class StrategyClass(ABC):
         self.high = None
         self.volume = None
         self.date = None
+        self.hour = None
 
         self.__data = None
         self.__data_adf = data
@@ -226,6 +238,7 @@ class StrategyClass(ABC):
         self.icon = cmattr('__data_icon')
         self.width = cmattr('__data_width')
         self.interval = cmattr('__data_interval')
+        self.__day_width = cmattr('__data_width_day')
 
         # Execution configuration
         self.__init_funds = cmattr('__init_funds') or 0
@@ -244,6 +257,9 @@ class StrategyClass(ABC):
                     raise exception.StyClassError('Order ord value out of range.')
 
                 self.__orders_order.update({k:v})
+
+        self.__balance = self.__init_funds
+        self.__balance_rec = []
 
         self.__ngap = bool(cmattr('__min_gap'))
         self.__limit_ig = bool(cmattr('__limit_ig'))
@@ -270,6 +286,74 @@ class StrategyClass(ABC):
 
     @abstractmethod
     def next(self) -> Any: ...
+
+    def tz_london(self) -> bool:
+        """
+        Time zone London.
+
+        This return True if its London time zone.
+
+        Return:
+            bool: True if False otherwise.
+        """
+
+        return int(self.hour) in [6,7,8,9,10,11,12,13]
+
+    def tz_tokyo(self) -> bool:
+        """
+        Time zone Tokyo.
+
+        This return True if its Tokyo time zone.
+
+        Return:
+            bool: True if False otherwise.
+        """
+
+        return int(self.hour) in [0,1,2,3,4,5,22,23]
+
+    def tz_sydney(self) -> bool:
+        """
+        Time zone Sydney.
+
+        This return True if its Sydney time zone.
+
+        Return:
+            bool: True if False otherwise.
+        """
+
+        return int(self.hour) in [20,21,22,23,0,1,2,3]
+
+    def tz_new_york(self) -> bool:
+        """
+        Time zone New York.
+
+        This return True if its New York time zone.
+
+        Return:
+            bool: True if False otherwise.
+        """
+
+        return int(self.hour) in [11,12,13,14,15,16,17,18]
+
+    def get_balance(self) -> float:
+        """
+        Get __balance
+
+        Returns:
+            float: The value of the hidden variable `__balance`.
+        """
+
+        return self.__balance
+
+    def get_balance_rec(self) -> flx.DataWrapper:
+        """
+        Get __balance_rec
+    
+        Returns:
+            DataWrapper: The value of the hidden variable `__balance_rec`.
+        """
+
+        return flx.DataWrapper(self.__balance_rec)
 
     def get_spread(self) -> flx.CostsValue:
         """
@@ -496,7 +580,7 @@ class StrategyClass(ABC):
             columns=data._columns, 
             index=data._index)
 
-    def __data_updater(self, index:int) -> None:
+    def __data_updater(self, index:int, balance:list[float] | None = None) -> None:
         """
         Data updater
 
@@ -515,12 +599,16 @@ class StrategyClass(ABC):
         self.close = data['close']
         self.volume = data['volume']
         self.date = dates
+        self.hour = dates[-1] % self.__day_width / self.__day_width * 24
 
         self.__data = data
         self.__data_index = index
         self.__data_dates = dates
 
-    def __before(self, index:int) -> None:
+        self.__balance = balance[-1] if balance else self.__balance
+        self.__balance_rec = balance if balance else self.__balance_rec
+
+    def __before(self, index:int, balance:list[float] | None = None) -> None:
         """
         Before
 
@@ -531,7 +619,7 @@ class StrategyClass(ABC):
         """
 
         # Updates data to the strategy
-        self.__data_updater(index=index)
+        self.__data_updater(index=index, balance=balance)
 
         # Check operations
         if self.__orders:
@@ -606,7 +694,10 @@ class StrategyClass(ABC):
             ChunkWrapper: Array with the values.
         """
 
-        dtype = [(key, ('U16' if (tp:=type(v)) is str else tp)) for key, v in values[0].items()]
+        types_dict = {str:'U16',
+                      int:float}
+        dtype = [(key, (types_dict[tp] if (tp:=type(v)) in list(types_dict.keys()) else tp)) 
+                 for key, v in values[0].items()]
         vl_arr = np.array([tuple(d.values()) for d in values], dtype=dtype)
 
         return vlist.append(vl_arr, dtype)
@@ -765,6 +856,10 @@ class StrategyClass(ABC):
             mode (str, optional): Order type ('taker', 'maker').
         """
 
+        mode = mode.lower()
+        if mode.lower() not in ('maker', 'taker'):
+            return
+
         amount = amount or np.nan
 
         position = self.__positions[index].copy()
@@ -775,11 +870,11 @@ class StrategyClass(ABC):
 
         position_close = price
 
-        if mode.lower() == 'maker':
+        if mode == 'maker':
 
             commission = self.__commission.get_maker()
             position_close_spread = price
-        elif mode.lower() == 'taker':
+        elif mode == 'taker':
 
             commission = self.__commission.get_taker()
             spread = price*(self.__spread_pct.get_taker()/100/2)
@@ -788,8 +883,6 @@ class StrategyClass(ABC):
             position_close_spread = (position_close-spread-slippage 
                                     if position.get('typeSide')
                                     else position_close+spread+slippage)
-        else:
-            return
 
         # Fill data.
         position['positionClose'] = position_close_spread
@@ -829,6 +922,7 @@ class StrategyClass(ABC):
                         * (commission / 100))
 
             position['profit'] = gross_profit - entry_fee - exit_fee
+            self.__balance += gross_profit - entry_fee - exit_fee
         else:
             position['profit'] = np.nan
 
@@ -1233,7 +1327,7 @@ class StrategyClass(ABC):
             last_data = self.__orders[-1]['unionId']
         elif '__pos_record' in self.__buffer and self.__buffer['__pos_record']:
             last_data = self.__buffer['__pos_record'][-1]['unionId']
-        elif self.__pos_record:
+        elif len(self.__pos_record) > 0:
             last_data = self.__pos_record[-1]['unionId']
 
         union_id = union_id or (last_data.split('/')[-1] if last_data else 0)

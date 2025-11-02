@@ -16,6 +16,10 @@ Variables:
 
 Hidden Variables:
     _icon: Icon currently used by the application (hidden variable).
+    _random_titles: Random titles for windows (hidden variable).
+    __panel_list: List of windows that will be joined into panels (hidden variable).
+    __panel_wmax = Maximum number of panels; if a value greater than 4 is given, an error will occur (hidden variable).
+    __linked_toolbars = List of connected toolbars (hidden variable).
     __min_gap: If left as True, gaps will not be calculated on the entry 
         of 'taker' orders (hidden variable).
     __limit_ig: If in a 'stopLimit' or 'takeLimit' the order is within the 
@@ -44,9 +48,10 @@ Hidden Variables:
     __plt_styles: Styles for coloring trading charts (hidden variable).
 
 Functions:
-    get_names: Takes the names of the saved backtests.
+    get_backtest_names: Takes the names of the saved backtests.
 
 Hidden Functions:
+    __get_names: Takes the names of an list of dictionaries.
     __get_trades: Take trades from 1 or more saved backtests.
     __get_dtrades: Does the same thing as '__get_trades' 
         but saves each backtest in a different key in a dict.
@@ -67,6 +72,19 @@ plt_style = None
 max_bar_updates = 1_000
 
 lift = True
+_random_titles = [
+    'Python > Others',
+    'Nice strategy',
+    'Python window',
+    'BackPy > ⚡',
+    'Many trades',
+    'loading...',
+    'Backtest',
+    'Panels!',
+    'Tkinter',
+    'BackPy',
+    '🚀',
+]
 
 __data_year_days = 365
 __data_width_day = None
@@ -75,6 +93,11 @@ __data_width = None
 __data_icon = None
 __data = None
 __backtests = []
+
+__anim_run = True
+__panel_list = []
+__panel_wmax = 4
+__linked_toolbars = []
 
 __min_gap = None
 __limit_ig = None
@@ -194,7 +217,7 @@ __plt_styles = {
     }
 }
 
-def get_names() -> list[str]:
+def get_backtest_names() -> list[str]:
     """
     Get names
 
@@ -204,7 +227,37 @@ def get_names() -> list[str]:
         list[str]: names
     """
 
-    return [i['name'] for i in __backtests]
+    return __get_names(__backtests)
+
+# Future implementation
+#def get_data_names() -> list[str]:
+#    """
+#    Get names
+
+#    Takes the names of the saved data.
+
+#    Returns:
+#        list[str]: names
+#    """
+
+#    return __get_names(__data)
+
+def __get_names(from_:list[dict]) -> list[str]:
+    """
+    Get names
+
+    Takes the names of the 'from' list of dictionaries.
+    'from' needs 'name' key.
+
+    Args:
+        from (list[dict], optional): List of dictionaries 
+            from which the names will be obtained.
+
+    Returns:
+        list[str]: names
+    """
+
+    return [i['name'] for i in from_]
 
 def __get_dtrades(names:list[str|int|None]|str|int|None = None) -> dict:
     """
@@ -254,8 +307,10 @@ def __get_trades(names:list[str|int|None]|str|int|None = None) -> pd.DataFrame:
     for i in (set(names or {None}) if not isinstance(names, str) else [names]):
         trades = pd.concat([trades, __get_strategy(i)['trades']])
 
-    return trades.sort_values(
-        by="positionDate", ascending=True).reset_index(drop=True)
+    if not trades.empty:
+        trades = trades.sort_values(
+            by="positionDate", ascending=True).reset_index(drop=True)
+    return trades
 
 def __get_strategy(name:str|int|Any|None = None) -> dict:
     """
@@ -269,11 +324,17 @@ def __get_strategy(name:str|int|Any|None = None) -> dict:
 
     Returns:
         dict: Dictionary with the following keys: 'name', 'trades', 
-            'init_funds', 'd_year_days', 'd_width_day', 'd_width'.
+            'balance_rec', 'init_funds', 'd_year_days', 'd_width_day', 'd_width'.
     """
 
     if len(__backtests) == 0:
-        raise exception.DataError('There are no backtests saved.')
+        return {'name':None, 
+                'trades':pd.DataFrame(), 
+                'balance_rec':pd.Series(),
+                'init_funds':0, 
+                'd_year_days':0, 
+                'd_width_day':0, 
+                'd_width':0}
     elif isinstance(name, int) or name is None:
         return __backtests[name or -1]
     elif not isinstance(name, str):
@@ -284,14 +345,16 @@ def __get_strategy(name:str|int|Any|None = None) -> dict:
             return __backtests[i]
     raise exception.DataError('Name not found.')
 
-def __gen_fname(name:str) -> str:
+def __gen_fname(name:str, from_:list[dict]) -> str:
     """
     Generate frame name
 
-    Generates a name based on 'name' that is not duplicated in '__backtests'.
+    Generates a name based on 'name' that is not duplicated in 'from'.
 
     Args:
         names (str, optional): Strategy name.
+        from (list[dict], optional): List of dictionaries 
+            from which the names will be obtained.
 
     Returns:
         str: Name not duplicated.
@@ -300,7 +363,7 @@ def __gen_fname(name:str) -> str:
     if len(__backtests) == 0:
         return name
 
-    names = get_names()
+    names = __get_names(from_=from_)
     mname = name
     nm = 1
 
