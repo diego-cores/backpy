@@ -1132,7 +1132,6 @@ def add_window(fig:Figure, title:str|Callable|None = None, block:bool = True,
         new (bool): Create a new window or add it as a panel. True = create new.
     """
 
-    new = False
     style = style or {}
 
     if not new:
