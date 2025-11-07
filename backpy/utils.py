@@ -83,7 +83,7 @@ def statistics_format(data:dict, title:str | None = None,
         data (dict): A dictionary containing metrics and values. Format: 
             {
             "metric":"value",
-            "another_metric": ["value", backpyf._commons.__COLORS['COLOR']]
+            "another_metric": ["value", backpy._commons.__COLORS['COLOR']]
             }
             If a metric value is a list, the second element should be a color.
         title (str | None, optional): Statistics title.

@@ -346,7 +346,7 @@ class CustomWin:
         Put the icon on the application and change its color.
         """
 
-        with resources.path('backpyf.assets', 'icon128x.png') as icon_path:
+        with resources.path('backpy.assets', 'icon128x.png') as icon_path:
             img = Image.open(icon_path).convert("RGBA")
 
         gray = ImageOps.grayscale(img)
@@ -1162,7 +1162,7 @@ def add_window(fig:Figure, title:str|Callable|None = None, block:bool = True,
             window.mpl_animation(anim=anim, mpl_canvas=mpl_canvas, interval=interval|100)
         if toolbar:
             toolbar = window.mpl_toolbar(
-                mpl_canvas=mpl_canvas, movement=False if toolbar == 'limited' else True)
+                mpl_canvas=mpl_canvas, movement=False if toolbar == 'limited' else True, link=True)
             window.mpl_toolbar_config(toolbar=toolbar, mpl_canvas=mpl_canvas)
 
         window.show(block=block)

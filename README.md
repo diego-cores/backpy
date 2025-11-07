@@ -1,7 +1,8 @@
-![BackPy logo](images/logo.png)
+![BackPy logo](https://raw.githubusercontent.com/diego-cores/BackPy/main/images/logo.png)
 ![Version](https://img.shields.io/badge/version-0.9.72b4-blue) ![Status](https://img.shields.io/badge/status-beta-orange)
 
 # BackPy
+
 ##### Light, realistic, fast and adaptable.
 
 **BackPy** is a Python library for backtesting strategies in financial markets.
@@ -62,7 +63,25 @@ By using this software, you acknowledge that you have read and agree to the term
 
 ---
 
-## 📦 How to install backpy with pip
+## 📦 Installation
+
+You can install BackPy (backpyf) in two different ways depending on your needs:
+
+---
+
+### 🧰 Option 1 — From PyPI (recommended)
+
+You can simply run: `pip install backpyf`
+
+Then import it in Python:
+
+```python
+import backpy
+```
+
+---
+
+### 💻 Option 2 — From source (GitHub)
 
 1. Download the latest version from GitHub
 
@@ -100,16 +119,16 @@ BackPy lets you prototype and test trading strategies fast and intuitively.
 
 ```python
 
-import backpyf
+import backpy
 
-backpyf.load_binance_data_spot(
+backpy.load_binance_data_spot(
     symbol='BTCUSDT',
     start_time='2023-01-01',
     end_time='2024-01-01',
     interval='1h'
 )
 
-class macdStrategy(backpyf.StrategyClass):
+class macdStrategy(backpy.StrategyClass):
     def next(self):
         if len(self.date) < 30 or len(self.prev_positions()) > 0:
             return
@@ -126,21 +145,21 @@ class macdStrategy(backpyf.StrategyClass):
             self.ord_put('takeProfit', self.close[-1]*1.06)
             self.ord_put('stopLoss', self.close[-1]*0.98)
 
-backpyf.run_config(
+backpy.run_config(
     initial_funds=10000,
     commission=(0.04, 0.08),
     spread=0.01,
     slippage=0.01
 )
-backpyf.run(macdStrategy)
+backpy.run(macdStrategy)
 
-backpyf.plot_strategy(style='darkmode', block=False)
-backpyf.plot(log=True)
+backpy.plot_strategy(style='darkmode', block=False)
+backpy.plot(log=True)
 ```
 
 Finally, visualize your results:
 
-![statistics graph image](images/graph.png "BackPy graph")
+![statistics graph image](https://raw.githubusercontent.com/diego-cores/BackPy/wip/main/images/graph.png "BackPy graph")
 
 ---
 
@@ -152,7 +171,7 @@ To begin, we need to load market data.
 We can do this from several sources:
 
 ```python
-backpyf.load_binance_data_spot(
+backpy.load_binance_data_spot(
     symbol='BTCUSDT',
     start_time='2023-01-01',
     end_time='2024-01-01',
@@ -163,7 +182,7 @@ backpyf.load_binance_data_spot(
 We can also use `yfinance`:
 
 ```python
-backpyf.load_yfinance_data(
+backpy.load_yfinance_data(
     ticker='BTC-USD', 
     start='2023-01-01', 
     end='2024-12-01', 
@@ -180,7 +199,7 @@ To do this, we define a class that inherits from `StrategyClass`.
 The main method we must implement is `next()`, which is executed on each iteration of the candle loop.
 
 ```python
-class macdStrategy(backpyf.StrategyClass):
+class macdStrategy(backpy.StrategyClass):
     def next(self):
         pass
 ```
@@ -238,7 +257,7 @@ If `amount` isn't specified, the order will close the entire position when execu
 Before running the strategy, we configure the backtest parameters with `run_config()`:
 
 ```python
-backpyf.run_config(
+backpy.run_config(
     initial_funds=10000,
     commission=(0.04, 0.08),
     spread=0.01,
@@ -258,7 +277,7 @@ Parameters:
 Then we run it with:
 
 ```python
-backpyf.run(macdStrategy)
+backpy.run(macdStrategy)
 ```
 
 ---
@@ -268,13 +287,13 @@ backpyf.run(macdStrategy)
 Once the strategy is executed, you can view the statistics and trades:
 
 ```python
-backpyf.plot_strategy(style='darkmode', block=False)
-backpyf.plot()
+backpy.plot_strategy(style='darkmode', block=False)
+backpy.plot()
 ```
 
 Use `block=False` if you want to display multiple charts without blocking the main thread.
-`backpyf.plot_strategy` displays backtest statistics.
-`backpyf.plot` displays the candles and trades executed.
+`backpy.plot_strategy` displays backtest statistics.
+`backpy.plot` displays the candles and trades executed.
 
 You can customize the style with the `style` argument (e.g., `darkmode`).
 There are more than 15 predefined styles, and you can also create your own using configuration functions like `style_c`.
