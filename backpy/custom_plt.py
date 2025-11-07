@@ -147,8 +147,15 @@ class CustomToolbar(NavigationToolbar2Tk):
         Execute '_org_zoom' in '__linked_toolbars'.
         """
 
-        for i in getattr(_cm, '__linked_toolbars'):
-            i._org_zoom(*args)
+        linked_toolbars = []
+        for v in getattr(_cm, '__linked_toolbars'):
+            try:
+                v._org_zoom(*args)
+                linked_toolbars.append(v)
+            except tk.TclError:
+                pass
+
+        setattr(_cm, '__linked_toolbars', linked_toolbars)
 
     def run_pan(self, *args):
         """
@@ -157,8 +164,15 @@ class CustomToolbar(NavigationToolbar2Tk):
         Execute '_org_pan' in '__linked_toolbars'.
         """
 
-        for i in getattr(_cm, '__linked_toolbars'):
-            i._org_pan(*args)
+        linked_toolbars = []
+        for v in getattr(_cm, '__linked_toolbars'):
+            try:
+                v._org_pan(*args)
+                linked_toolbars.append(v)
+            except tk.TclError:
+                pass
+
+        setattr(_cm, '__linked_toolbars', linked_toolbars)
 
     def zoom(self, *args):
         return self.run_zoom(*args)
@@ -251,6 +265,7 @@ class CustomWin:
         _regen_title: If 'title' is callable, it is called again every 5s.
         _after_id_lift: After id that lifts the window with 'lift'.
         _main_after_id: 'root.after' id used to avoid errors by not blocking the process.
+        _after_id_title: After id of title generation.
 
     Methods:
         gen_title: Generate and put the title to the window.
@@ -308,7 +323,10 @@ class CustomWin:
 
         self.config_icon()
         self.gen_title(title=self.title)
+    
+        self._after_id_title = None
         self._after_id_lift = self.root.after(100, self.lift)
+
         self.root.minsize(int(self.root.winfo_screenwidth()*0.4), 
                           int(self.root.winfo_screenheight()*0.4))
 
@@ -325,15 +343,18 @@ class CustomWin:
             title (str|Callable|None, optional): Title.
         """
 
+        if not self.root.winfo_exists():
+            return
+
         try:
-            if self.title_after:
-                self.root.after_cancel(self.title_after)
-                self.title_after = None
+            if self._after_id_title:
+                self.root.after_cancel(self._after_id_title)
+                self._after_id_title = None
         except AttributeError:
             pass
 
         if callable(title):
-            self.title_after = self.root.after(
+            self._after_id_title = self.root.after(
                 10000, lambda: self.gen_title(self.title))
             title = title()
 
@@ -389,6 +410,9 @@ class CustomWin:
         if self._after_id_lift:
             self.root.after_cancel(self._after_id_lift)
             self._after_id_lift = None
+        if self._after_id_title:
+            self.root.after_cancel(self._after_id_title)
+            self._after_id_title = None
 
         if self.root.winfo_exists():
             self.root.destroy()
@@ -432,6 +456,9 @@ class CustomWin:
             Args:
                 call_rdraw (bool, optioanl): It's called 'canvas.draw' when redefining the function.
             """
+
+            if not self.root.winfo_exists():
+                return
 
             try:
                 if call_rdraw:
@@ -776,7 +803,6 @@ class CustomWin:
         except AttributeError:
             pass
 
-        title_after = None
         act_canvas = list(canvases.keys())[-1]
         def active_canvas(canvas:FigureCanvasTkAgg, graph_n:int) -> None:
             """
@@ -789,7 +815,7 @@ class CustomWin:
                 canvas (FigureCanvasTkAgg): Focused canvas.
                 graph_n (int): Graph number.
             """
-            nonlocal act_canvas, title_after
+            nonlocal act_canvas
 
             if act_canvas != canvas:
                 if canvases[act_canvas]:
@@ -802,11 +828,12 @@ class CustomWin:
                 act_canvas = canvas
 
             if titles:
-                if title_after:
-                    self.root.after_cancel(title_after)
-                
+                if self._after_id_title:
+                    self.root.after_cancel(self._after_id_title)
+                    self._after_id_title = None
+
                 self.gen_title(titles[graph_n-1])
-                title_after = self.root.after(5000, lambda: self.gen_title(self.title))
+                self._after_id_title = self.root.after(5000, lambda: self.gen_title(self.title))
 
         def toolbar_update(height:int) -> None:
             """

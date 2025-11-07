@@ -71,7 +71,11 @@ You can install BackPy (backpyf) in two different ways depending on your needs:
 
 ### 🧰 Option 1 — From PyPI (recommended)
 
-You can simply run: `pip install backpyf`
+You can simply run: 
+
+```bash
+pip install backpyf
+```
 
 Then import it in Python:
 

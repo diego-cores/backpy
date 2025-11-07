@@ -11,5 +11,4 @@ include setup.py
 recursive-include backpy/assets *
 
 exclude .gitignore
-
-recursive-exclude backpy/test *
+prune test
