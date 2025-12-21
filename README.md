@@ -1,7 +1,5 @@
-![BackPy logo](https://raw.githubusercontent.com/diego-cores/BackPy/main/images/logo.png)
-![Version](https://img.shields.io/badge/version-0.9.72b4-blue) ![Status](https://img.shields.io/badge/status-beta-orange)
-
-# BackPy
+![BackPy logo](https://raw.githubusercontent.com/diego-cores/backpy/main/images/logo.png)
+![Version](https://img.shields.io/badge/version-0.9.72b5-blue) ![Status](https://img.shields.io/badge/status-beta-orange) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/backpyf?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pypi.org/project/backpyf/)
 
 ##### Light, realistic, fast and adaptable.
 
@@ -9,7 +7,7 @@
 You can provide your own historical data or use the built-in integration with the `yfinance` or `binance-connector` modules.
 
 With **BackPy-binance-connector** you can connect your strategy to the real market using Binance.
-Official repository: [BackPy-binance-connector](https://github.com/diego-cores/BackPy-binance-connector "BackPy-binance-connector").
+Official repository: [BackPy-binance-connector](https://github.com/diego-cores/backpy-binance-connector "BackPy-binance-connector").
 
 ---
 
@@ -71,7 +69,7 @@ You can install BackPy (backpyf) in two different ways depending on your needs:
 
 ### 🧰 Option 1 — From PyPI (recommended)
 
-You can simply run: 
+You can simply run:
 
 ```bash
 pip install backpyf
@@ -163,7 +161,7 @@ backpy.plot(log=True)
 
 Finally, visualize your results:
 
-![statistics graph image](https://raw.githubusercontent.com/diego-cores/BackPy/wip/main/images/graph.png "BackPy graph")
+![statistics graph image](https://raw.githubusercontent.com/diego-cores/backpy/wip/main/images/graph.png "BackPy graph")
 
 ---
 

@@ -15,7 +15,6 @@ Variables:
         to jump over everything else when running.
 
 Hidden Variables:
-    _icon: Icon currently used by the application (hidden variable).
     _random_titles: Random titles for windows (hidden variable).
     __panel_list: List of windows that will be joined into panels (hidden variable).
     __panel_wmax = Maximum number of panels; if a value greater than 4 is given, an error will occur (hidden variable).
@@ -62,17 +61,18 @@ Hidden Functions:
 from typing import Any
 import pandas as pd
 
+from backpy.flex_data import CostsValue
 from . import exception
 
-alert = True
-dots = True
-run_timer = True
-plt_style = None
+alert:bool = True
+dots:bool = True
+run_timer:bool = True
+plt_style:str|None = None
 
-max_bar_updates = 1_000
+max_bar_updates:int = 1_000
 
-lift = True
-_random_titles = [
+lift:bool = True
+_random_titles:list = [
     'Python > Others',
     'Nice strategy',
     'Python window',
@@ -86,35 +86,34 @@ _random_titles = [
     '🚀',
 ]
 
-__data_year_days = 365
-__data_width_day = None
-__data_interval = None
-__data_width = None
-__data_icon = None
-__data = None
-__backtests = []
+__data_year_days:int = 365
+__data_width_day:None|float = None
+__data_interval:None|str = None
+__data_width:None|float = None
+__data_icon:None|str = None
+__data:None|pd.DataFrame = None
+__backtests:list = []
 
-__anim_run = True
-__panel_list = []
-__panel_wmax = 4
-__linked_toolbars = []
+__anim_run:bool = True
+__panel_list:list = []
+__panel_wmax:int = 4
+__linked_toolbars:list = []
 
-__min_gap = None
-__limit_ig = None
-__init_funds = None
-__commission = None
-__spread_pct = None
-__slippage_pct = None
-__orders_order = None
-__orders_nclose = None
-__chunk_size = None
+__min_gap:None|bool = None
+__limit_ig:None|bool = None
+__init_funds:None|int = 100
+__commission:None|CostsValue = None
+__spread_pct:None|CostsValue = None
+__slippage_pct:None|CostsValue = None
+__orders_order:None|dict = None
+__orders_nclose:None|bool = None
+__chunk_size:None|int = None
 
-_icon = None
-__custom_plot = {}
+__custom_plot:dict = {}
 
-__binance_timeout = 0.08
+__binance_timeout:float = 0.08
 
-__COLORS = {
+__COLORS:dict[str, str] = {
     'RED': "\033[91m",
     'GREEN': "\033[92m",
     'YELLOW': "\033[93m",
@@ -131,7 +130,7 @@ __COLORS = {
     'UNDERLINE': "\033[4m",
     'RESET': "\033[0m",
 }
-__plt_styles = {
+__plt_styles:dict = {
     # 'bg','fr','btn' are required for each style.
     'lightmode':{
         'bg': '#e5e5e5', 
@@ -279,9 +278,9 @@ def __get_dtrades(names:list[str|int|None]|str|int|None = None) -> dict:
     """
 
     trades = {
-        i: __get_strategy(i)['trades'].sort_values(
+        (g_st:=__get_strategy(i))['name']: g_st['trades'].sort_values(
             by="positionDate", ascending=True).reset_index(drop=True)
-        for i in (set(names or {None}) if not isinstance(names, str) else [names])
+        for i in (set(names or {None}) if not isinstance(names, (str, int))  else [names])
     }
 
     return trades
@@ -304,12 +303,14 @@ def __get_trades(names:list[str|int|None]|str|int|None = None) -> pd.DataFrame:
     """
 
     trades = pd.DataFrame()
-    for i in (set(names or {None}) if not isinstance(names, str) else [names]):
+    for i in (set(names or {None}) if not isinstance(names, (str, int)) else [names]):
         trades = pd.concat([trades, __get_strategy(i)['trades']])
 
     if not trades.empty:
+        col = "positionDate" if "positionDate" in trades.columns else "positionOpen"
+
         trades = trades.sort_values(
-            by="positionDate", ascending=True).reset_index(drop=True)
+            by=col, ascending=True).reset_index(drop=True)
     return trades
 
 def __get_strategy(name:str|int|Any|None = None) -> dict:
@@ -319,7 +320,7 @@ def __get_strategy(name:str|int|Any|None = None) -> dict:
     Take data from a backtest.
 
     Args:
-        names (str|int|Any|None, optional): 
+        name (str|int|Any|None, optional): 
             Strategy name or index, None and Any = -1.
 
     Returns:
@@ -336,7 +337,7 @@ def __get_strategy(name:str|int|Any|None = None) -> dict:
                 'd_width_day':0, 
                 'd_width':0}
     elif isinstance(name, int) or name is None:
-        return __backtests[name or -1]
+        return __backtests[-1 if name is None else name]
     elif not isinstance(name, str):
         return __backtests[-1]
 

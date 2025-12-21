@@ -29,11 +29,12 @@ Functions:
     correlation: Measure correlation between strategies.
 """
 
-import matplotlib.pyplot
+import matplotlib.pyplot as plt
 import matplotlib as mpl
 import pandas as pd
 import numpy as np
 
+from typing import Literal, Callable
 import random as rd
 
 from . import custom_plt as cpl
@@ -58,7 +59,7 @@ def average_ratio(trades:pd.DataFrame) -> float:
     if 'profitPer' in trades.columns:
 
         return ((trades['profitPer'][trades['profitPer'] > 0].mean()
-                / abs(trades['profitPer'][trades['profitPer'] < 0]).mean()))
+                / abs(trades.loc[:, 'profitPer'][trades['profitPer'] < 0]).mean()))
     return 0
 
 def profit_fact(profits:pd.Series) -> float:
@@ -176,7 +177,8 @@ def sortino_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
     Returns:
         float: Sortino ratio.
     """
-    std_dev = np.std(diary_per[diary_per < 0].dropna(), ddof=1)
+
+    std_dev = np.std(diary_per.loc[diary_per < 0].dropna(), ddof=1)
     if std_dev < 1e-2: return 0
 
     return (ann_av / np.sqrt(year_days) / std_dev)
@@ -195,8 +197,8 @@ def payoff_ratio(profits:pd.Series) -> float:
         float: Payoff ratio.
     """
 
-    return (profits[profits > 0].dropna().mean() 
-            / abs(profits[profits < 0].dropna().mean()))
+    return (profits.loc[profits > 0].dropna().mean() 
+            / abs(profits.loc[profits < 0].dropna().mean()))
 
 def expectation(profits:pd.Series) -> float:
     """
@@ -296,7 +298,7 @@ def max_drawdown(values:pd.Series) -> float:
 
 def get_drawdowns(
         values:list | pd.Series | np.ndarray
-    ) -> list | pd.Series | np.ndarray:
+    ) -> Literal[0] | list | pd.Series | np.ndarray:
     """
     Get drawdowns.
 
@@ -307,7 +309,7 @@ def get_drawdowns(
             The ordered data to calculate the drawdowns.
 
     Returns:
-        list: The drawdowns from the given data.
+        Literal[0] | list | pd.Series | np.ndarray: The drawdowns from the given data.
     """
 
     if len(values) == 0:
@@ -359,6 +361,7 @@ def perf_tzone_chart(names:list[str|int|None]|str|int|None = None,
 
     # Exceptions.
     panel = panel.lower()
+    valid_style = {'random', 'last'} | set(_cm.__plt_styles.keys())
 
     if col and col not in ('profit', 'profitPer'):
         raise exception.StatsError(
@@ -366,13 +369,12 @@ def perf_tzone_chart(names:list[str|int|None]|str|int|None = None,
     elif panel not in ('new', 'add'):
         raise exception.StatsError(
             f"'{panel}' Not a valid option for: 'panel'.")
-    elif (not style is None and not (style:=style.lower()) 
-          in ('random', 'last', *_cm.__plt_styles.keys())):
+    elif (not style is None and not (style:=style.lower()) in valid_style):
         raise exception.StatsError(f"'{style}' Not a style.")
     col = col or 'profitPer'
 
     trades = _cm.__get_trades(names=names)
-    name = list(names)[0] if type(names) in (tuple,set,list) else names
+    name = list(names)[0] if isinstance(names, (tuple, set, list)) else names
     trades_data = _cm.__get_strategy(name=name)
 
     if trades.empty:
@@ -399,14 +401,14 @@ def perf_tzone_chart(names:list[str|int|None]|str|int|None = None,
     gdir = plt_colors.get('gdir', False)
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
 
-    fig = mpl.pyplot.figure(figsize=(16,8))
+    fig = plt.figure(figsize=(16,8))
     fig.subplots_adjust(left=0, right=1, top=1, 
                         bottom=0, wspace=0, hspace=0)
 
     graphics = ['p', 'd', 'mp', 'md']
-    axes, view = cpl.ax_view(view=view, graphics=graphics)
+    axes, v_view = cpl.ax_view(view=view, graphics=graphics)
 
-    def time_graph(legend:str, time_col:str, func:callable) -> None:
+    def time_graph(legend:str, time_col:str, func:Callable) -> None:
         """
         Time graph
 
@@ -415,7 +417,7 @@ def perf_tzone_chart(names:list[str|int|None]|str|int|None = None,
         Args:
             legend (str): Graph name.
             time_col (str): Column for statistics, 'positionDate' or 'date'.
-            func (callable): Function to obtain the time of each trade.
+            func (Callable): Function to obtain the time of each trade.
         """
 
         trades['time_close'] = func(trades[time_col].dropna())
@@ -426,7 +428,7 @@ def perf_tzone_chart(names:list[str|int|None]|str|int|None = None,
         ax.bar(hourly_sums.index+1, hourly_sums, color=colors)
         ax.legend([legend], loc='upper left')
 
-    for i,v in enumerate(view):
+    for i,v in enumerate(v_view):
         ax = axes[i]
     
         cpl.custom_ax(ax, plt_colors['bg'], edge=gdir)
@@ -435,8 +437,8 @@ def perf_tzone_chart(names:list[str|int|None]|str|int|None = None,
         ax.tick_params('y', which='both', left=False, 
                         right=False, labelleft=False)
 
-        ax.yaxis.set_major_formatter(lambda y, _: y.real)
-        ax.xaxis.set_major_formatter(lambda x, _: x.real)
+        ax.yaxis.set_major_formatter(lambda y, _: str(y.real))
+        ax.xaxis.set_major_formatter(lambda x, _: str(x.real))
 
         match v:
             case 'p':
@@ -499,6 +501,7 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
     """
     # Exceptions.
     panel = panel.lower()
+    valid_style = {'random', 'last'} | set(_cm.__plt_styles.keys())
 
     if col and col not in ('profit', 'profitPer'):
         raise exception.StatsError(
@@ -511,8 +514,7 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
                         'n_trades' can only be greater than 1 and 
                         less than or equal to the length of 'data'.
                         """, newline_exclude=True))
-    elif (not style is None and not (style:=style.lower()) 
-          in ('random', 'last', *_cm.__plt_styles.keys())):
+    elif (not style is None and not (style:=style.lower()) in valid_style):
         raise exception.StatsError(f"'{style}' Not a style.")
 
     if style == 'last':
@@ -531,14 +533,14 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
     gdir = plt_colors.get('gdir', False)
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
 
-    fig = mpl.pyplot.figure(figsize=(16,8))
+    fig = plt.figure(figsize=(16,8))
     fig.subplots_adjust(left=0, right=1, top=1, 
                         bottom=0, wspace=0, hspace=0)
 
     graphics = ['s','d']
-    axes, view = cpl.ax_view(view=view, graphics=graphics)
+    axes, v_view = cpl.ax_view(view=view, graphics=graphics)
 
-    for i,v in enumerate(view):
+    for i,v in enumerate(v_view):
         ax = axes[i]
     
         cpl.custom_ax(ax, plt_colors['bg'], edge=gdir)
@@ -547,8 +549,8 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
         ax.tick_params('y', which='both', left=False, 
                         right=False, labelleft=False)
 
-        ax.yaxis.set_major_formatter(lambda y, _: y.real)
-        ax.xaxis.set_major_formatter(lambda x, _: x.real)
+        ax.yaxis.set_major_formatter(lambda y, _: str(y.real))
+        ax.xaxis.set_major_formatter(lambda x, _: str(x.real))
 
         match v:
             case 's':
@@ -635,7 +637,7 @@ def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None,
             "'n_trades' can only be greater than 0.")
 
     trades = _cm.__get_trades(names=names)
-    name = list(names)[0] if type(names) in (tuple,set,list) else names
+    name = list(names)[0] if isinstance(names, (tuple,set,list)) else names
     trades_data = _cm.__get_strategy(name=name)
     sim = []
 
@@ -659,8 +661,8 @@ def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None,
         trades_calc = trades_s
         trades_calc['multiplier'] = 1 + trades_calc['profitPer'] / 100
 
-        stats['profit_fact'].append(profit_fact(trades['profit']))
-        stats['expectation'].append(expectation(trades_s['profitPer']))
+        stats['profit_fact'].append(profit_fact(trades.loc[:, 'profit']))
+        stats['expectation'].append(expectation(trades_s.loc[:, 'profitPer']))
         stats['max_drawdown'].append(
             max_drawdown(np.cumprod(trades_s['multiplier'].dropna())))
         stats['avg_drawdown'].append(
@@ -671,7 +673,7 @@ def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None,
         stats['avg_drawdown$'].append(
             np.mean(get_drawdowns(trades['profit'].cumsum().dropna()
                                   +trades_data['init_funds'])))
-        stats['winrate'].append(winnings(trades['profitPer'])*100)
+        stats['winrate'].append(winnings(trades.loc[:, 'profitPer'])*100)
 
         sim.append(trades_s)
 

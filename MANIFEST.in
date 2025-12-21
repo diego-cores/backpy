@@ -11,4 +11,11 @@ include setup.py
 recursive-include backpy/assets *
 
 exclude .gitignore
+prune tests
 prune test
+
+prune __pycache__
+prune */__pycache__
+prune .github
+prune images
+prune venv

@@ -7,14 +7,14 @@ with open('README.md', encoding='utf-8') as file:
 
 setup(
     name='backpyf',
-    version='0.9.72b4',
+    version='0.9.72b5',
     packages=find_packages(),
     package_data={'backpy': ['assets/*']},
-    description='BackPy is a library made in python for back testing in financial markets. Read Risk_notice.txt and LICENSE.',
+    description='BackPy is a library made in python for back testing in financial markets.',
     long_description=desc,
     long_description_content_type='text/markdown',
-    author='Diego',
-    url='https://github.com/Diego-Cores/BackPy',
+    author='Diego Cores',
+    url='https://github.com/diego-cores/backpy',
     license='MIT',
     classifiers=[
         'Programming Language :: Python :: 3',

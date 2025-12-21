@@ -31,12 +31,13 @@ Hidden Functions:
 from matplotlib.collections import PatchCollection, LineCollection
 from matplotlib.patches import Rectangle 
 from matplotlib.axes._axes import Axes
+from matplotlib.dates import date2num
 import matplotlib.colors
+import matplotlib as mpl
 
-from typing import Any
+from typing import Any, Callable
 from time import sleep
 
-import matplotlib as mpl
 import pandas as pd
 import numpy as np
 
@@ -126,14 +127,14 @@ def statistics_format(data:dict, title:str | None = None,
 
     return text
 
-def num_align(num:float, digits:int = 4, side:bool = True) -> str:
+def num_align(num:float|np.floating, digits:int = 4, side:bool = True) -> str:
     """
     Align a number.
 
     Aligns a number to the left or right with a maximum number of digits.
 
     Args:
-        num (float): The number to align.
+        num (float|floating): The number to align.
         digits (int, optional): Total number of digits in the result.
         side (bool, optional): Align to the left (False) or right (True).
 
@@ -158,7 +159,7 @@ def num_align(num:float, digits:int = 4, side:bool = True) -> str:
     data_s = side_c(round(num, digits-len(int_part)-1))
     return data_s if _cm.dots else data_s.replace('.', ',')
 
-def round_r(num:float, r:int = 1) -> float:
+def round_r(num:float|np.floating, r:int = 1) -> float|np.floating:
     """
     Round right.
 
@@ -166,12 +167,12 @@ def round_r(num:float, r:int = 1) -> float:
     decimal point. If `num` is `np.nan` or evaluates to `None`, it returns 0.
 
     Args:
-        num (float): The number to round.
+        num (float|floating): The number to round.
         r (int, optional): Maximum number of significant digits to the right of 
             the decimal point. Defaults to 1.
 
     Returns:
-        float: The rounded number, or 0 if `num` is `np.nan` or evaluates to 
+        float|floating: The rounded number, or 0 if `num` is `np.nan` or evaluates to 
             `None`.
     """
 
@@ -185,7 +186,7 @@ def round_r(num:float, r:int = 1) -> float:
             
     return num
 
-def not_na(x:Any, y:Any, f:callable = max) -> Any:
+def not_na(x:Any, y:Any, f:Callable = max) -> Any:
     """
     If not np.nan.
 
@@ -196,7 +197,7 @@ def not_na(x:Any, y:Any, f:callable = max) -> Any:
     Args:
         x (Any): The first value.
         y (Any): The second value.
-        f (callable, optional): Function to apply to `x` and `y` if neither is 
+        f (Callable, optional): Function to apply to `x` and `y` if neither is 
             `np.nan`. Defaults to `max`.
 
     Returns:
@@ -206,7 +207,7 @@ def not_na(x:Any, y:Any, f:callable = max) -> Any:
 
     return y if np.isnan(x) else x if np.isnan(y) else f(x, y)
 
-def correct_index(index:pd.Index) -> np.ndarray:
+def correct_index(index:pd.Index) -> np.ndarray|pd.Index:
     """
     Correct index.
 
@@ -216,26 +217,27 @@ def correct_index(index:pd.Index) -> np.ndarray:
         index (Index): The `index` of the data to be corrected.
 
     Returns:
-        ndarray: The corrected `index`.
+        ndarray|Index: The corrected `index`.
     """
 
+    r_index = index
     if not all(isinstance(ix, float) for ix in index):
-        index = mpl.dates.date2num(index)
+        r_index = date2num(index)
         print(text_fix("""
               The 'index' has been automatically corrected. 
               To resolve this, use a valid index.
               """)) if _cm.alert else None
     
-    return index
+    return r_index
 
-def calc_width(index:pd.Index, alert:bool = False) -> float:
+def calc_width(index:pd.Index|np.ndarray, alert:bool = False) -> float:
     """
     Calc width.
     
     Calculate the width of `index` if it has not been calculated already.
 
     Args:
-        index (Index): The index of the data.
+        index (Index|ndarray): The index of the data.
         alert (bool, optional): If `True`, an alert will be printed. Defaults to 
             False.
 
@@ -281,7 +283,8 @@ def calc_day(interval:str = '1d', width:float = 1) -> float:
         case _:
             unit_large = 1
 
-    return unit_large/int(''.join(filter(str.isdigit, interval)))*width
+    digit_str = ''.join(filter(str.isdigit, interval))
+    return unit_large/(int(digit_str) if digit_str else 1)*width
 
 def text_fix(text:str, newline_exclude:bool = True) -> str:
     """
@@ -300,7 +303,7 @@ def text_fix(text:str, newline_exclude:bool = True) -> str:
     return ''.join(line.lstrip() + ('\n' if not newline_exclude else '')  
                         for line in text.split('\n'))
 
-def mult_color(color:str, multiplier:float = 1) -> tuple[float, float, float]:
+def mult_color(color:str, multiplier:float = 1) -> tuple[float, ...]:
     """
     Multiply a color
 
@@ -309,14 +312,14 @@ def mult_color(color:str, multiplier:float = 1) -> tuple[float, float, float]:
         multiplier (float): multiplier.
 
     Return:
-        tuple[float,float,float]: Rgb color.
+        tuple[float, ...]: Rgb color.
     """
 
     rgb = mpl.colors.to_rgb(color)
-    return tuple(min(1, max(c*multiplier, 0)) for c in rgb)
+    return tuple(min(1., max(c*multiplier, 0)) for c in rgb)
 
 def diff_color(color:str, factor:float = 1, 
-               line:float = 0.2) -> tuple[float, float, float]:
+               line:float = 0.2) -> tuple[float, ...]:
     """
     Different color
 
@@ -333,7 +336,7 @@ def diff_color(color:str, factor:float = 1,
             number the opposite will be done (lightening).
 
     Returns:
-        tuple[float,float,float]: Rgb color.
+        tuple[float, ...]: Rgb color.
     """
 
     if line > 1 or line < 0:
@@ -342,10 +345,13 @@ def diff_color(color:str, factor:float = 1,
         raise ValueError("'factor' can only be between 0 and 1 or equal.")
 
     rgb = mpl.colors.to_rgb(color) 
-    return tuple(min(1, c*(1+factor)) if (dk:=c*(1-factor)) <= line else dk for c in rgb)
+
+    return tuple((dk := c * (1 - factor),
+                min(1., c * (1 + factor)) if dk <= line else dk)[1]
+                for c in rgb)
 
 def diff_ccolor(color:str, dcolor:str, factor:float = 1, 
-               line:float = 0.2) -> tuple[float, float, float]:
+               line:float = 0.2) -> tuple[float, ...]:
     """
     Different color to color
 
@@ -363,7 +369,7 @@ def diff_ccolor(color:str, dcolor:str, factor:float = 1,
             modified, otherwise it is not modified.
 
     Returns:
-        tuple[float,float,float]: Rgb color.
+        tuple[float, ...]: Rgb color.
     """
 
     if line > 1 or line < 0:
@@ -375,7 +381,7 @@ def diff_ccolor(color:str, dcolor:str, factor:float = 1,
     rgb_d = mpl.colors.to_rgb(dcolor) 
 
     return tuple(rgb[i] if v >= rgb_d[i]*(1+line) or v <= rgb_d[i]*(1-line) 
-                 else min(1, v*(1+factor)) for i,v in enumerate(rgb))
+                 else min(1., v*(1+factor)) for i,v in enumerate(rgb))
 
 def plot_volume(ax:Axes, data:pd.Series, 
                 width:float = 1, color:str = 'tab:orange', 
@@ -400,7 +406,8 @@ def plot_volume(ax:Axes, data:pd.Series,
 
     ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0))
     ax.set_ylim(None, data.max()*1.1 or 1)
-    ax.set_xlim(data.index[0]-(width*len(data.index)/10), data.index[-1]+(width*len(data.index)/10))
+    ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
+                data.index.values[-1]+(width*len(data.index)/10))
 
 def plot_candles(ax:Axes, data:pd.DataFrame, 
                  width:float = 1, color_up:str = 'g', 
@@ -435,9 +442,9 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     ax.add_collection(LineCollection(segments, colors=color, alpha=alpha, 
                                      linewidths=1, zorder=1))
 
-    x = data.index.values - width / 2
-    y = np.minimum(data['open'].values, data['close'].values)
-    height = np.abs(data['close'].values - data['open'].values)
+    x = data.index.to_numpy() - width / 2
+    y = np.minimum(data.loc[:, 'open'].values, data.loc[:, 'close'].values)
+    height = np.abs(data.loc[:, 'close'].values - data.loc[:, 'open'].values)
 
     # Bar drawing.
     patches = [Rectangle((xi, yi), width, hi) for xi, yi, hi in zip(x, y, height)]
@@ -486,9 +493,12 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
 
     # Draw routes of the operations.
     if operation_route or operation_route is None:
-        segments = trades.apply(lambda row: [
-            (row['date'], row['positionOpen']), 
-            (row['positionDate'], row['positionClose'])], axis=1)
+
+        segments = [[(d, o), (pd, c)] for d, o, pd, c in zip(
+            trades['date'], 
+            trades['positionOpen'],
+            trades['positionDate'],
+            trades['positionClose'],)]
 
         ax.add_collection(LineCollection(
             segments,
@@ -539,17 +549,17 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
                color=diff_color(color_stop, factor=arrow_fact, line=0.2), s=30, 
                marker='v', alpha=alpha_arrow, zorder=1.1)
 
-def _loop_data(function:callable, bpoint:callable, init:int, timeout:float) -> pd.DataFrame:
+def _loop_data(function:Callable, bpoint:Callable, init:int, timeout:float) -> pd.DataFrame:
     """
     Data loop.
 
     Runs a loop to extract data from an API with a data per second limit.
 
     Args:
-        function (callable): A callable function that retrieves data from an API or another source. 
+        function (Callable): A callable function that retrieves data from an API or another source. 
             The function must accept an integer (`init`) as its argument and 
             return data in a format that can be converted to a pandas DataFrame.
-        bpoint (callable): A callable function used as a breaking point checker or updater. 
+        bpoint (Callable): A callable function used as a breaking point checker or updater. 
             It should accept the current DataFrame and optionally an integer `init`. 
             If provided with `init`, it should return `True` if the loop should stop. 
             If called without `init`, it should return the updated `init` value.

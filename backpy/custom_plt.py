@@ -22,10 +22,11 @@ from matplotlib.animation import FuncAnimation
 from PIL import Image, ImageTk, ImageOps
 from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
+from typing import Callable, Never
+import matplotlib.pyplot as plt
 from importlib import resources
-from typing import Callable
+from types import MethodType
 import matplotlib.colors
-import matplotlib.pyplot
 import matplotlib as mpl
 import tkinter as tk
 import random as rd
@@ -132,7 +133,7 @@ class CustomToolbar(NavigationToolbar2Tk):
         self.config_colors()
 
         if link and movement:
-            linked_toolbars = getattr(_cm, '__linked_toolbars')
+            linked_toolbars:list = getattr(_cm, '__linked_toolbars')
             linked_toolbars.append(self)
 
             setattr(_cm, '__linked_toolbars', linked_toolbars)
@@ -140,7 +141,7 @@ class CustomToolbar(NavigationToolbar2Tk):
             self.run_zoom = self._org_zoom
             self.run_pan = self._org_pan
 
-    def run_zoom(self, *args):
+    def run_zoom(self, *args) -> None:
         """
         Run zoom
 
@@ -157,7 +158,7 @@ class CustomToolbar(NavigationToolbar2Tk):
 
         setattr(_cm, '__linked_toolbars', linked_toolbars)
 
-    def run_pan(self, *args):
+    def run_pan(self, *args) -> None:
         """
         Run pan
 
@@ -174,11 +175,17 @@ class CustomToolbar(NavigationToolbar2Tk):
 
         setattr(_cm, '__linked_toolbars', linked_toolbars)
 
-    def zoom(self, *args):
-        return self.run_zoom(*args)
+    class _ZoomExit(Exception):
+        """Internal control-flow exception."""
+        pass
 
-    def pan(self, *args):
-        return self.run_pan(*args)
+    def zoom(self, *args) -> Never:
+        self.run_zoom(*args)
+        raise SystemExit
+
+    def pan(self, *args) -> Never:
+        self.run_pan(*args)
+        raise SystemExit
 
     def config_colors(self) -> None:
         """
@@ -199,43 +206,43 @@ class CustomToolbar(NavigationToolbar2Tk):
             img_tk = ImageTk.PhotoImage(colorized, master=self.window)
             self.custom_img[key] = img_tk
 
-            btn = self._buttons.get(key)
+            btn = self._buttons[key]
 
             if isinstance(btn, tk.Button):
                 btn.config(activebackground=self.color_act)
             elif isinstance(btn, tk.Checkbutton):
-                btn.select = lambda btn=btn, img=img_tk: self.select(btn, img)
-                btn.deselect = lambda btn=btn: self.deselect(btn)
+                btn.select = MethodType(lambda b, img_tk=img_tk: self.select(b, img_tk), btn)
+                btn.deselect = MethodType(lambda b: self.deselect(b), btn)
                 btn.config(activebackground=self.color_act, selectcolor=self.color_act)
             btn.config(image=img_tk, bg=self.color_bg)
 
         list(map(lambda x: x.config(bg=self.color_bg, fg=self.color_btn), self.winfo_children()[-2:]))
 
-    def select(self, btn:tk.Button, img:ImageTk.PhotoImage) -> None:
+    def select(self, btn:tk.Checkbutton, img:ImageTk.PhotoImage) -> None:
         """
         Select
 
         Changes the style of the button when selected.
 
         Args:
-            btn (Button): Button.
+            btn (Checkbutton): Button.
             img (PhotoImage): Button icon.
         """
 
-        btn.var.set(0)
+        btn.setvar(btn.cget('variable'), '0')
         btn.config(image=img, bg=self.color_act, offrelief="sunken", overrelief="groove")
 
-    def deselect(self, btn:tk.Button) -> None:
+    def deselect(self, btn:tk.Checkbutton) -> None:
         """
         Deselect
 
         Changes the style of the button when deselect.
 
         Args:
-            btn (Button): Button.
+            btn (Checkbutton): Button.
         """
 
-        btn.var.set(0)
+        btn.setvar(btn.cget('variable'), '0')
         btn.config(bg=self.color_bg, offrelief="flat", overrelief="flat")
 
     def set_history_buttons(self) -> None:
@@ -367,7 +374,7 @@ class CustomWin:
         Put the icon on the application and change its color.
         """
 
-        with resources.path('backpy.assets', 'icon128x.png') as icon_path:
+        with resources.as_file(resources.files('backpy.assets') / 'icon128x.png') as icon_path:
             img = Image.open(icon_path).convert("RGBA")
 
         gray = ImageOps.grayscale(img)
@@ -377,7 +384,7 @@ class CustomWin:
 
         self.icon = ImageTk.PhotoImage(colorized, master=self.root)
 
-        self.root.tk.call('wm', 'iconphoto', self.root._w, self.icon)
+        self.root.tk.call('wm', 'iconphoto', '.', self.icon)
 
     def lift(self) -> None:
         """
@@ -386,7 +393,7 @@ class CustomWin:
         Focus on the window and jump over the others.
         """
 
-        self._after_id_lift = None
+        self._after_id_lift = ''
 
         if not _cm.lift:
             return
@@ -409,7 +416,7 @@ class CustomWin:
             self._main_after_id = None
         if self._after_id_lift:
             self.root.after_cancel(self._after_id_lift)
-            self._after_id_lift = None
+            self._after_id_lift = ''
         if self._after_id_title:
             self.root.after_cancel(self._after_id_title)
             self._after_id_title = None
@@ -418,7 +425,7 @@ class CustomWin:
             self.root.destroy()
 
     def mpl_canvas(self, fig:Figure, 
-                   master:tk.PanedWindow|None = None) -> FigureCanvasTkAgg:
+                   master:tk.PanedWindow|tk.Frame|tk.Tk|None = None) -> FigureCanvasTkAgg:
         """
         Matplotlib canvas
 
@@ -426,7 +433,7 @@ class CustomWin:
 
         Args:
             fig (Figure): Figure from matplotlib.
-            master (PanedWindow|None, optional): Where the canvas is drawn.
+            master (PanedWindow|Frame|Tk|None, optional): Where the canvas is drawn.
 
         Returns:
             FigureCanvasTkAgg: Resulting canvas figure.
@@ -445,7 +452,7 @@ class CustomWin:
         last_size = ()
         _in_rdraw = False
         re_draw = canvas.draw
-        _resize_after_id = None
+        _resize_after_id:str = ''
 
         def on_redraw(call_rdraw:bool = True) -> None:
             """
@@ -484,7 +491,7 @@ class CustomWin:
             setattr(_cm, '__anim_run', False)
             canvas.draw = lambda: None
 
-            if _resize_after_id is not None:
+            if _resize_after_id:
                 widget.after_cancel(_resize_after_id)
 
             def before_redraw() -> None:
@@ -494,6 +501,9 @@ class CustomWin:
                 Before calling 'on_redraw', the variable '_in_rdraw' is set to False.
                 """
                 nonlocal _in_rdraw
+
+                if not self.root.winfo_exists():
+                    return
 
                 _in_rdraw = False
                 on_redraw()
@@ -626,8 +636,10 @@ class CustomWin:
                     is type(mpl_canvas).draw
                 and getattr(_cm, '__anim_run')):
                 try:
+                    anim.frame_seq = iter(anim.frame_seq)
                     frame = next(anim.frame_seq)
-                    anim._draw_next_frame(frame, anim._blit)
+
+                    getattr(anim, '_draw_next_frame')(frame, getattr(anim, '_blit'))
                 except:
                     pass
 
@@ -728,10 +740,10 @@ class CustomWin:
                         height=height, mpl_place=mpl_place)
 
         self.root.bind('<Configure>', 
-                       lambda x: self.mpl_update(mpl_canvas.get_tk_widget(), 
+                       lambda event: self.mpl_update(mpl_canvas.get_tk_widget(), 
                                                 toolbar, 
                                                 height=height, 
-                                                mpl_place=mpl_place), add=['+'])
+                                                mpl_place=mpl_place), add='+')
 
     def tk_panels(self, minsize:int = 200) -> None:
         """
@@ -864,7 +876,7 @@ class CustomWin:
                 "<Button-3>", lambda e, c=key, n=graph_n: active_canvas(c, n), add='+')
 
         self.root.bind(
-            '<Configure>', lambda x: toolbar_update(height=height), add=['+'])
+            '<Configure>', lambda x: toolbar_update(height=height), add='+')
         try:
             self.main_pane.sash_place(0, int(self.root.winfo_width() * 0.5), 0)
             self.left_pane.sash_place(0, 0, int(self.root.winfo_height() * 0.5))
@@ -955,8 +967,7 @@ def def_style(name:str,
                 'd':down or 'red',
     }}})
 
-def gradient_ax(ax:matplotlib.axes._axes.Axes, 
-                colors:list, right:bool=False) -> None:
+def gradient_ax(ax:Axes, colors:list|tuple, right:bool=False) -> None:
     """
     Gradient axes.
 
@@ -964,25 +975,25 @@ def gradient_ax(ax:matplotlib.axes._axes.Axes,
 
     Args:
         ax (Axes): Axes to draw.
-        colors (list): List of the colors of the garden in order.
+        colors (list|tuple): List of the colors of the garden in order.
+            Len less than 2 will default to: ['white', '#e5e5e5'].
         right (bool, optional): Corner from which the gradient 
             starts if False starts from the top left.
     """
 
-    if len(colors) < 1:
-        colors = ['white']
+    if len(colors) < 2:
+        colors = ['white', '#e5e5e5']
 
     gradient = (np.linspace(0, 1, 256).reshape(-1, 1) 
                 + (np.linspace(0, 1, 256) 
                    if right else -np.linspace(0, 1, 256)))
 
     im = ax.imshow(gradient, aspect='auto', 
-                   cmap=mpl.colors.LinearSegmentedColormap.from_list("custom_gradient", colors), 
-                extent=[0, 1, 0, 1], transform=ax.transAxes, zorder=-1)
+                   cmap=mpl.colors.LinearSegmentedColormap.from_list('custom_gradient', colors), 
+                extent=(0., 1., 0., 1.), transform=ax.transAxes, zorder=-1)
     im.get_cursor_data = lambda event: None
 
-def custom_ax(ax:matplotlib.axes._axes.Axes, 
-              bg = '#e5e5e5', edge:bool = False) -> None:
+def custom_ax(ax:Axes, bg:str|tuple|list = '#e5e5e5', edge:bool = False) -> None:
     """
     Custom axes.
 
@@ -993,7 +1004,7 @@ def custom_ax(ax:matplotlib.axes._axes.Axes,
 
     Args:
         ax (Axes): Axes to config.
-        bg (str, optional): Background color of the axis, 
+        bg (str|tuple|list, optional): Background color of the axis, 
             if it is a list or tuple a gradient will be created.
         edge (bool, optional): If the background is a gradient, this 
             determines which corner you launch from, false left, true right.
@@ -1004,7 +1015,7 @@ def custom_ax(ax:matplotlib.axes._axes.Axes,
     if (isinstance(bg, tuple) or isinstance(bg, list)) and len(bg) > 1:
         gradient_ax(ax, bg, right=edge)
     else:
-        ax.set_facecolor(bg)
+        ax.set_facecolor(bg[0] if isinstance(bg, list) else bg)
 
     ax.tick_params(colors='white')
     ax.spines['bottom'].set_color('white')
@@ -1023,7 +1034,7 @@ def custom_ax(ax:matplotlib.axes._axes.Axes,
         spine.set_linewidth(1.2)
 
 def ax_view(view:str, graphics:list[str], 
-            sharex:bool = False) -> tuple[Axes, list[str]]:
+            sharex:bool = False) -> tuple[list[Axes], list[str]]:
     """
     Axes view
 
@@ -1033,16 +1044,18 @@ def ax_view(view:str, graphics:list[str],
     Args:
         view (str): String with format: s/s/s/s each value is a graph.
         graphics (list[str]): Name of each graph, needed to process 'view'.
+            If a graphic has a '/' it is replaced by ''.
         sharex (bool): Shares the x-axis with all the axes.
 
     Returns:
         tuple[list[Axes],list[str]]: List of axes and list of view values.
     """
 
-    view = view.lower().strip().split('/')
-    view = [i for i in view if i in graphics]
+    graphics = [g.replace('/', '') for g in graphics]
+    pview = view.lower().strip().split('/')
+    pview = [i for i in pview if i in graphics]
 
-    if len(view) > 8 or len(view) < 1: 
+    if len(pview) > 8 or len(pview) < 1: 
         raise exception.StatsError(utils.text_fix(f"""
             'view' allowed format: 's/s/s/s' where s is the name of the graph.
             Available graphics: {(",".join([f"'{i}'" for i in graphics]))}.
@@ -1061,17 +1074,17 @@ def ax_view(view:str, graphics:list[str],
     }
 
     axes = []
-    for i in range(len(view)):
+    for i in range(len(pview)):
         sharex_=axes[-1] if axes and sharex else None
-        nrows, ncols, rowspan, colspan = layout_rules[len(view)](i)
+        nrows, ncols, rowspan, colspan = layout_rules[len(pview)](i)
         axes.append(
-            mpl.pyplot.subplot2grid(
+            plt.subplot2grid(
                 (nrows, ncols), loc[i],
                 rowspan=rowspan, colspan=colspan,
                 sharex=sharex_
         ))
 
-    return axes, view
+    return axes, pview
 
 def new_paneledw(block:bool, style:dict = {}) -> None:
     """
@@ -1093,11 +1106,13 @@ def new_paneledw(block:bool, style:dict = {}) -> None:
     """
 
     # Exceptions
-    if len(_cm.__panel_list) > 4:
-        raise exception.CustomWinError("Maximum 4 panels")
 
-    if len(_cm.__panel_list) != _cm.__panel_wmax and not block:
+    if len(_cm.__panel_list) > 4:
+        raise exception.CustomWinError('Maximum 4 panels')
+    elif len(_cm.__panel_list) != _cm.__panel_wmax and not block:
         return
+    elif len(_cm.__panel_list) <= 0:
+        raise exception.CustomWinError('None panel loaded.')
 
     window = CustomWin(
         title=_cm.__panel_list[-1].get('title', None) if len(_cm.__panel_list) == 1 else None,
@@ -1173,7 +1188,7 @@ def add_window(fig:Figure, title:str|Callable|None = None, block:bool = True,
             'toolbar':toolbar,
         })
 
-        mpl.pyplot.close(fig)
+        plt.close(fig)
         new_paneledw(block=block, style=style)
     else:
         window = CustomWin(
@@ -1183,13 +1198,13 @@ def add_window(fig:Figure, title:str|Callable|None = None, block:bool = True,
             button_act=style.get('btna', '#333333'))
 
         mpl_canvas = window.mpl_canvas(fig=fig)
-        mpl.pyplot.close(fig)
+        plt.close(fig)
 
         if anim:
-            window.mpl_animation(anim=anim, mpl_canvas=mpl_canvas, interval=interval|100)
+            window.mpl_animation(anim=anim, mpl_canvas=mpl_canvas, interval=interval or 100)
         if toolbar:
-            toolbar = window.mpl_toolbar(
+            custom_toolbar = window.mpl_toolbar(
                 mpl_canvas=mpl_canvas, movement=False if toolbar == 'limited' else True, link=True)
-            window.mpl_toolbar_config(toolbar=toolbar, mpl_canvas=mpl_canvas)
+            window.mpl_toolbar_config(toolbar=custom_toolbar, mpl_canvas=mpl_canvas)
 
         window.show(block=block)

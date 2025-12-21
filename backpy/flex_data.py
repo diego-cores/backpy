@@ -11,9 +11,10 @@ Classes:
 """
 
 from __future__ import annotations
+from typing import Self, Any, cast, overload, Callable
 
-from typing import TypeVar, Generic, Any
-from collections.abc import MutableSequence
+from pandas.api.extensions import ExtensionArray
+from pandas._typing import SequenceNotStr
 
 import pandas as pd
 import random as rd
@@ -21,9 +22,7 @@ import numpy as np
 
 from . import exception
 
-T = TypeVar('T')
-
-class DataWrapper(MutableSequence, Generic[T]):
+class DataWrapper():
     """
     Data wrapper.
 
@@ -52,73 +51,76 @@ class DataWrapper(MutableSequence, Generic[T]):
         __valid_columns: Returns the correct column names.
     """
 
+    _columns:np.ndarray | range | None
+    _index:np.ndarray | range | None
+
     def __init__(
-            self, data: (list | dict[str, list] | np.ndarray | pd.DataFrame
+            self, data: (list | dict[str, list] | ExtensionArray | np.ndarray | pd.DataFrame
                           | pd.Series | pd.Index | DataWrapper | None) = None, 
-            columns: np.ndarray | pd.Index | list | tuple | "DataWrapper" | None = None,
-            index: np.ndarray | pd.Index | list | tuple | "DataWrapper" | None = None
+            columns: np.ndarray | pd.Index | range | list | tuple | "DataWrapper" | None = None,
+            index: np.ndarray | pd.Index | range | list | tuple | "DataWrapper" | None = None
         ) -> None:
         """
         Builder method.
 
         Args:
-            data (list | dict[str, list] | ndarray | DataFrame 
+            data (list | dict[str, list] | ExtensionArray | ndarray | DataFrame 
                 | Series | Index | DataWrapper | None, optional): Value to store.
-            columns (ndarray | Index | list | tuple | 
+            columns (ndarray | Index | range | list | tuple | 
                 "DataWrapper" | None, optional): Column names.
             index (ndarray | Index | list | tuple | 
                 "DataWrapper" | None, optional): Data index.
         """
 
-        if not columns is None:
-            columns = self.__get_columns(columns)
+        columns_nd = None if columns is None else self.__get_columns(columns)            
+
         if not index is None:
-            index = self.__get_columns(columns, index=True)
+            index = self.__get_columns(index, index=True)
 
         self._data = self.__set_convertible(data)
         self._index = (self.__set_index(data) if index is None else index)
-        self._columns = (self.__set_columns(data) if columns is None 
-                         else columns)
+        self._columns = (self.__set_columns(data) 
+                        if columns_nd is None else columns_nd)
 
         super().__init__()
 
     def __get_columns(self, 
-            columns:(np.ndarray | pd.Index 
-                | list | tuple | "DataWrapper"), 
-            index:bool = False) -> np.ndarray:
+            columns:(np.ndarray | pd.Index | range
+                | list | tuple | "DataWrapper" | None), 
+            index:bool = False) -> np.ndarray|range|None:
         """
         Get columns.
 
-        This function converts its 'columns' argument to ndarray.
+        This function converts its 'columns' argument to ndarray or range.
 
         Args:
-            columns (np.ndarray | pd.Index 
+            columns (ndarray | Index 
                 | list | tuple | "DataWrapper" | None, optional): 
                 Columns to convert.
             index (bool, optional): Instead of searching for 
                 the '_columns' attribute in 'DataWrapper' search for '_index'.
 
         Returns:
-            ndarray: 'columns' in ndarray type.
+            ndarray|range|None: 'columns' in ndarray type.
         """
 
-        if type(columns) is np.ndarray:
+        if isinstance(columns, (np.ndarray, range)):
             return columns
-        elif type(columns) is DataWrapper:
+        elif isinstance(columns, DataWrapper):
             if index: return columns._index
 
             return columns._columns
-        elif type(columns) is pd.Index:
+        elif isinstance(columns, pd.Index):
             return columns.to_numpy()
         else:
             return np.array(columns, ndmin=1)
 
-    def __set_convertible(self, data:list | dict[str, list] | np.ndarray | pd.DataFrame 
+    def __set_convertible(self, data:list | dict[str, list] | ExtensionArray | np.ndarray | pd.DataFrame 
                 | pd.Series | pd.Index | "DataWrapper" | None) -> np.ndarray:
         """
         Set convertible.
 
-        Returns 'data' in list type.
+        Returns 'data' in ndarray type.
 
         Args:
             data (list | dict[str, list] | np.ndarray | pd.DataFrame 
@@ -129,61 +131,61 @@ class DataWrapper(MutableSequence, Generic[T]):
         """
         if data is None:
             return np.array([])
-        elif type(data) is DataWrapper:
+        elif isinstance(data, DataWrapper):
             return data.unwrap()
-        elif type(data) is list:
+        elif isinstance(data, list):
             return np.array(data, dtype=object)
-        elif type(data) is dict:
+        elif isinstance(data, dict):
             return np.array(list(data.values()), 
                             dtype=object).T
-
-        match type(data):
-            case pd.DataFrame:
-                return data.to_records(index=False)
-            case pd.Series | pd.Index:
-                return data.values
-            case np.ndarray:
-                return data
+        elif isinstance(data, pd.DataFrame):
+            return data.to_records(index=False)
+        elif isinstance(data, (pd.Series, pd.Index)):
+            return np.asarray(data.values)
+        elif isinstance(data, np.ndarray):
+            return data
+        elif isinstance(data, ExtensionArray):
+            return np.asarray(data)
 
         return data
 
-    def __set_index(self, data:list | dict[str, list] | np.ndarray | pd.DataFrame 
-                | pd.Series | pd.Index | "DataWrapper" | None) -> np.ndarray:
+    def __set_index(self, data:list | dict[str, list] | ExtensionArray | np.ndarray | pd.DataFrame 
+                | pd.Series | pd.Index | "DataWrapper" | None) -> range|np.ndarray|None:
         """
         Set index.
 
         Returns the Pandas index if 'data' has one.
 
         Args:
-            data (list | dict[str, list] | np.ndarray | pd.DataFrame 
-                | pd.Series | pd.Index | DataWrapper | None, optional): Value with index.
+            data (list | dict[str, list] | ExtensionArray | np.ndarray | DataFrame 
+                | Series | Index | DataWrapper | None, optional): Value with index.
 
         Returns:
-            ndarray: Index in ndarray type.
+            range|np.ndarray|None: Index in ndarray or range type.
         """
 
         if type(data) is DataWrapper:
             return data._index
         elif type(data) is pd.DataFrame or type(data) is pd.Series:
             return data.index.to_numpy()
-        elif type(data) is np.ndarray:
+        elif type(data) is np.ndarray or type(data) is ExtensionArray:
             return range(len(data))
 
         return None
 
-    def __set_columns(self, data:list | dict[str, list] | np.ndarray | pd.DataFrame 
-                | pd.Series | pd.Index | "DataWrapper" | None) -> np.ndarray:
+    def __set_columns(self, data:list | dict[str, list] | ExtensionArray | np.ndarray | pd.DataFrame 
+                | pd.Series | pd.Index | "DataWrapper" | None) -> np.ndarray|range|None:
         """
         Set index.
 
         Returns the names of columns if 'data' has columns.
 
         Args:
-            data (list | dict[str, list] | np.ndarray | pd.DataFrame 
-                | pd.Series | pd.Index | DataWrapper | None, optional): Value with columns.
+            data (list | dict[str, list] | ExtensionArray | np.ndarray | DataFrame 
+                | Series | Index | DataWrapper | None, optional): Value with columns.
 
         Returns:
-            ndarray: Columns in ndarray type.
+            ndarray|range|None: Columns in ndarray type.
         """
 
         if type(data) is DataWrapper:
@@ -195,7 +197,7 @@ class DataWrapper(MutableSequence, Generic[T]):
 
         return None
 
-    def __valid_index(self, flatten:bool = False) -> list:
+    def __valid_index(self, flatten:bool = False) -> None|list:
         """
         Valid index.
 
@@ -206,7 +208,7 @@ class DataWrapper(MutableSequence, Generic[T]):
                 is calculated instead of self._data.
 
         Returns:
-            list: Index in list type.
+            None|list: Index in list type.
         """
 
         return (self._index.tolist() 
@@ -229,10 +231,11 @@ class DataWrapper(MutableSequence, Generic[T]):
 
         return (self._columns.tolist() 
                 if not self._columns is None
+                    and not isinstance(self._columns, range)
                     and n_cols == len(self._columns) 
                 else list(range(n_cols)))
 
-    def insert(self, idx:int, value:Any) -> None:
+    def insert(self, index:int, value:Any) -> None:
         """
         Insert
 
@@ -240,11 +243,11 @@ class DataWrapper(MutableSequence, Generic[T]):
         Inserts a value into the data list.
 
         Args:
-            idx (bool): Index where it will be inserted.
+            index (bool): Index where it will be inserted.
             value (Any): Value to insert.
         """
 
-        self._data = np.insert(self._data, idx, value)
+        self._data = np.insert(self._data, index, value)
 
     def unwrap(self) -> np.ndarray:
         """
@@ -271,11 +274,16 @@ class DataWrapper(MutableSequence, Generic[T]):
         try: 
             if (hasattr(self._data.dtype, "names") 
                 and self._data.dtype.names is not None):
-                return pd.DataFrame(self._data, index=self.__valid_index())
+
+                return pd.DataFrame(self._data, index=cast(
+                                        SequenceNotStr[int], 
+                                        self.__valid_index() or []))
             else:
-                return pd.DataFrame(self._data, index=self.__valid_index(), 
-                                    columns=self.__valid_columns())
-        except ValueError as e: 
+                return pd.DataFrame(self._data, index=cast(
+                                        SequenceNotStr[int], 
+                                        self.__valid_index() or []), 
+                                    columns=cast(SequenceNotStr, self.__valid_columns()))
+        except ValueError as e:
             raise exception.ConvWrapperError(f"Dataframe conversion error.")
 
     def to_series(self) -> pd.Series:
@@ -327,11 +335,12 @@ class DataWrapper(MutableSequence, Generic[T]):
         return self._data.tolist()
 
     def __getattr__(self, name):
-        attr = getattr(self._data, name, None)
+        attr:Any|None = getattr(self._data, name, None)
         if callable(attr):
+            c_attr = attr
             def wrapper(*args, **kwargs):
                 try:
-                    result = attr(*args, **kwargs)
+                    result = c_attr(*args, **kwargs)
 
                     return DataWrapper(result) if isinstance(result, np.ndarray) else result
                 except Exception as e:
@@ -346,16 +355,19 @@ class DataWrapper(MutableSequence, Generic[T]):
     def __array__(self, dtype=None):
         return self._data if dtype is None else self._data.astype(dtype)
 
-    def __getitem__(self, idx):
+    @overload
+    def __getitem__(self, index: int | slice) -> np.ndarray: ...
+
+    @overload
+    def __getitem__(self, index: str) -> np.ndarray: ...
+
+    def __getitem__(self, index:str|int|slice) -> np.ndarray:
         if len(self._data) == 0: return self._data
 
-        return self._data[idx]
+        return self._data[index]
 
-    def __setitem__(self, idx, value):
-        self._data[idx] = value
-
-    def __delitem__(self, idx):
-        del self._data[idx]
+    def __setitem__(self, index, value):
+        self._data[index] = value
 
     def __len__(self):
         if (hasattr(self._data.dtype, "names") 
@@ -452,7 +464,7 @@ class CostsValue:
         else:
             self.__maker = self.__taker = self.__process_value(value)
 
-    def __process_value(self, val: tuple | int | float) -> callable:
+    def __process_value(self, val: tuple | int | float) -> Callable:
         """
         Process value.
 
@@ -463,7 +475,7 @@ class CostsValue:
             val (tuple | int | float): Value to evaluate.
 
         Returns:
-            callable: The function that will return the random or fixed value.
+            Callable: The function that will return the random or fixed value.
         """
 
         if isinstance(val, tuple) and len(val) == 2 and self._rand_supp:
@@ -524,14 +536,17 @@ class ChunkWrapper(np.ndarray):
         __rewrap: Wraps an ndarray with this instance.
     """
 
-    def __new__(cls, data: np.ndarray = np.array([]), 
+    _chunk_size:int
+    _pos:int
+
+    def __new__(cls, data:Any = np.array([]), 
                 dtype:str | type | np.dtype | None = None,
-                chunk_size: int | None = None) -> np.ndarray:
+                chunk_size: int | None = None) -> Self:
         """
         Constructor method.
 
         Args:
-            data (ndarray): Value to store.
+            data (Any): Value to store.
             dtype (str | type | dtype | None, optional): 
                 Numpy dtype, None sets the dtype already set.
             chunk_size (int, optional): Size of each chunk.
@@ -569,14 +584,14 @@ class ChunkWrapper(np.ndarray):
         return new_data
 
     def chunk_loader(
-            self, dtype:str | type | np.dtype | None = None) -> ChunkWrapper:
+            self, dtype:str | type | tuple | list | np.dtype | None = None) -> ChunkWrapper:
         """
         Chunk loader
 
         Load space to save more data.
 
         Args:
-            dtype (str | type | dtype | None, optional): 
+            dtype (str | type | tuple | list | dtype | None, optional): 
                 Numpy dtype, None sets the dtype already set.
 
         Returns:
@@ -586,7 +601,7 @@ class ChunkWrapper(np.ndarray):
         if dtype is None:
             dtype = self.dtype
 
-        self.dtype = dtype
+        setattr(self, 'dtype', dtype)
         new_data = np.concat(
             [self, np.empty(self._chunk_size, dtype=dtype)]
         , dtype=dtype)
@@ -594,7 +609,7 @@ class ChunkWrapper(np.ndarray):
         return self.__rewrap(new_data)
 
     def append(self, data:np.ndarray, 
-                    dtype:str | type | np.dtype | None = None) -> ChunkWrapper:
+                dtype:str | type | tuple | list | np.dtype | None = None) -> ChunkWrapper:
         """
         Append
 
@@ -602,7 +617,7 @@ class ChunkWrapper(np.ndarray):
 
         Args:
             data (ndarray): Data to add.
-            dtype (str | type | dtype | None, optional): 
+            dtype (str | type | tuple | list | dtype | None, optional): 
                 Numpy dtype, None sets the dtype already set.
 
         Returns:
@@ -620,14 +635,14 @@ class ChunkWrapper(np.ndarray):
 
         return new_val
 
-    def values(self) -> ChunkWrapper:
+    def values(self) -> np.ndarray:
         """
         Values
 
         Returns the filled data, equivalent to 'self[:self._pos]'
         
         Returns:
-            ChunkWrapper: The array without the empty data.
+            ndarray: The array without the empty data.
         """
 
         return self[:self._pos]

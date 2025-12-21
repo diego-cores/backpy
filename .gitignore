@@ -1,4 +1,5 @@
 backpy/__pycache__/
+tests/__pycache__/
 *.egg-info/
 .vscode/
 venv/

@@ -25,13 +25,14 @@ Hidden Functions:
     __load_binance_data: Load data from Binance using a client.
 """
 
-from matplotlib.axes._axes import Axes
-
 from datetime import datetime
-from typing import Any
+from typing import Callable
 
-import matplotlib.animation
-import matplotlib.pyplot
+from matplotlib.collections import LineCollection, PatchCollection, PathCollection
+from matplotlib.dates import DateFormatter, date2num, num2date
+from matplotlib.animation import FuncAnimation
+from matplotlib.axes._axes import Axes
+import matplotlib.pyplot as plt
 import matplotlib as mpl
 
 import random as rd
@@ -49,7 +50,7 @@ from . import strategy
 from . import utils
 from . import stats
 
-def __load_binance_data(client:callable, symbol:str = 'BTCUSDT', 
+def __load_binance_data(client:Callable, symbol:str = 'BTCUSDT', 
                         interval:str = '1d', start_time:str | None = None, 
                         end_time:str | None = None, statistics:bool = True, 
                         progress:bool = True, data_extract:bool = False
@@ -60,7 +61,7 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
     Loads data using the Binance client.
 
     Args:
-        client (callable): Bianance client.
+        client (Callable): Bianance client.
         symbol (str, optional): The trading pair.
         interval (str, optional): Data interval, e.g 1s, 1m, 5m, 1h, 1d, etc.
         start_time (str | None): Start date for load data in YYYY-MM-DD format.
@@ -83,7 +84,7 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
     if progress:
         t = time()
         size = None
-        ini_time = None
+        ini_time = 0
 
     def __loop_def(st_t):
         dt = client.klines(symbol=symbol, 
@@ -135,13 +136,13 @@ def __load_binance_data(client:callable, symbol:str = 'BTCUSDT',
                     'taker_buy_quote', 
                     '_']
 
-    data.index = data['timestamp']
+    data.index = data['timestamp'].values
     data = data[['open', 'high', 'low', 'close', 'volume']]
 
-    if data.empty: 
+    if data.empty or isinstance(data, pd.Series): 
         raise exception.BinanceError('Data empty error.')
 
-    data.index = mpl.dates.date2num(pd.to_datetime(data.index, unit='ms', utc=True))
+    data.index = date2num(pd.to_datetime(data.index, unit='ms', utc=True))
     data_width = utils.calc_width(data.index)
 
     if statistics: stats_icon(prnt=True, 
@@ -249,11 +250,10 @@ def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d',
     except: 
         raise exception.BinanceError('Binance parameters error.')
 
-def load_yfinance_data(ticker:str = Any, 
-                       start:str | None = None, end:str | None = None, 
-                       interval:str = '1d', days_op:int = 365, 
-                       statistics:bool = True, progress:bool = True, 
-                       data_extract:bool = False
+def load_yfinance_data(ticker:str, start:str | None = None, 
+                       end:str | None = None, interval:str = '1d', 
+                       days_op:int = 365, statistics:bool = True, 
+                       progress:bool = True, data_extract:bool = False
                        ) -> tuple[pd.DataFrame, float] | None:
     """
     Load yfinance Data.
@@ -287,7 +287,7 @@ def load_yfinance_data(ticker:str = Any,
     try:
         import yfinance as yf
 
-        t = time() if progress else None
+        t = time()
 
         yf.set_tz_cache_location('.\\yfinance_cache')
 
@@ -299,7 +299,7 @@ def load_yfinance_data(ticker:str = Any,
             raise exception.YfinanceError('The symbol does not exist.')
         
         data.columns = data.columns.droplevel(1).str.lower()
-        data.index = mpl.dates.date2num(data.index)
+        data.index = date2num(data.index)
         data_width = utils.calc_width(data.index)
 
         if progress: 
@@ -363,9 +363,9 @@ def load_data(data:pd.DataFrame, icon:str | None = None,
     if days_op > 365 or days_op < 1:
         raise exception.DataError(f"'days_op' cant be: '{days_op}'.")
 
+    t = time()
     if progress:
         utils.load_bar(size=1, step=0)
-        t = time()
 
     if not 'volume' in data.columns:
         data['volume'] = 0
@@ -374,10 +374,17 @@ def load_data(data:pd.DataFrame, icon:str | None = None,
         utils.load_bar(size=1, step=1)
         print('| DataTimer:',utils.num_align(round(time()-t,2)))
 
-    _cm.__data = data[['open', 'high', 'low', 'close', 'volume']]
+    data_df = data[['open', 'high', 'low', 'close', 'volume']]
+    if data_df.empty or isinstance(data_df, pd.Series): 
+        raise exception.DataError('Data empty error.')
+
+    _cm.__data = data_df
     _cm.__data.index.name = 'date'
     _cm.__data.index = utils.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index)
+
+    icon = icon or 'None'
+    interval = interval or 'None'
 
     _cm.__data_icon = icon.strip()
     _cm.__data_interval = interval.strip()
@@ -423,9 +430,9 @@ def load_data_bpd(path:str = 'data.bpd', start:int | None = None,
         raise exception.DataError(
             "The resulting 'data' is empty. Bad: 'start' and 'end'.")
 
+    t = time()
     if progress:
         utils.load_bar(size=1, step=0)
-        t = time()
 
     with open(path, "rb") as file:
         data, icon, interval, days_op_load = pk.load(file)
@@ -572,8 +579,8 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
     _cm.__spread_pct = flx.CostsValue(spread, cust_error="Error of 'spread'.")
     _cm.__chunk_size = chunk_size or None
 
-def run(cls:type|list[type], name:str|None = None, prnt:bool = True, 
-        progress:bool = True, trades_r:bool = False) -> str | None:
+def run(cls:type|list[type]|tuple[type], name:str|None = None, prnt:bool = True, 
+        progress:bool = True, trades_r:bool = False) -> dict|str|None:
     """
     Run
 
@@ -584,7 +591,7 @@ def run(cls:type|list[type], name:str|None = None, prnt:bool = True,
         function as expected.
 
     Args:
-        cls (type|list[type]): A class inherited from `StrategyClass` where the strategy is implemented.
+        cls (type|list[type]|tuple[type]): A class inherited from `StrategyClass` where the strategy is implemented.
         name (str|None, optional): Backtest name, None = cls.__name__, 
             if the name is duplicated a number will be added at the end.
         prnt (bool, optional): If True, prints trade statistics. If False, returns a string 
@@ -594,12 +601,12 @@ def run(cls:type|list[type], name:str|None = None, prnt:bool = True,
             data is returned and will not be saved.
 
     Returns:
-        str|None: Statistics.
+        dict|str|None: Statistics or backtest.
     """
     # Exceptions.
     if _cm.__data is None: 
         raise exception.RunError('Data not loaded.')
-    elif not type(cls) in (tuple, list):
+    elif not isinstance(cls, (tuple, list)):
         cls = [cls]
 
     instances = []
@@ -607,7 +614,7 @@ def run(cls:type|list[type], name:str|None = None, prnt:bool = True,
         if not issubclass(st, strategy.StrategyClass):
             raise exception.RunError(
                 f"'{st.__name__}' is not a subclass of 'strategy.StrategyClass'.")
-        elif st.__abstractmethods__:
+        elif getattr(st, '__abstractmethods__'):
             raise exception.RunError(
                 "The implementation of the 'next' abstract method is missing.")
 
@@ -664,7 +671,7 @@ def run(cls:type|list[type], name:str|None = None, prnt:bool = True,
             f'RunTimer: {utils.num_align(time()-t)}'
             if _cm.run_timer and not progress else '') 
 
-    positions_list = None
+    positions_list:np.ndarray|None = None
     positions_open_list = []
     for i in instances:
         positions_open_list.extend(i._StrategyClass__positions)
@@ -724,9 +731,9 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
             and the end of the candles is more in the center.
         panel (str, optional): To create a new window or add a panel, 
             only 'new' or 'add' are possible.
-        style (str | None, optional): Color style. 
+        style (str|None, optional): Color style. 
             If you leave it as 'last' the last one will be used.
-        style_c (dict | None, optional): Customize the defined style by 
+        style_c (dict|None, optional): Customize the defined style by 
             modifying the dictionary. To know what to modify, 
             read the docstring of 'def_style'.
         block (bool, optional): If True, pauses script execution until all 
@@ -735,6 +742,7 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
     """
     # Exceptions.
     panel = panel.lower()
+    valid_styles = {'random', 'last'} | set(_cm.__plt_styles.keys())
 
     if _cm.__data is None: 
         raise exception.RunError('Data not loaded.')
@@ -744,11 +752,10 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
     elif not issubclass(cls, strategy.StrategyClass):
         raise exception.RunError(
             f"'{cls.__name__}' is not a subclass of 'strategy.StrategyClass'.")
-    elif cls.__abstractmethods__:
+    elif getattr(cls, '__abstractmethods__'):
         raise exception.RunError(
             "The implementation of the 'next' abstract method is missing.")
-    elif (not style is None and not (style:=style.lower()) 
-          in ('random', 'last', *_cm.__plt_styles.keys())):
+    elif (not style is None and (style:=style.lower()) not in valid_styles):
         raise exception.PlotError(f"'{style}' Not a style.")
     elif interval < 100:
         raise exception.PlotError(f"'interval' it can only be greater or equal than 100.")
@@ -771,9 +778,9 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
         plt_colors.update(style_c)
 
     instance = cls(data=_cm.__data)
-    fig = mpl.pyplot.figure(figsize=(16,8))
-    ax1 = mpl.pyplot.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
-    ax2 = mpl.pyplot.subplot2grid((6,1), (5,0), rowspan=1, 
+    fig = plt.figure(figsize=(16,8))
+    ax1 = plt.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
+    ax2 = plt.subplot2grid((6,1), (5,0), rowspan=1, 
                                   colspan=1, sharex=ax1)
 
     gdir = plt_colors.get('gdir', False)
@@ -802,11 +809,14 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
 
         nonlocal f, trades_last, pad
 
-        if f+1 >= len(_cm.__data):
-            return
+        if (_cm.__data is None 
+            or not isinstance(_cm.__data_width, float) 
+            or f+1 >= len(_cm.__data)):
+            return ()
 
         f += 1
-        if (l:=f-candles) <= 0: l = 0
+        l = f-candles
+        if l <= 0: l = 0
 
         utils.plot_candles(ax1, _cm.__data.iloc[[f]], _cm.__data_width*0.9,
                         color_up=market_colors.get('u', 'g'),
@@ -828,7 +838,7 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
 
         dupl_trades = pd.concat([trades, trades_last]).drop_duplicates(keep=False)
         trades_mask = trades.apply(tuple, axis=1).isin(dupl_trades.apply(tuple, axis=1))
-        trades_uniq = trades[trades_mask].copy()
+        trades_uniq = trades.loc[trades_mask].copy()
         trades_last = pd.concat([trades, trades_last]).drop_duplicates()
 
         if not trades_uniq.empty:
@@ -841,11 +851,11 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
         pad_l = (abs(_cm.__data.index[l:f][-1]-_cm.__data.index[l:f][0])/2 if pad else 0)
         ax1.set_ylim(_cm.__data.iloc[l:f]['low'].min()*0.99,
                      _cm.__data.iloc[l:f]['high'].max()*1.01,)
-        ax1.set_xlim(_cm.__data.index[l:f][0]-_cm.__data_width*(candles*0.03), 
-                    _cm.__data.index[l:f][-1]+_cm.__data_width*2*(candles*0.03)+pad_l)
+        ax1.set_xlim(_cm.__data.index.values[l:f][0]-_cm.__data_width*(candles*0.03), 
+                    _cm.__data.index.values[l:f][-1]+_cm.__data_width*2*(candles*0.03)+pad_l)
         ax2.set_ylim(None, _cm.__data.iloc[l:f]['volume'].max()*1.1 or 1)
 
-        def axes_xlim(ax:Axes) -> None:
+        def axes_xlim(ax:Axes):
             """
             Axes xlim
 
@@ -856,15 +866,26 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
                 ax (Axes): Axis.
             """
 
+            if _cm.__data is None or _cm.__data_width is None:
+                return
+
             for coll in ax.collections:
-                if isinstance(coll, matplotlib.collections.LineCollection):
+                if isinstance(coll, LineCollection):
                     segs = coll.get_segments()[0]
                     xs = segs[0][0]
-                elif isinstance(coll, matplotlib.collections.PatchCollection):
+                elif isinstance(coll, PatchCollection):
                     paths = coll.get_paths()[0]
+                    if not isinstance(paths.vertices, np.ndarray):
+                        continue
+
                     xs = np.max(paths.vertices[:, 0])
-                elif isinstance(coll, matplotlib.collections.PathCollection):
-                    xs = coll.get_offsets()[:, 0][0]
+
+                elif isinstance(coll, PathCollection):
+                    offsets = coll.get_offsets()
+                    if not isinstance(offsets, np.ndarray):
+                        continue
+
+                    xs = offsets[:, 0][0]
                 else:
                     continue
 
@@ -872,11 +893,12 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
                     coll.remove()
 
         axes_xlim(ax1); axes_xlim(ax2)
+        return ()
 
-    date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
+    date_format = DateFormatter('%H:%M %d-%m-%Y')
 
-    ax2.yaxis.set_major_formatter(lambda y, _: y.real)
-    ax1.yaxis.set_major_formatter(lambda y, _: y.real)
+    ax2.yaxis.set_major_formatter(lambda y, _: str(y.real))
+    ax1.yaxis.set_major_formatter(lambda y, _: str(y.real))
     ax1.xaxis.set_major_formatter(date_format)
 
     ax1.tick_params(axis='x', labelbottom=False)
@@ -888,8 +910,8 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
     fig.autofmt_xdate()
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0, hspace=0)
 
-    anim = mpl.animation.FuncAnimation(fig, update, frames=len(_cm.__data),
-                                       interval=interval, blit=False)
+    anim = FuncAnimation(fig, update, frames=len(_cm.__data),
+                        interval=interval, blit=False)
 
     cpl.add_window(
         fig=fig,
@@ -947,6 +969,7 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
 
     # Exceptions.
     panel = panel.lower()
+    valid_style = {'random', 'last'} | set(_cm.__plt_styles.keys())
 
     if _cm.__data is None or not type(_cm.__data) is pd.DataFrame or _cm.__data.empty: 
         raise exception.PlotError('Data not loaded.')
@@ -956,8 +979,7 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
     elif panel not in ('new', 'add'):
         raise exception.PlotError(
             f"'{panel}' Not a valid option for: 'panel'.")
-    elif (not style is None and not (style:=style.lower()) 
-          in ('random', 'last', *_cm.__plt_styles.keys())):
+    elif (not style is None and not (style:=style.lower()) in valid_style):
         raise exception.PlotError(f"'{style}' Not a style.")
 
     # Corrections.
@@ -977,14 +999,14 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
     if isinstance(style_c, dict):
         plt_colors.update(style_c)
 
+    t = time()
     if progress: 
-        t = time()
         text = f'| PlotTimer: {utils.num_align(0)} '
         utils.load_bar(size=4, step=0, text=text)
 
-    fig = mpl.pyplot.figure(figsize=(16,8))
-    ax1 = mpl.pyplot.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
-    ax2 = mpl.pyplot.subplot2grid((6,1), (5,0), rowspan=1, 
+    fig = plt.figure(figsize=(16,8))
+    ax1 = plt.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
+    ax2 = plt.subplot2grid((6,1), (5,0), rowspan=1, 
                                   colspan=1, sharex=ax1)
 
     gdir = plt_colors.get('gdir', False)
@@ -1007,7 +1029,7 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
         text = f'| PlotTimer: {utils.num_align(time()-t)} '
         utils.load_bar(size=4, step=2, text=text)
 
-    utils.plot_volume(ax2, _cm.__data['volume'], _cm.__data_width, 
+    utils.plot_volume(ax2, _cm.__data.loc[:, 'volume'], _cm.__data_width, 
                       color=plt_colors.get('vol', 'tab:orange'))
 
     if position and position.lower() != 'none' and len(_cm.get_backtest_names()) > 0:
@@ -1024,10 +1046,10 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
         text = f'| PlotTimer: {utils.num_align(time()-t)} '
         utils.load_bar(size=4, step=3, text=text)
 
-    date_format = mpl.dates.DateFormatter('%H:%M %d-%m-%Y')
+    date_format = DateFormatter('%H:%M %d-%m-%Y')
 
-    ax2.yaxis.set_major_formatter(lambda y, _: y.real)
-    ax1.yaxis.set_major_formatter(lambda y, _: y.real)
+    ax2.yaxis.set_major_formatter(lambda y, _: str(y.real))
+    ax1.yaxis.set_major_formatter(lambda y, _: str(y.real))
     ax1.xaxis.set_major_formatter(date_format)
 
     ax1.tick_params(axis='x', labelbottom=False)
@@ -1039,7 +1061,7 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
     fig.autofmt_xdate()
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0, hspace=0)
 
-    ix_date = mpl.dates.num2date(_cm.__data.index)
+    ix_date = num2date(_cm.__data.index)
 
     s_date = ".".join(str(val) for val in 
                     [ix_date[0].day, ix_date[0].month, 
@@ -1066,7 +1088,7 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
                   log:bool = False, view:str = 'b/w/r/e',  
                   custom_graph:dict = {}, panel:str = 'new',
                   style:str | None = 'last', style_c:dict | None = None, 
-                  block:bool = True) -> None:
+                  block:bool = True) -> str|None:
     """
     Plot Strategy Statistics.
 
@@ -1105,6 +1127,9 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
         block (bool, optional): If True, pauses script execution until all figure 
             windows are closed. If False, the script continues running after 
             displaying the figures. Default is True.
+
+    Return:
+        str: Returns a string if there is no data to view or no trades.
     """
 
     for i in custom_graph: plot_strategy_add(custom_graph[i], i)
@@ -1114,13 +1139,13 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
 
     # Exceptions.
     panel = panel.lower()
+    valid_style = {'random', 'last'} | set(_cm.__plt_styles.keys())
 
     if trades.empty: 
         return 'Trades not loaded.'
     elif not 'profit' in trades.columns:  
         return 'No data to see.'
-    elif (not style is None and not (style:=style.lower()) 
-          in ('random', 'last', *_cm.__plt_styles.keys())):
+    elif (not style is None and not (style:=style.lower()) in valid_style):
         raise exception.StatsError(f"'{style}' Not a style.")
     elif panel not in ('new', 'add'):
         raise exception.StatsError(
@@ -1139,7 +1164,7 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
     if isinstance(style_c, dict):
         plt_colors.update(style_c)
 
-    fig = mpl.pyplot.figure(figsize=(16,8))
+    fig = plt.figure(figsize=(16,8))
 
     init_data = {col: 0 for col in trades.columns}
     init_data['positionDate'] = trades['positionDate'].iloc[0]
@@ -1154,9 +1179,9 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
     graphics = ['p','w','r','e','b']
     graphics.extend(list(_cm.__custom_plot.keys()))
 
-    axes, view = cpl.ax_view(view=view, graphics=graphics)
+    axes, r_view = cpl.ax_view(view=view, graphics=graphics)
 
-    for i,v in enumerate(view):
+    for i,v in enumerate(r_view):
         ax = axes[i]
 
         cpl.custom_ax(ax, plt_colors['bg'], edge=gdir)
@@ -1165,15 +1190,15 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
         ax.tick_params('y', which='both', left=False, 
                        right=False, labelleft=False)
 
-        ax.yaxis.set_major_formatter(lambda y, _: y.real)
-        ax.xaxis.set_major_formatter(mpl.dates.DateFormatter('%H:%M %d-%m-%Y'))
+        ax.yaxis.set_major_formatter(lambda y, _: str(y.real))
+        ax.xaxis.set_major_formatter(DateFormatter('%H:%M %d-%m-%Y'))
 
         pos_date = trades['positionDate']
         ax.set_xlim(pos_date.dropna().iloc[0]-(trades_data['d_width']*len(pos_date)/10), 
                     pos_date.dropna().iloc[-1]+(trades_data['d_width']*len(pos_date)/10))
 
-        y_limit = lambda values, comp=1: (np.min(values)-comp, 
-                                          np.max(values)*1.05+comp)
+        y_limit:Callable = lambda values, comp=1: (np.min(values)-comp, 
+                                                    np.max(values)*1.05+comp)
 
         match v:
             case 'b':
@@ -1211,8 +1236,8 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
                 if np.isinf(values).any():
                     values = pd.Series(0, index=values.index)
 
-                color = (market_colors.get('u', 'g') 
-                         if (1 + trades['profitPer'] / 100).prod() > 1 
+                color = (market_colors.get('u', 'g')
+                         if (1 + trades.loc[:, 'profitPer'] / 100).prod() > 1 
                          else market_colors.get('d', 'r'))
 
                 ax.plot(pos_date, values, c=color, 
@@ -1242,7 +1267,7 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
     fig.subplots_adjust(left=0, right=1, top=1, 
                         bottom=0, wspace=0, hspace=0)
 
-    mpl.pyplot.xticks([])
+    plt.xticks([])
 
     import random
     cpl.add_window(
@@ -1254,7 +1279,7 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
         toolbar='total'
     )
 
-def plot_strategy_decorator(name:str) -> callable:
+def plot_strategy_decorator(name:str) -> Callable:
     """
     Add statistics for plot decorator.
 
@@ -1271,26 +1296,26 @@ def plot_strategy_decorator(name:str) -> callable:
         name (str): Name with which it will be called.
 
     Returns:
-        callable: 'plot_strategy_add'.
+        Callable: 'plot_strategy_add'.
     """
 
     return lambda x: plot_strategy_add(x, name)
 
-def plot_strategy_add(func:callable, name:str) -> callable:
+def plot_strategy_add(func:Callable, name:str) -> Callable:
     """
     Add statistics for plot.
 
     Add functions and then see them graphed with 'plot_strategy'.
 
     Args:
-        func (callable): Function, to which this will be passed in order: 
+        func (Callable): Function, to which this will be passed in order: 
             'ax', 'trades', '_cm.__data', 'log'.
             To avoid visual problems, I suggest using 
             'trades.index' as the x-axis or normalizing the axis.
         name (str): Name with which it will be called.
 
     Returns:
-        callable: 'func' param.
+        Callable: 'func' param.
     """
 
     if not name or name in _cm.__custom_plot.keys() or not callable(func):
@@ -1338,12 +1363,13 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None,
         s_date = ".".join(str(val) for val in 
                         [data.index[0].day, data.index[0].month, 
                         data.index[0].year])
-        
+
+        idx_last = data.index[-1]
         e_date = ".".join(str(val) for val in 
-                        [data.index[-1].day, data.index[-1].month, 
-                        data.index[-1].year]
-                        ) if isinstance(data.index[0], pd.Timestamp) else ""
-        
+                        [idx_last.day, idx_last.month, 
+                        idx_last.year]
+                        ) if isinstance(idx_last, pd.Timestamp) else ""
+
         r_date = f"{s_date}~{e_date}"
     else: r_date = ""
 
@@ -1359,9 +1385,9 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None,
         'Sample size':[len(data.index)],
         'Standard deviation':[utils.round_r(
             np.std(data['close'].dropna(), ddof=1),2)],
-        'Average price':[utils.round_r(data['close'].mean(),2),
+        'Average price':[utils.round_r(data.loc[:, 'close'].mean(),2),
                          _cm.__COLORS['YELLOW']],
-        'Average volume':[utils.round_r(data['volume'].mean(),2),
+        'Average volume':[utils.round_r(data.loc[:, 'volume'].mean(),2),
                           _cm.__COLORS['YELLOW']],
         f"'{data_icon}'":[f'{r_date} ~ {data_interval}',
                           _cm.__COLORS['CYAN']],
@@ -1468,7 +1494,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
 
     trades = _cm.__get_trades(name)
 
-    name = list(name)[0] if type(name) in (tuple,set,list) else name
+    name = list(name)[0] if isinstance(name, (tuple, set, list)) else name
     trades_data = _cm.__get_strategy(name=name)
 
     # Exceptions.
@@ -1476,7 +1502,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
         raise exception.StatsError('Trades not loaded.')
     elif not 'profitPer' in trades.columns:  
         raise exception.StatsError('There is no data to see.')
-    elif np.isnan(trades['profitPer'].mean()): 
+    elif np.isnan(trades['profitPer'].mean()):
         raise exception.StatsError('There is no data to see.') 
 
     # Number of years operated.
@@ -1498,7 +1524,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
                                -trades_calc['date'])/trades_data['d_width_day']
 
     ann_profit = trades_calc.groupby('year')['profit'].sum()
-    diary_profit = trades_calc.groupby('diary')['profit'].sum()
+    diary_profit:pd.Series = pd.Series(trades_calc.groupby('diary')['profit'].sum())
 
     # Consecutive trades calc.
     trades_count_cs = trades['profitPer'].apply(
@@ -1523,7 +1549,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
         trades_calc['multiplier'] = 1 + trades_calc['profitPer'] / 100
 
         nan_inf = lambda x: x.where(~np.isinf(x), np.nan)
-        multiplier_cumprod = nan_inf(trades_calc['multiplier'].cumprod().dropna())
+        multiplier_cumprod = nan_inf(trades_calc.loc[:, 'multiplier'].cumprod().dropna())
 
         ann_return = nan_inf(trades_calc.groupby('year')['multiplier'].prod())
         diary_return = nan_inf(trades_calc.groupby('diary')['multiplier'].prod())
@@ -1534,7 +1560,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
 
         'Op years':[utils.round_r(op_years, 2), _cm.__COLORS['CYAN']],
 
-        'Return':[str(_return:=utils.round_r((trades_calc['multiplier'].prod()-1)*100,2))+'%',
+        'Return':[str(_return:=utils.round_r((trades_calc.loc[:, 'multiplier'].prod()-1)*100,2))+'%',
                   _cm.__COLORS['GREEN'] if float(_return) > 0 else _cm.__COLORS['RED'],],
 
         'Profit':[str(_profit:=utils.round_r(trades['profit'].sum(),2)),
@@ -1552,7 +1578,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
 
         'Return from max':[str(utils.round_r(
             -((multiplier_cumprod.max()-1)
-            - (trades_calc['multiplier'].prod()-1))*100,2))+'%'],
+            - (trades_calc.loc[:, 'multiplier'].prod()-1))*100,2))+'%'],
 
         'Days from max':[str(utils.round_r(
             (trades_calc['date'].dropna().iloc[-1]
@@ -1564,7 +1590,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
         'Return ann':[str(_return_ann:=utils.round_r((ann_return.prod()**(1/op_years)-1)*100,2))+'%',
                   _cm.__COLORS['GREEN'] if float(_return_ann) > 0 else _cm.__COLORS['RED'],],
 
-        'Profit ann':[str(_profit_ann:=utils.round_r(ann_profit.mean(),2)),
+        'Profit ann':[str(_profit_ann:=utils.round_r(float(ann_profit.mean()),2)),
                   _cm.__COLORS['GREEN'] if float(_profit_ann) > 0 else _cm.__COLORS['RED'],],
 
         'Return ann vol':[utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1)
@@ -1579,13 +1605,13 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
                         _cm.__COLORS['YELLOW'],],
 
         'Average return':[str(utils.round_r((
-                trades_calc['multiplier'].dropna().mean()-1)*100,2))+'%',
+                trades_calc.loc[:, 'multiplier'].dropna().mean()-1)*100,2))+'%',
             _cm.__COLORS['YELLOW'],],
 
-        'Average profit':[str(utils.round_r(trades['profit'].mean(),2))+'%',
+        'Average profit':[str(utils.round_r(trades.loc[:, 'profit'].mean(),2))+'%',
                     _cm.__COLORS['YELLOW'],],
 
-        'Profit fact':[_profit_fact:=utils.round_r(stats.profit_fact(trades['profit']), 3),
+        'Profit fact':[_profit_fact:=utils.round_r(stats.profit_fact(trades.loc[:, 'profit']), 3),
                 _cm.__COLORS['GREEN'] if float(_profit_fact) > 1 else _cm.__COLORS['RED'],],
 
         'Return diary std':[(_return_std:=utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1), 2)),
@@ -1594,18 +1620,18 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
         'Profit diary std':[(_profit_std:=utils.round_r(np.std(diary_profit.dropna(),ddof=1), 2)),
                       _cm.__COLORS['YELLOW'] if float(_profit_std) > 1 else _cm.__COLORS['GREEN'],],
 
-        'Math hope':[_math_hope:=utils.round_r(stats.math_hope(trades['profit']), 2),
+        'Math hope':[_math_hope:=utils.round_r(stats.math_hope(trades.loc[:, 'profit']), 2),
             _cm.__COLORS['GREEN'] if float(_math_hope) > 0 else _cm.__COLORS['RED'],],
 
         'Math hope r':[_math_hope_r:=utils.round_r(
-                stats.math_hope_relative(trades, trades['profitPer']), 2),
+                stats.math_hope_relative(trades, trades.loc[:, 'profitPer']), 2),
             _cm.__COLORS['GREEN'] if float(_math_hope_r) > 0 else _cm.__COLORS['RED'],],
 
         'Historical var':[0 if trades['profit'].dropna().empty else utils.round_r(
-                            stats.var_historical(trades['profit'].dropna()), 2)],
+                            stats.var_historical(trades.loc[:, 'profit'].dropna()), 2)],
 
         'Parametric var':[0 if trades['profit'].dropna().empty else utils.round_r(
-                            stats.var_parametric(trades['profit'].dropna()), 2)],
+                            stats.var_parametric(trades.loc[:, 'profit'].dropna()), 2)],
 
         'Sharpe ratio':[utils.round_r(stats.sharpe_ratio(
             (ann_return.prod()**(1/op_years)-1)*100,
@@ -1631,27 +1657,27 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
             trades_calc['duration'].sum()/len(trades.index), 2),
             _cm.__COLORS['CYAN']],
 
-        'Payoff ratio':[utils.round_r(stats.payoff_ratio(trades['profitPer']), 3)],
+        'Payoff ratio':[utils.round_r(stats.payoff_ratio(trades.loc[:, 'profitPer']), 3)],
 
-        'Expectation':[utils.round_r(stats.expectation(trades['profitPer']))],
+        'Expectation':[utils.round_r(stats.expectation(trades.loc[:, 'profitPer']))],
 
         'Skewness':[utils.round_r((diary_return.dropna()-1).skew(), 2)],
 
         'Kurtosis':[utils.round_r((diary_return.dropna()-1).kurt(), 2)],
 
-        'Average winning op':[str(utils.round_r(trades['profitPer'][
+        'Average winning op':[str(utils.round_r(trades.loc[:, 'profitPer'][
                 trades['profitPer'] > 0].dropna().mean(), 2))+'%',
             _cm.__COLORS['GREEN']],
 
-        'Average losing op':[str(utils.round_r(trades['profitPer'][
+        'Average losing op':[str(utils.round_r(trades.loc[:, 'profitPer'][
                 trades['profitPer'] < 0].dropna().mean(), 2))+'%',
             _cm.__COLORS['RED']],
 
-        'Average duration winn':[str(utils.round_r(trades_calc['duration'][
+        'Average duration winn':[str(utils.round_r(trades_calc.loc[:, 'duration'][
                 trades_calc['profitPer'] > 0].dropna().mean()))+'d',
                 _cm.__COLORS['CYAN']],
 
-        'Average duration loss':[str(utils.round_r(trades_calc['duration'][
+        'Average duration loss':[str(utils.round_r(trades_calc.loc[:, 'duration'][
                 trades_calc['profitPer'] < 0].dropna().mean()))+'d',
                 _cm.__COLORS['CYAN']],
 
@@ -1682,15 +1708,16 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
                                 trades_data['init_funds']))*100, 1)) + '%'],
 
         'Long exposure':[str(round(
-            stats.long_exposure(trades['typeSide'])*100)) + '%',
+            stats.long_exposure(trades.loc[:, 'typeSide'])*100)) + '%',
             _cm.__COLORS['GREEN']],
 
-        'Winnings':[str(round(stats.winnings(trades['profitPer'])*100)) + '%'],
+        'Winnings':[str(round(stats.winnings(trades.loc[:, 'profitPer'])*100)) + '%'],
 
         }, f"---Statistics of '{trades_data['name']}'---")
 
     text = text if _cm.dots else text.replace('.', ',')
-    if data: text += stats_icon(False)
-    
+    if data: 
+        text += (stats_icon(False) or '')
+
     if prnt: print(text)
     else: return text
