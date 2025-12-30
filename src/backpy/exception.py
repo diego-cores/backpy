@@ -1,5 +1,5 @@
 """
-Exceptions Module.
+Exception module
 
 Custom exceptions.
 """
@@ -18,8 +18,18 @@ class RunError(Exception):pass
 
 class StyClassError(Exception):pass
 
-class ActionError(Exception):pass
+class PositionError(Exception):pass
 
 class ConvWrapperError(Exception):pass
 
+class ChunkWrapperError(Exception):pass
+
 class CostValueError(Exception):pass
+
+class UidcError(Exception):pass
+
+class StyleError(Exception):pass
+
+class OrderError(Exception):pass
+
+class CustomWinError(Exception):pass

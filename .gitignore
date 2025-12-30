@@ -1,5 +1,9 @@
-backpyf/__pycache__/
+src/backpy/__pycache__/
+tests/__pycache__/
+*.egg-info/
 .vscode/
 venv/
 yfinance_cache
 test
+build
+dist
