@@ -4,6 +4,9 @@ Main module
 This module contains the main functions of BackPy, including data loading, 
 strategy processing, and graph display.
 
+Variables:
+    logger (Logger): Logger variable.
+
 Functions:
     load_binance_data_spot: Loads data using the binance-connector module.
     load_binance_data_futures: Loads data using the binance-futures-connector module.
@@ -25,8 +28,9 @@ Hidden Functions:
     __load_binance_data: Load data from Binance using a client.
 """
 
+from typing import Callable, Sequence, cast
 from datetime import datetime
-from typing import Callable
+import logging
 
 from matplotlib.collections import LineCollection, PatchCollection, PathCollection
 from matplotlib.dates import DateFormatter, date2num, num2date
@@ -49,6 +53,8 @@ from . import exception
 from . import strategy
 from . import utils
 from . import stats
+
+logger:logging.Logger = logging.getLogger(__name__)
 
 def __load_binance_data(client:Callable, symbol:str = 'BTCUSDT', 
                         interval:str = '1d', start_time:str | None = None, 
@@ -81,10 +87,10 @@ def __load_binance_data(client:Callable, symbol:str = 'BTCUSDT',
         raise exception.BinanceError(
             "'start_time' and 'end_time' cannot be None.")
 
-    if progress:
-        t = time()
-        size = None
-        ini_time = 0
+    t = time()
+    load_prgs = utils.ProgressBar()
+    load_prgs.adder_add({'DataTimer':lambda x=t: utils.num_align(time()-x)})
+    ini_time = 0
 
     def __loop_def(st_t):
         dt = client.klines(symbol=symbol, 
@@ -94,17 +100,12 @@ def __load_binance_data(client:Callable, symbol:str = 'BTCUSDT',
                         limit=1000)
 
         if progress:
-            nonlocal size, ini_time
+            nonlocal ini_time
 
-            if not size:
+            if not load_prgs.size:
                 ini_time = dt[0][0]
-                size = (end-ini_time)//(dt[-1][0]-dt[0][0])
-
-            step_time = (end-ini_time)//size
-            step = int(round((dt[-1][0]-ini_time)/step_time,0))
-
-            text = f'| DataTimer: {utils.num_align(time()-t)} '
-            utils.load_bar(size=size, step=step, text=text)
+                load_prgs.size = (end-ini_time)//(dt[-1][0]-dt[0][0])
+            load_prgs.next()
 
         return dt
     start = int(datetime.strptime(start_time, '%Y-%m-%d').timestamp() * 1000)
@@ -119,9 +120,6 @@ def __load_binance_data(client:Callable, symbol:str = 'BTCUSDT',
         init = start,
         timeout = _cm.__binance_timeout
         ).astype(float)
-
-    if progress:
-        print(end='\n')
 
     data.columns = ['timestamp', 
                     'open', 
@@ -142,7 +140,7 @@ def __load_binance_data(client:Callable, symbol:str = 'BTCUSDT',
     if data.empty or isinstance(data, pd.Series): 
         raise exception.BinanceError('Data empty error.')
 
-    data.index = date2num(pd.to_datetime(data.index, unit='ms', utc=True))
+    data.index = date2num(pd.to_datetime(data.index, unit='ms', utc=True)) # type: ignore[arg-type]
     data_width = utils.calc_width(data.index)
 
     if statistics: stats_icon(prnt=True, 
@@ -287,23 +285,26 @@ def load_yfinance_data(ticker:str, start:str | None = None,
     try:
         import yfinance as yf
 
-        t = time()
-
         yf.set_tz_cache_location('.\\yfinance_cache')
 
-        data = yf.download(ticker, start=start, 
+        t = time()
+        load_prgs = utils.ProgressBar()
+        load_prgs.adder_add({'DataTimer':lambda x=t: utils.num_align(time()-x)})
+        if progress:
+            load_prgs.reset_size(1)
+
+        data:pd.DataFrame = yf.download(ticker, start=start, 
                            end=end, interval=interval, 
-                           progress=progress, auto_adjust=False)
-        
+                           progress=False, auto_adjust=False)
+
         if data.empty: 
             raise exception.YfinanceError('The symbol does not exist.')
         
         data.columns = data.columns.droplevel(1).str.lower()
-        data.index = date2num(data.index)
+        data.index = date2num(data.index) # type: ignore[arg-type]
         data_width = utils.calc_width(data.index)
 
-        if progress: 
-            print('\033[F\033[{}C| DataTimer:'.format(59), utils.num_align(time()-t,2))
+        load_prgs.next()
 
         if statistics: stats_icon(prnt=True, 
                                   data=data, 
@@ -364,15 +365,15 @@ def load_data(data:pd.DataFrame, icon:str | None = None,
         raise exception.DataError(f"'days_op' cant be: '{days_op}'.")
 
     t = time()
+    load_prgs = utils.ProgressBar()
+    load_prgs.adder_add({'DataTimer':lambda x=t: utils.num_align(time()-x)})
     if progress:
-        utils.load_bar(size=1, step=0)
+        load_prgs.reset_size(1)
 
     if not 'volume' in data.columns:
         data['volume'] = 0
 
-    if progress: 
-        utils.load_bar(size=1, step=1)
-        print('| DataTimer:',utils.num_align(round(time()-t,2)))
+    load_prgs.next()
 
     data_df = data[['open', 'high', 'low', 'close', 'volume']]
     if data_df.empty or isinstance(data_df, pd.Series): 
@@ -431,8 +432,10 @@ def load_data_bpd(path:str = 'data.bpd', start:int | None = None,
             "The resulting 'data' is empty. Bad: 'start' and 'end'.")
 
     t = time()
+    load_prgs = utils.ProgressBar()
+    load_prgs.adder_add({'DataTimer':lambda x=t: utils.num_align(time()-x)})
     if progress:
-        utils.load_bar(size=1, step=0)
+        load_prgs.reset_size(1)
 
     with open(path, "rb") as file:
         data, icon, interval, days_op_load = pk.load(file)
@@ -454,9 +457,7 @@ def load_data_bpd(path:str = 'data.bpd', start:int | None = None,
     elif days_op > 365 or days_op < 1:
         raise exception.DataError("Bad data: 'days_op'.")
 
-    if progress: 
-        utils.load_bar(size=1, step=1)
-        print('| DataTimer:',utils.num_align(round(time()-t,2)))
+    load_prgs.next()
 
     data = data.iloc[start:end]
 
@@ -589,6 +590,7 @@ def run(cls:type|list[type]|tuple[type], name:str|None = None, prnt:bool = True,
     Note:
         If your function prints to the console, the loading bar may not 
         function as expected.
+        To delete a backtest use the function: 'backpy._commons.del_backtest'.
 
     Args:
         cls (type|list[type]|tuple[type]): A class inherited from `StrategyClass` where the strategy is implemented.
@@ -624,40 +626,56 @@ def run(cls:type|list[type]|tuple[type], name:str|None = None, prnt:bool = True,
     _cm.__data.index = utils.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index, True)
 
+    # Progress bar variables
     t = time()
-    balance_rec = []
     step_t = time()
-    step_history = np.zeros(10)
     steph_index = 0
-
+    step_history = np.zeros(10)
     skip = max(1, _cm.__data.shape[0] // _cm.max_bar_updates)
 
+    load_prgs = utils.ProgressBar()
+
+    def prediction_calc() -> float|np.floating:
+        """
+        Prediction calc
+
+        Calculate the prediction so you can add it to the progress bar.
+
+        Return:
+            float|np.floating: Prediction.
+        """
+        nonlocal steph_index
+
+        if _cm.__data is None: 
+            return 0.
+
+        step_history[steph_index % 10] = time()-step_t
+        steph_index += 1
+        return time()-t + (
+            ((md:=np.median(step_history)) + (time()-t - md*f)/f) 
+            * (_cm.__data.shape[0]-f))
+
+    # Progress bar config
+    if _cm.run_timer:
+        load_prgs.adder_add({
+            'RunTimer':lambda x=t: utils.num_align(time()-x),
+            'TimerPredict':lambda: utils.num_align(prediction_calc())
+        })
+    load_prgs.adder_add({'StepTime':lambda: utils.num_align(time()-step_t)})
+
     if progress:
-        utils.load_bar(size=_cm.__data.shape[0], step=0)
+        load_prgs.reset_size(_cm.__data.shape[0])
+
+    # Run strategy
+    balance_rec = []
     for f, _ in enumerate(_cm.__data.index):
         f += 1
 
+        # Progress bar
         if (progress and (f % skip == 0 or f >= _cm.__data.shape[0]) 
             and _cm.__data.shape[0] >= f):
-
-            step_time = time()-step_t
-            step_history[steph_index % 10] = step_time
-            steph_index += 1
- 
-            run_timer_text = (
-                f"| RunTimer: {utils.num_align(time()-t)} \n"
-                f"| TimerPredict: " + utils.num_align(
-                    time()-t + (((md:=np.median(step_history))
-                    + (time()-t - md*f)/f) *
-                    (_cm.__data.shape[0]-f))) + " \n"
-            ) if _cm.run_timer else ""
-
-            text = utils.text_fix(f"""
-                | StepTime: {utils.num_align(step_time)} 
-                {run_timer_text}
-                """)
-
-            utils.load_bar(size=_cm.__data.shape[0], step=f, text=text) 
+            load_prgs._step = f-1
+            load_prgs.next()
         step_t = time()
 
         for i in instances:
@@ -666,11 +684,10 @@ def run(cls:type|list[type]|tuple[type], name:str|None = None, prnt:bool = True,
                 balance_rec[f-1] = i._StrategyClass__balance
             else:
                 balance_rec.append(i._StrategyClass__balance)
-    if progress or _cm.run_timer:
-        print(
-            f'RunTimer: {utils.num_align(time()-t)}'
-            if _cm.run_timer and not progress else '') 
+    if _cm.run_timer and not progress:
+        print(f'RunTimer: {utils.num_align(time()-t)}') 
 
+    # Save variables
     positions_list:np.ndarray|None = None
     positions_open_list = []
     for i in instances:
@@ -849,11 +866,11 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
                             alpha_arrow=0.8)
 
         pad_l = (abs(_cm.__data.index[l:f][-1]-_cm.__data.index[l:f][0])/2 if pad else 0)
-        ax1.set_ylim(_cm.__data.iloc[l:f]['low'].min()*0.99,
-                     _cm.__data.iloc[l:f]['high'].max()*1.01,)
+        ax1.set_ylim(_cm.__data.iloc[l:f]['low'].to_numpy(dtype=float).min()*0.99,
+                     _cm.__data.iloc[l:f]['high'].to_numpy(dtype=float).max()*1.01,)
         ax1.set_xlim(_cm.__data.index.values[l:f][0]-_cm.__data_width*(candles*0.03), 
                     _cm.__data.index.values[l:f][-1]+_cm.__data_width*2*(candles*0.03)+pad_l)
-        ax2.set_ylim(None, _cm.__data.iloc[l:f]['volume'].max()*1.1 or 1)
+        ax2.set_ylim(top=_cm.__data.iloc[l:f]['volume'].to_numpy(dtype=float).max()*1.1 or 1)
 
         def axes_xlim(ax:Axes):
             """
@@ -925,7 +942,8 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
     )
 
 def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int|None = None,
-         position:str = 'complex', panel:str = 'new', style:str | None = 'last',
+         position:str = 'complex', panel:str = 'new', style:str | None = 'last', 
+         draw_style:str | None = None, draw_style_vol:str | None = None, 
          style_c:dict | None = None, block:bool = True) -> None:
     """
     Plot Graph with Trades.
@@ -943,6 +961,15 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
         'embernight', 'obsidian', 'neonforge', 'carbonfire', 
         'datamatrix', 'terminalblood', 'plasmacore'.
 
+    Draw styles:
+        'candle': Typical Japanese candle. 
+        'line': A line traces the outline of the closures.
+        'none': The data is not drawn.
+
+    Volume draw styles:
+        'bar': Typical bar. 
+        'none': The volume is not drawn.
+
     Args:
         log (bool, optional): If True, plots data using a logarithmic scale. 
             Default is False.
@@ -959,6 +986,10 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
             only 'new' or 'add' are possible.
         style (str | None, optional): Color style. 
             If you leave it as 'last' the last one will be used.
+        draw_style (str | None, optional): Change the drawing style of the data.
+            Current types: 'candle', 'line', 'none'. None = 'line'.
+        draw_style_vol (str | None, optional): Change the drawing style of the
+            volumen. Current types: 'bar', 'none'. None = 'bar'.
         style_c (dict | None, optional): Customize the defined style by 
             modifying the dictionary. To know what to modify, 
             read the docstring of 'def_style'.
@@ -970,6 +1001,8 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
     # Exceptions.
     panel = panel.lower()
     valid_style = {'random', 'last'} | set(_cm.__plt_styles.keys())
+    draw_style = draw_style or 'line'
+    draw_style_vol = draw_style_vol or 'bar'
 
     if _cm.__data is None or not type(_cm.__data) is pd.DataFrame or _cm.__data.empty: 
         raise exception.PlotError('Data not loaded.')
@@ -981,6 +1014,10 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
             f"'{panel}' Not a valid option for: 'panel'.")
     elif (not style is None and not (style:=style.lower()) in valid_style):
         raise exception.PlotError(f"'{style}' Not a style.")
+    elif not draw_style in {'none', 'line', 'candle'}:
+        raise exception.PlotError(f"'{draw_style}' Not a draw style.")
+    elif not draw_style_vol in {'none', 'bar'}:
+        raise exception.PlotError(f"'{draw_style_vol}' Not a draw style.")
 
     # Corrections.
     _cm.__data.index = utils.correct_index(_cm.__data.index)
@@ -1000,9 +1037,10 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
         plt_colors.update(style_c)
 
     t = time()
+    load_prgs = utils.ProgressBar()
+    load_prgs.adder_add({'PlotTimer':lambda x=t: utils.num_align(time()-x)})
     if progress: 
-        text = f'| PlotTimer: {utils.num_align(0)} '
-        utils.load_bar(size=4, step=0, text=text)
+        load_prgs.reset_size(5)
 
     fig = plt.figure(figsize=(16,8))
     ax1 = plt.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
@@ -1016,21 +1054,31 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
     if log: 
         ax1.semilogy(); ax2.semilogy()
 
-    if progress: 
-        text = f'| PlotTimer: {utils.num_align(time()-t)} '
-        utils.load_bar(size=4, step=1, text=text)
-
+    load_prgs.next()
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
-    utils.plot_candles(ax1, _cm.__data, _cm.__data_width*0.9,
-                       color_up=market_colors.get('u', 'g'),
-                       color_down=market_colors.get('d', 'r'))
 
-    if progress: 
-        text = f'| PlotTimer: {utils.num_align(time()-t)} '
-        utils.load_bar(size=4, step=2, text=text)
+    # Draw style
+    match draw_style:
+        case 'candle':
+            utils.plot_candles(ax1, _cm.__data, _cm.__data_width*0.9,
+                            color_up=market_colors.get('u', 'g'),
+                            color_down=market_colors.get('d', 'r'))
+        case 'line':
+            utils.plot_line(ax1, _cm.__data['close'], _cm.__data_width,
+                            color_up=market_colors.get('u', 'g'),
+                            color_down=market_colors.get('d', 'r'))
+        case 'none' | _:
+            pass
+    load_prgs.next()
 
-    utils.plot_volume(ax2, _cm.__data.loc[:, 'volume'], _cm.__data_width, 
-                      color=plt_colors.get('vol', 'tab:orange'))
+    # Draw style volume
+    match draw_style_vol:
+        case 'bar':
+            utils.plot_volume(ax2, _cm.__data.loc[:, 'volume'], _cm.__data_width, 
+                            color=plt_colors.get('vol', 'tab:orange'))
+        case 'none' | _:
+            pass
+    load_prgs.next()
 
     if position and position.lower() != 'none' and len(_cm.get_backtest_names()) > 0:
 
@@ -1042,10 +1090,7 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
                             operation_route=position.lower() == 'complex',
                             alpha=0.3, alpha_arrow=0.8)
 
-    if progress: 
-        text = f'| PlotTimer: {utils.num_align(time()-t)} '
-        utils.load_bar(size=4, step=3, text=text)
-
+    load_prgs.next()
     date_format = DateFormatter('%H:%M %d-%m-%Y')
 
     ax2.yaxis.set_major_formatter(lambda y, _: str(y.real))
@@ -1061,7 +1106,7 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
     fig.autofmt_xdate()
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0, hspace=0)
 
-    ix_date = num2date(_cm.__data.index)
+    ix_date:Sequence = num2date(_cm.__data.index) # type: ignore[arg-type]
 
     s_date = ".".join(str(val) for val in 
                     [ix_date[0].day, ix_date[0].month, 
@@ -1071,10 +1116,7 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
                     [ix_date[-1].day, ix_date[-1].month, 
                     ix_date[-1].year])
 
-    if progress: 
-        text = f'| PlotTimer: {utils.num_align(time()-t)} \n'
-        utils.load_bar(size=4, step=4, text=text)
-
+    load_prgs.next()
     cpl.add_window(
         fig=fig,
         title=f"Back testing: '{_cm.__data_icon}' {s_date}~{e_date} - {style}",
@@ -1088,7 +1130,7 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
                   log:bool = False, view:str = 'b/w/r/e',  
                   custom_graph:dict = {}, panel:str = 'new',
                   style:str | None = 'last', style_c:dict | None = None, 
-                  block:bool = True) -> str|None:
+                  block:bool = True) -> None:
     """
     Plot Strategy Statistics.
 
@@ -1127,9 +1169,6 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
         block (bool, optional): If True, pauses script execution until all figure 
             windows are closed. If False, the script continues running after 
             displaying the figures. Default is True.
-
-    Return:
-        str: Returns a string if there is no data to view or no trades.
     """
 
     for i in custom_graph: plot_strategy_add(custom_graph[i], i)
@@ -1142,9 +1181,11 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
     valid_style = {'random', 'last'} | set(_cm.__plt_styles.keys())
 
     if trades.empty: 
-        return 'Trades not loaded.'
+        logger.warning('Trades not loaded')
+        return
     elif not 'profit' in trades.columns:  
-        return 'No data to see.'
+        logger.warning('No data to see')
+        return
     elif (not style is None and not (style:=style.lower()) in valid_style):
         raise exception.StatsError(f"'{style}' Not a style.")
     elif panel not in ('new', 'add'):
@@ -1166,7 +1207,7 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
 
     fig = plt.figure(figsize=(16,8))
 
-    init_data = {col: 0 for col in trades.columns}
+    init_data:dict = {col: 0 for col in trades.columns}
     init_data['positionDate'] = trades['positionDate'].iloc[0]
     init_p = pd.DataFrame([init_data])
 
@@ -1213,7 +1254,7 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
                 if log: ax.set_yscale('symlog')
             case 'p':
                 values = trades['profit'].cumsum()
-                color = (market_colors.get('u', 'g') if sum(trades['profit']) > 0 
+                color = (market_colors.get('u', 'g') if trades['profit'].to_numpy().sum() > 0 
                          else market_colors.get('d', 'r'))
 
                 ax.plot(pos_date, values, c=color, 
@@ -1234,10 +1275,11 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
                 with np.errstate(over='ignore'):
                     values = np.cumprod(1 + trades['profitPer'] / 100)
                 if np.isinf(values).any():
-                    values = pd.Series(0, index=values.index)
+                    values = np.zeros_like(values)
 
+                mltp:pd.Series[float] = (1 + trades.loc[:, 'profitPer'] / 100)
                 color = (market_colors.get('u', 'g')
-                         if (1 + trades.loc[:, 'profitPer'] / 100).prod() > 1 
+                         if _cm.c_tf(mltp.prod()) > 1 
                          else market_colors.get('d', 'r'))
 
                 ax.plot(pos_date, values, c=color, 
@@ -1249,7 +1291,9 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
                 if log: ax.set_yscale('symlog')
             case 'r':
                 values = trades['profitPer'].cumsum()
-                color = (market_colors.get('u', 'g') if trades['profitPer'].sum() > 0 
+
+                profit_per:pd.Series[float] = trades['profitPer']
+                color = (market_colors.get('u', 'g') if profit_per.sum() > 0 
                          else market_colors.get('d', 'r'))
 
                 ax.plot(pos_date, values, c=color, 
@@ -1374,13 +1418,13 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None,
     else: r_date = ""
 
     text = utils.statistics_format({
-        'Last price':[utils.round_r(data['close'].iloc[-1],2), 
+        'Last price':[utils.round_r(_cm.c_tf(data['close'].iloc[-1]),2),
                       _cm.__COLORS['BOLD']],
-        'Maximum price':[utils.round_r(data['high'].max(),2),
+        'Maximum price':[utils.round_r(_cm.c_tf(data['high'].max()),2),
                          _cm.__COLORS['GREEN']],
-        'Minimum price':[utils.round_r(data['low'].min(),2),
+        'Minimum price':[utils.round_r(_cm.c_tf(data['low'].min()),2),
                          _cm.__COLORS['RED']],
-        'Maximum volume':[utils.round_r(data['volume'].max(), 2),
+        'Maximum volume':[utils.round_r(_cm.c_tf(data['volume'].max()), 2),
                           _cm.__COLORS['CYAN']],
         'Sample size':[len(data.index)],
         'Standard deviation':[utils.round_r(
@@ -1507,17 +1551,17 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
 
     # Number of years operated.
     op_years = abs(
-        (trades['date'].iloc[-1] - trades['date'].iloc[0])/
+        (_cm.c_tf(trades['date'].iloc[-1]) - trades['date'].iloc[0])/
         (trades_data['d_width_day']*trades_data['d_year_days']))
 
     # Annualized trades calc.
     trades_calc = trades.copy()
-    trades_calc['year'] = ((trades_calc['date'] - trades_calc['date'].iloc[0]) / 
-                  (trades_calc['date'].iloc[-1] - trades_calc['date'].iloc[0]) * 
+    trades_calc['year'] = ((_cm.c_tf(trades_calc['date']) - trades_calc['date'].iloc[0]) / 
+                  (_cm.c_tf(trades_calc['date'].iloc[-1]) - trades_calc['date'].iloc[0]) * 
                   op_years).astype(int)
 
-    trades_calc['diary'] = ((trades_calc['date'] - trades_calc['date'].iloc[0]) / 
-                (trades_calc['date'].iloc[-1] - trades_calc['date'].iloc[0]) * 
+    trades_calc['diary'] = ((_cm.c_tf(trades_calc['date']) - trades_calc['date'].iloc[0]) / 
+                (_cm.c_tf(trades_calc['date'].iloc[-1]) - trades_calc['date'].iloc[0]) * 
                 op_years*trades_data['d_year_days']).astype(int)
 
     trades_calc['duration'] = (trades_calc['positionDate']
@@ -1560,17 +1604,17 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
 
         'Op years':[utils.round_r(op_years, 2), _cm.__COLORS['CYAN']],
 
-        'Return':[str(_return:=utils.round_r((trades_calc.loc[:, 'multiplier'].prod()-1)*100,2))+'%',
+        'Return':[str(_return:=utils.round_r((_cm.c_tf(trades_calc.loc[:, 'multiplier'].prod())-1)*100,2))+'%',
                   _cm.__COLORS['GREEN'] if float(_return) > 0 else _cm.__COLORS['RED'],],
 
-        'Profit':[str(_profit:=utils.round_r(trades['profit'].sum(),2)),
+        'Profit':[str(_profit:=utils.round_r(trades['profit'].to_numpy().sum(),2)),
                 _cm.__COLORS['GREEN'] if float(_profit) > 0 else _cm.__COLORS['RED'],],
 
-        'Gross earnings':[utils.round_r((trades['profit'][trades['profit']>0].sum()
+        'Gross earnings':[utils.round_r((trades['profit'][_cm.c_tf(trades['profit'])>0].sum()
                            if not pd.isna(trades['profit']).all() else 0), 4),
                         _cm.__COLORS['GREEN']],
 
-        'Gross losses':[utils.round_r(abs(trades['profit'][trades['profit']<=0].sum())
+        'Gross losses':[utils.round_r(abs(trades['profit'][_cm.c_tf(trades['profit'])<=0].sum())
                            if not pd.isna(trades['profit']).all() else 0, 4),
                         _cm.__COLORS['RED']],
 
@@ -1578,10 +1622,10 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
 
         'Return from max':[str(utils.round_r(
             -((multiplier_cumprod.max()-1)
-            - (trades_calc.loc[:, 'multiplier'].prod()-1))*100,2))+'%'],
+            - (_cm.c_tf(trades_calc.loc[:, 'multiplier'].prod())-1))*100,2))+'%'],
 
         'Days from max':[str(utils.round_r(
-            (trades_calc['date'].dropna().iloc[-1]
+            (_cm.c_tf(trades_calc['date'].dropna().iloc[-1])
                 - trades_calc['date'].dropna().loc[
                 np.argmax(multiplier_cumprod)])
             / trades_data['d_width_day'], 2)),
@@ -1605,7 +1649,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
                         _cm.__COLORS['YELLOW'],],
 
         'Average return':[str(utils.round_r((
-                trades_calc.loc[:, 'multiplier'].dropna().mean()-1)*100,2))+'%',
+                trades_calc.loc[:, 'multiplier'].dropna().to_numpy().mean()-1)*100,2))+'%',
             _cm.__COLORS['YELLOW'],],
 
         'Average profit':[str(utils.round_r(trades.loc[:, 'profit'].mean(),2))+'%',
@@ -1654,7 +1698,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
             diary_profit), 2)],
 
         'Duration ratio':[utils.round_r(
-            trades_calc['duration'].sum()/len(trades.index), 2),
+            _cm.c_tf(trades_calc['duration'].to_numpy().sum())/len(trades.index), 2),
             _cm.__COLORS['CYAN']],
 
         'Payoff ratio':[utils.round_r(stats.payoff_ratio(trades.loc[:, 'profitPer']), 3)],
@@ -1666,19 +1710,19 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
         'Kurtosis':[utils.round_r((diary_return.dropna()-1).kurt(), 2)],
 
         'Average winning op':[str(utils.round_r(trades.loc[:, 'profitPer'][
-                trades['profitPer'] > 0].dropna().mean(), 2))+'%',
+                _cm.c_tf(trades['profitPer']) > 0].dropna().mean(), 2))+'%',
             _cm.__COLORS['GREEN']],
 
         'Average losing op':[str(utils.round_r(trades.loc[:, 'profitPer'][
-                trades['profitPer'] < 0].dropna().mean(), 2))+'%',
+                _cm.c_tf(trades['profitPer']) < 0].dropna().mean(), 2))+'%',
             _cm.__COLORS['RED']],
 
         'Average duration winn':[str(utils.round_r(trades_calc.loc[:, 'duration'][
-                trades_calc['profitPer'] > 0].dropna().mean()))+'d',
+                _cm.c_tf(trades_calc['profitPer']) > 0].dropna().mean()))+'d',
                 _cm.__COLORS['CYAN']],
 
         'Average duration loss':[str(utils.round_r(trades_calc.loc[:, 'duration'][
-                trades_calc['profitPer'] < 0].dropna().mean()))+'d',
+                _cm.c_tf(trades_calc['profitPer']) < 0].dropna().mean()))+'d',
                 _cm.__COLORS['CYAN']],
 
         'Daily frequency op':[utils.round_r(
@@ -1688,7 +1732,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
         'Max consecutive winn':[trades_csct.max(),
                                 _cm.__COLORS['GREEN']],
 
-        'Max consecutive loss':[abs(trades_csct.min()),
+        'Max consecutive loss':[abs(_cm.c_tf(trades_csct.min())),
                                 _cm.__COLORS['RED']],
 
         'Max losing streak':[abs(trades_streak.min())],

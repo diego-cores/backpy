@@ -3,6 +3,9 @@ Stats module
 
 This module contains functions to calculate different metrics.
 
+Variables:
+    logger (Logger): Logger variable.
+
 Functions:
     average_ratio: Based on the take profit and stop loss 
             positions, it calculates an average ratio.
@@ -36,12 +39,15 @@ import numpy as np
 
 from typing import Literal, Callable
 import random as rd
+import logging
 
 from . import custom_plt as cpl
 from . import _commons as _cm
 from . import exception
 from . import strategy
 from . import utils
+
+logger:logging.Logger = logging.getLogger(__name__)
 
 def average_ratio(trades:pd.DataFrame) -> float:
     """
@@ -58,8 +64,8 @@ def average_ratio(trades:pd.DataFrame) -> float:
 
     if 'profitPer' in trades.columns:
 
-        return ((trades['profitPer'][trades['profitPer'] > 0].mean()
-                / abs(trades.loc[:, 'profitPer'][trades['profitPer'] < 0]).mean()))
+        return ((trades['profitPer'][_cm.c_tf(trades['profitPer']) > 0].mean()
+                / abs(trades.loc[:, 'profitPer'][_cm.c_tf(trades['profitPer']) < 0]).mean()))
     return 0
 
 def profit_fact(profits:pd.Series) -> float:
@@ -138,7 +144,7 @@ def winnings(profits:pd.Series) -> float:
     return 0
 
 
-def sharpe_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
+def sharpe_ratio(ann_av:float|np.floating, year_days:int, diary_per:pd.Series) -> float:
     """
     Sharpe ratio.
 
@@ -148,7 +154,7 @@ def sharpe_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
     If the standard deviation is too close to 0, returns 0 to avoid inflated values.
 
     Args:
-        ann_av (float): Annual returns.
+        ann_av (float|floating): Annual returns.
         year_days (int): Operable days of the year (normally 252).
         diary_per (Series): Daily return.
 
@@ -160,7 +166,7 @@ def sharpe_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
 
     return (ann_av / np.sqrt(year_days) / std_dev)
 
-def sortino_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
+def sortino_ratio(ann_av:float|np.floating, year_days:int, diary_per:pd.Series) -> float:
     """
     Sortino ratio.
 
@@ -170,7 +176,7 @@ def sortino_ratio(ann_av:float, year_days:int, diary_per:pd.Series) -> float:
     If the standard deviation is too close to 0, returns 0 to avoid inflated values.
 
     Args:
-        ann_av (float): Annual returns.
+        ann_av (float|floating): Annual returns.
         year_days (int): Operable days of the year (normally 252).
         diary_per (Series): Daily return.
 
@@ -421,11 +427,11 @@ def perf_tzone_chart(names:list[str|int|None]|str|int|None = None,
         """
 
         trades['time_close'] = func(trades[time_col].dropna())
-        hourly_sums = trades.groupby('time_close')[col].sum()
+        hourly_sums:pd.Series[float] = trades.groupby('time_close')[col].sum()
         colors = np.where(hourly_sums>0, market_colors.get('u'), 
                                             market_colors.get('d'))
 
-        ax.bar(hourly_sums.index+1, hourly_sums, color=colors)
+        ax.bar(hourly_sums.index.values+1, hourly_sums.to_numpy(), color=colors)
         ax.legend([legend], loc='upper left')
 
     for i,v in enumerate(v_view):
@@ -557,7 +563,7 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
                 for i in range(n_trades if n_trades else len(data)):
                     curve = (data[i][col].cumsum().dropna() 
                              if isinstance(col, str) else 
-                             np.cumprod(1 + data[i]['profitPer'] / 100).dropna()-1 )
+                             (1 + data[i]['profitPer'] / 100).cumprod().dropna()-1 )
                     ax.plot(range(0, len(curve)), curve, alpha=0.5)
 
                 ax.legend(['Simulations.'], loc='upper left')
@@ -569,7 +575,7 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
                 last_result = np.array([data_last(df) for df in data])
 
                 parts = np.array_split(np.sort(last_result), 100)
-                means = [np.mean(part) for part in parts if len(part) > 0]
+                means:list[float] = [np.mean(part) for part in parts if len(part) > 0]
 
                 color_u = lambda x: utils.mult_color(
                     color=market_colors['u'], multiplier=x)
@@ -580,7 +586,7 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
                     for val in means if val != 0
                 ])
 
-                ax.bar(list(range(len(means))), means, 
+                ax.bar(list(range(len(means))), means, # type: ignore[arg-type]
                        width=0.8, color=colors)
                 ax.legend(['Distribution.'], loc='upper left')
             case _: pass
@@ -664,7 +670,7 @@ def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None,
         stats['profit_fact'].append(profit_fact(trades.loc[:, 'profit']))
         stats['expectation'].append(expectation(trades_s.loc[:, 'profitPer']))
         stats['max_drawdown'].append(
-            max_drawdown(np.cumprod(trades_s['multiplier'].dropna())))
+            max_drawdown(pd.Series(np.cumprod(trades_s['multiplier'].dropna()))))
         stats['avg_drawdown'].append(
             np.mean(get_drawdowns(np.cumprod(trades_s['multiplier'].dropna()))))
         stats['max_drawdown$'].append(

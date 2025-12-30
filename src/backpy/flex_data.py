@@ -3,6 +3,9 @@ Flex data module
 
 This module has types and classes that BackPy uses.
 
+Variables:
+    logger (Logger): Logger variable.
+
 Classes:
     DataWrapper: Class for storing dataframes, series, ndarrays, lists, and dictionaries in a single type.
     CostsValue: Class to calculate different commissions, spreads, etc. 
@@ -12,6 +15,7 @@ Classes:
 
 from __future__ import annotations
 from typing import Self, Any, cast, overload, Callable
+import logging
 
 from pandas.api.extensions import ExtensionArray
 from pandas._typing import SequenceNotStr
@@ -21,6 +25,9 @@ import random as rd
 import numpy as np
 
 from . import exception
+from . import utils
+
+logger:logging.Logger = logging.getLogger(__name__)
 
 class DataWrapper():
     """
@@ -32,6 +39,7 @@ class DataWrapper():
         _data: The stored data in np.ndarray type.
         _index: Pandas index
         _columns: Name of columns.
+        _alert: Alert about performance.
 
     Methods:
         insert: Inserts a value into the data list.
@@ -58,7 +66,8 @@ class DataWrapper():
             self, data: (list | dict[str, list] | ExtensionArray | np.ndarray | pd.DataFrame
                           | pd.Series | pd.Index | DataWrapper | None) = None, 
             columns: np.ndarray | pd.Index | range | list | tuple | "DataWrapper" | None = None,
-            index: np.ndarray | pd.Index | range | list | tuple | "DataWrapper" | None = None
+            index: np.ndarray | pd.Index | range | list | tuple | "DataWrapper" | None = None,
+            alert: bool = False
         ) -> None:
         """
         Builder method.
@@ -70,6 +79,7 @@ class DataWrapper():
                 "DataWrapper" | None, optional): Column names.
             index (ndarray | Index | list | tuple | 
                 "DataWrapper" | None, optional): Data index.
+            alert (bool): Alert about performance when running conversions that may take a long time.
         """
 
         columns_nd = None if columns is None else self.__get_columns(columns)            
@@ -81,6 +91,7 @@ class DataWrapper():
         self._index = (self.__set_index(data) if index is None else index)
         self._columns = (self.__set_columns(data) 
                         if columns_nd is None else columns_nd)
+        self._alert = bool(alert or False)
 
         super().__init__()
 
@@ -271,6 +282,12 @@ class DataWrapper():
             DataFrame: Data.
         """
 
+        if self._alert:
+            logger.warning(utils.text_fix("""
+            Converting data types takes a long time; 
+            if you're looking for good performance, 
+            you should use the default type: 'np.ndarray'.
+            """, newline_exclude=False))
         try: 
             if (hasattr(self._data.dtype, "names") 
                 and self._data.dtype.names is not None):
@@ -296,6 +313,12 @@ class DataWrapper():
             Series: Data.
         """
 
+        if self._alert:
+            logger.warning(utils.text_fix("""
+            Converting data types takes a long time; 
+            if you're looking for good performance, 
+            you should use the default type: 'np.ndarray'.
+            """, newline_exclude=False))
         try: 
             return pd.Series(self._data.flatten(), 
                              index=self.__valid_index(True))
@@ -312,6 +335,12 @@ class DataWrapper():
             dict: Data.
         """
 
+        if self._alert:
+            logger.warning(utils.text_fix("""
+            Converting data types takes a long time; 
+            if you're looking for good performance, 
+            you should use the default type: 'np.ndarray'.
+            """, newline_exclude=False))
         try:
             if self._data.ndim == 2:
                 columns = self.__valid_columns()
@@ -332,6 +361,12 @@ class DataWrapper():
             list: Data.
         """
 
+        if self._alert:
+            logger.warning(utils.text_fix("""
+            Converting data types takes a long time; 
+            if you're looking for good performance, 
+            you should use the default type: 'np.ndarray'.
+            """, newline_exclude=False))
         return self._data.tolist()
 
     def __getattr__(self, name):

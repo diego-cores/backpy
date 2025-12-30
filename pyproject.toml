@@ -1,6 +1,55 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=75.3.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "backpyf"
+version = "0.9.72b5"
+description = "BackPy is a library made in python for back testing in financial markets."
+authors = [{name = "Diego Cores", email = "89626622+diego-cores@users.noreply.github.com"}]
+readme = {file = "README.md", "content-type" = "text/markdown"}
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent"
+]
+
+dependencies = [
+    "pandas>=2.3.0",
+    "numpy>=2.3.2",
+    "matplotlib>=3.7.5",
+    "pillow>=11.3.0",
+]
+
+[project.optional-dependencies]
+optional = [
+    "yfinance==0.2.50",
+    "binance-connector==3.10.0",
+    "binance-futures-connector==4.1.0",
+]
+dev = [
+    "matplotlib-stubs",
+    "pandas-stubs",
+    "pyrefly"
+]
+
+[project.scripts]
+backpy = "backpy.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/diego-cores/backpy"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+backpy = ["assets/*"]
 
 [tool.pyrefly]
 project-includes = [

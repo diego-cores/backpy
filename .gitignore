@@ -1,4 +1,4 @@
-backpy/__pycache__/
+src/backpy/__pycache__/
 tests/__pycache__/
 *.egg-info/
 .vscode/

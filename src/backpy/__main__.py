@@ -25,8 +25,12 @@ def run_test() -> None:
     with contextlib.redirect_stdout(buf):
 
         from pandas import DataFrame
+        import logging
+
         from . import main
         from . import strategy
+        
+        logging.basicConfig(level=logging.ERROR)
 
         main.load_data(DataFrame({
             'open':[1,3,5],

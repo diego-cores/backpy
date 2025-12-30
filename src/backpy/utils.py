@@ -3,8 +3,16 @@ Utils module
 
 Contains various utility functions for the operation of the main code.
 
+Variables:
+    logger (Logger): Logger variable.
+
+Hidden variables:
+    _ansi_re (Pattern): ANSI escape sequence pattern.
+
+Classes:
+    ProgressBar: Create a loading bar.
+
 Functions:
-    load_bar: Function to print a loading bar.
     statistics_format: Returns statistics into a structured string.
     num_align: Aligns a number to the left or right with a maximum number of digits.
     round_r: Function to round a number to a specified number of significant 
@@ -22,6 +30,7 @@ Functions:
     diff_ccolor: Differentiate a color from another color.
     plot_volume: Function to plot volume on a give `Axes`.
     plot_candles: Function to plot candles on a given `Axes`.
+    plot_line: Plots a line with data on the provided `Axes`.
     plot_position: Function to plot a trading position.
 
 Hidden Functions:
@@ -29,48 +38,212 @@ Hidden Functions:
 """
 
 from matplotlib.collections import PatchCollection, LineCollection
+from matplotlib.markers import MarkerStyle
 from matplotlib.patches import Rectangle 
 from matplotlib.axes._axes import Axes
 from matplotlib.dates import date2num
 import matplotlib.colors
 import matplotlib as mpl
 
-from typing import Any, Callable
-from time import sleep
+from typing import Any, Callable, cast
+from time import sleep, time
+import threading
+import logging
+import shutil
+import re
 
 import pandas as pd
 import numpy as np
 
 from . import _commons as _cm
 
-def load_bar(size:int, step:int, count:bool = True, text:str = '') -> None:
+logger:logging.Logger = logging.getLogger(__name__)
+_ansi_re = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
+
+class ProgressBar():
     """
-    Loading bar.
+    Progress bar
 
-    Prints a loading bar.
+    Create a loading bar.
+    Call 'next' method for the next step.
 
-    Args:
-        size (int): Number of steps in the loading bar.
-        step (int): Current step in the loading process.
-        count (bool, optional): If you want the number of 
-            steps and the current step to be displayed.
-        text (str, optional): If you want to optimize your 
-            code by sending only one print to the console 
-            at a time, you can enter the text you want to 
-            appear to the right of the loading bar.
+    Attributes:
+        size (int|None): Number of steps the loading bar will have.
+        noprint (bool): If true, the loading bar is not printed and 
+            is returned as a string.
+        show_count (bool): Show the step count.
+
+    Private Attributes:
+        _step: Last step.
+        _rsize: Number of points within the load bar.
+        _adder: Dict with additional text to the loading bar.
+
+    Methods:
+        pass
     """
 
-    per = str(int(step/size*100))
-    load = '*'*int(46*step/size) + ' '*(46-int(46*step/size))
+    size:int|None
+    noprint:bool
+    show_count:bool
 
-    first = load[:46//2-int(round(len(per)/2,0))]
-    sec = load[46//2+int(len(per)-round(len(per)/2,0)):]
+    _step:int
+    _rsize:int
+    _adder:dict
 
-    print(
-        f'\r[{first}{per}%%{sec}] ' 
-        + (f' {num_align(step, len(str(size)))} of {size} completed ' if count else '')
-        + (text if text.split() != '' else ''), 
-        end='')
+    def __init__(self, size:int|None = None, count:bool = True, 
+                rsize:int = 46, noprint:bool = False) -> None:
+        """
+        __init__
+
+        Builder for initializing the class.
+
+        Args:
+            size (int|None, optional): Number of steps the loading bar will have.
+            count (bool, optional): Show the step count.
+            rsize (int, optional): Number of points within the load bar.
+            noprint (bool, optional): If true, the loading bar is not printed 
+                and is returned as a string.
+        """
+
+        if rsize < 1:
+            raise ValueError("'rsize' can only be equal to or greater than 1.")
+
+        self.size = size
+        self.noprint = noprint
+        self.show_count = count
+
+        self._step = 0
+        self._adder = {}
+        self._rsize = rsize
+
+    def adder_add(self, add:dict) -> None:
+        """
+        Adder add
+
+        Add additional text to the loading bar.
+
+        Args:
+            add (dict): Dictionary where the keys will be the title and 
+                the value can be a Callable.
+        """
+
+        self._adder.update(add)
+
+    def adder_replace(self, replace:dict) -> None:
+        """
+        Adder replace
+
+        Replace the dictionary with all the additional text with a new one.
+
+        Args:
+            replace (dict): Dictionary where the keys will be the title and 
+                the value can be a Callable.
+        """
+
+        self._adder = replace
+
+    def adder_clear(self) -> None:
+        """
+        Adder clear
+
+        Remove all additional text.
+        """
+
+        self._adder = {}
+
+    def adder_calc(self) -> str:
+        """
+        Adder calc
+
+        Based on the '_adder' dictionary, it creates a text 
+        that compiles all the additional text with the correct format.
+
+        Return:
+            str: Formated additional text.
+        """
+
+        if not len(self._adder):
+            return ''
+
+        text = ''
+        for k,v in self._adder.items():
+            if isinstance(v, Callable):
+                v = v()
+
+            text += f'| {str(k).strip()}: {str(v).strip()} '
+        return text
+
+    def console_adjust(self, text:str) -> str:
+        """
+        Console adjust
+
+        Adjust the text to the current console size.
+
+        Args:
+            text (str): text.
+
+        Return:
+            str: Adjusted text.
+        """
+
+        console_size = shutil.get_terminal_size().columns
+        if len(_ansi_re.sub('', text)) > console_size:
+            text = text[:console_size-4] + '...'
+
+        return text
+
+    def reset_size(self, size:int) -> None:
+        """
+        Reset size
+
+        Reset the loading bar.
+
+        Args:
+            size (int): New size.
+        """
+
+        self.size = size
+        self._step = 0
+
+    def next(self) -> str|None:
+        """
+        Next
+
+        Call this method to advance the loading bar; 
+        if size is None or the loading bar is full, nothing is done.
+
+        Return:
+            str|None: Returns the loading bar as a string if 'noprint'.
+        """
+
+        if self.size is None or self._step >= self.size:
+            return
+
+        self._step += 1
+        per = str(int(self._step/self.size*100))
+        load = (
+            '*'*int(self._rsize*self._step/self.size)
+            + ' '*(self._rsize-int(self._rsize*self._step/self.size))
+        )
+
+        first = load[:self._rsize//2-int(round(len(per)/2,0))]
+        sec = load[self._rsize//2+int(len(per)-round(len(per)/2,0)):]
+
+        text = self.adder_calc()
+        progress_bar = (
+            f'\r\033[K[{first}{per}%%{sec}] ' 
+            + (f' {num_align(self._step, len(str(self.size)))} of {self.size} completed ' 
+                if self.show_count else '')
+            + (text if text.strip() != '' else '')
+        )
+
+        if not self.noprint:
+            print(
+                self.console_adjust(progress_bar), 
+                end='\n' if self._step >= self.size else '', 
+                flush=True)
+
+        else: return progress_bar
 
 def statistics_format(data:dict, title:str | None = None, 
                       val_tt:list = ['Metric', 'Value']) -> str:
@@ -220,13 +393,13 @@ def correct_index(index:pd.Index) -> np.ndarray|pd.Index:
         ndarray|Index: The corrected `index`.
     """
 
-    r_index = index
+    r_index:np.ndarray|pd.Index = index
     if not all(isinstance(ix, float) for ix in index):
-        r_index = date2num(index)
-        print(text_fix("""
+        r_index = date2num(index) # type: ignore[arg-type]
+        logger.warning(text_fix("""
               The 'index' has been automatically corrected. 
               To resolve this, use a valid index.
-              """)) if _cm.alert else None
+              """))
     
     return r_index
 
@@ -238,7 +411,7 @@ def calc_width(index:pd.Index|np.ndarray, alert:bool = False) -> float:
 
     Args:
         index (Index|ndarray): The index of the data.
-        alert (bool, optional): If `True`, an alert will be printed. Defaults to 
+        alert (bool, optional): If `True`, an warning will be logged. Defaults to 
             False.
 
     Returns:
@@ -248,10 +421,11 @@ def calc_width(index:pd.Index|np.ndarray, alert:bool = False) -> float:
     if isinstance(_cm.__data_width, float) and _cm.__data_width > 0: 
         return _cm.__data_width
 
-    print(text_fix("""
-          The 'data_width' has been automatically corrected. 
-          To resolve this, use a valid width.
-          """)) if _cm.alert and alert else None
+    if alert:
+        logger.warning(text_fix("""
+            The 'data_width' has been automatically corrected. 
+            To resolve this, use a valid width.
+            """))
 
     return 1. if len(index) <= 1 else np.median(np.diff(index))
 
@@ -404,8 +578,8 @@ def plot_volume(ax:Axes, data:pd.Series,
 
     patches = [Rectangle((xi, 0), width, vol) for xi, vol in zip(x, volume)]
 
-    ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0))
-    ax.set_ylim(None, data.max()*1.1 or 1)
+    ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0)) # type: ignore[arg-type]
+    ax.set_ylim(top=data.max()*1.1 or 1)
     ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
                 data.index.values[-1]+(width*len(data.index)/10))
 
@@ -420,7 +594,8 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
 
     Args:
         ax (Axes): The `Axes` object where the candles will be drawn.
-        data (DataFrame): Data to draw the candles.
+        data (DataFrame): Data to draw the candles. 
+            Need 'close', 'open', 'high', 'low' columns.
         width (float, optional): Width of each candle. Defaults to 1.
         color_up (str, optional): Color of the candle when the price rises. 
             Defaults to 'g'.
@@ -439,18 +614,78 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     # Drawing vertical lines.
     segments = [[(x, low), (x, high)] 
                 for x, low, high in zip(data.index, data['low'], data['high'])]
-    ax.add_collection(LineCollection(segments, colors=color, alpha=alpha, 
+    ax.add_collection(LineCollection(segments, colors=color, alpha=alpha, # type: ignore[arg-type]
                                      linewidths=1, zorder=1))
 
     x = data.index.to_numpy() - width / 2
-    y = np.minimum(data.loc[:, 'open'].values, data.loc[:, 'close'].values)
-    height = np.abs(data.loc[:, 'close'].values - data.loc[:, 'open'].values)
+    y = np.minimum(data.loc[:, 'open'].to_numpy(), data.loc[:, 'close'].to_numpy())
+    height = np.abs(data.loc[:, 'close'].to_numpy() - data.loc[:, 'open'])
 
     # Bar drawing.
     patches = [Rectangle((xi, yi), width, hi) for xi, yi, hi in zip(x, y, height)]
-    ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0, zorder=1))
+    ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0, zorder=1)) # type: ignore[arg-type]
 
-    ax.set_ylim(data['low'].min()*0.98+1, data['high'].max()*1.02+1)
+    ax.set_ylim(_cm.c_tf(data['low'].min())*0.98+1, _cm.c_tf(data['high'].max())*1.02+1)
+    ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
+                data.index.values[-1]+(width*len(data.index)/10))
+
+def plot_line(ax:Axes, data:pd.Series, 
+            width:float = 1, color_up:str = 'g', 
+            color_down:str = 'r', color_n:str = 'k',
+            alpha:float = 1) -> None:
+    """
+    Line draw.
+
+    Plots a line with data on the provided `ax`.
+
+    Args:
+        ax (Axes): The `Axes` object where the line will be drawn.
+        data (Series): Data to draw the line.
+        width (float, optional): Used to calculate the margin on the sides.
+            Width of each point. Defaults to 1.
+        color_up (str, optional): Color of the line when the price rises. 
+            Defaults to 'g'.
+        color_down (str, optional): Color of the line when the price falls. 
+            Defaults to 'r'.
+        color_n (str, optional): Color of the line when the price does not move. 
+            Defaults to 'k'.
+        alpha (float, optional): Opacity of the line. Defaults to 1.
+    """
+
+    x = data.index.to_numpy()
+    y = data.to_numpy()
+
+    groups:dict[str, dict] = {
+        'n': {'xy':([],[]), 'color':color_n},
+        'u': {'xy':([],[]), 'color':color_up},
+        'd': {'xy':([],[]), 'color':color_down},
+    }
+
+    for a, b, c, d in zip(x[:-1], y[:-1], x[1:], y[1:]):    
+        if b == d:
+            key = 'n'
+        elif b < d:
+            key = 'u'
+        else:
+            key = 'd'
+
+        groups[key]['xy'][0].extend([a, c, np.nan])
+        groups[key]['xy'][1].extend([b, d, np.nan])
+
+    ax.plot(groups['n']['xy'][0], groups['n']['xy'][1], color=groups['n']['color'], zorder=1, alpha=alpha)
+
+    u_z = p_z = 1.01
+    if y.sum() > 0:
+        u_z = 1.02
+    else:
+        p_z = 1.02
+
+    ax.plot(groups['u']['xy'][0], groups['u']['xy'][1], color=groups['u']['color'], zorder=u_z, alpha=alpha)
+    ax.plot(groups['d']['xy'][0], groups['d']['xy'][1], color=groups['d']['color'], zorder=p_z, alpha=alpha)
+
+    ax.set_ylim(_cm.c_tf(data.min())*0.98+1, _cm.c_tf(data.max())*1.02+1)
+    ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
+                data.index.values[-1]+(width*len(data.index)/10))
 
 def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green', 
                   color_stop:str = 'red', alpha:float = 1, 
@@ -494,22 +729,22 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
     # Draw routes of the operations.
     if operation_route or operation_route is None:
 
-        segments = [[(d, o), (pd, c)] for d, o, pd, c in zip(
+        segments:list = [[(d, o), (pd, c)] for d, o, pd, c in zip(
             trades['date'], 
             trades['positionOpen'],
             trades['positionDate'],
             trades['positionClose'],)]
 
-        ax.add_collection(LineCollection(
+        ax.add_collection(LineCollection( # type: ignore[arg-type]
             segments,
             colors="grey",
             linestyles=(0, (5, 5)),
             linewidths=0.8,
             alpha=alpha_arrow,
-            zorder=0.9
+            zorder=cast(int, 0.9)
         ))
 
-    color_close = trades.apply(
+    color_close:list = trades.apply(
         lambda x: (
             diff_ccolor('#089991', color_take, factor=0.2) 
             if x['profitPer'] >= 0 
@@ -518,7 +753,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
     if operation_route:
         routes = [
             Rectangle(
-                (xi, yi), (pdi - xi), hi)
+                (_cm.c_tf(xi), _cm.c_tf(yi)), (_cm.c_tf(pdi) - _cm.c_tf(xi)), hi)
             for xi, yi, hi, pdi in zip(
                 trades['date'],
                 trades['positionOpen'],
@@ -526,28 +761,29 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
                 trades['positionDate']
         )]
 
-        ax.add_collection(PatchCollection(routes, color=color_close, 
+        ax.add_collection(PatchCollection(routes, color=color_close, # type: ignore[arg-type]
                                         alpha=alpha, linewidth=0, zorder=0.8))
 
     # Drawing of the closing marker of the operations.
     if ('positionDate' in trades.columns and 
         'positionClose' in trades.columns):
 
-        ax.scatter(trades['positionDate'], trades['positionClose'], 
-                  c=color_close, s=30, marker='x', alpha=alpha_arrow, zorder=1.1)
+        ax.scatter(trades['positionDate'].to_numpy(), trades['positionClose'].to_numpy(), 
+                  c=color_close, s=30, marker=MarkerStyle('x'), alpha=alpha_arrow, zorder=1.1)
+
+    up_type:Callable = lambda x: x['positionOpen'] if x['typeSide'] == 1 else None
+    down_type:Callable = lambda x: x['positionOpen'] if x['typeSide'] != 1 else None
 
     # Drawing of the position type marker.
-    ax.scatter(trades['date'], 
-               trades.apply(lambda x: x['positionOpen'] 
-                            if x['typeSide'] == 1 else None, axis=1), 
+    ax.scatter(trades['date'].to_numpy(), 
+               trades.apply(up_type, axis=1), 
                color=diff_color(color_take, factor=arrow_fact, line=0.2), s=30, 
-               marker='^', alpha=alpha_arrow, zorder=1.1)
+               marker=MarkerStyle('^'), alpha=alpha_arrow, zorder=1.1)
 
-    ax.scatter(trades['date'], 
-               trades.apply(lambda x: x['positionOpen']
-                            if x['typeSide'] != 1 else None, axis=1),
+    ax.scatter(trades['date'].to_numpy(), 
+               trades.apply(down_type, axis=1),
                color=diff_color(color_stop, factor=arrow_fact, line=0.2), s=30, 
-               marker='v', alpha=alpha_arrow, zorder=1.1)
+               marker=MarkerStyle('v'), alpha=alpha_arrow, zorder=1.1)
 
 def _loop_data(function:Callable, bpoint:Callable, init:int, timeout:float) -> pd.DataFrame:
     """

@@ -155,3 +155,19 @@ __all__ = [
 __author__ = 'Diego Cores'
 __url__ = 'https://github.com/diego-cores'
 __email__ = '89626622+diego-cores@users.noreply.github.com'
+
+import logging
+
+_logger = logging.getLogger(__name__)
+
+if not _logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.WARNING)
+
+    formatter = logging.Formatter(
+        "%(levelname)s: %(message)s"
+    )
+    handler.setFormatter(formatter)
+
+    _logger.addHandler(handler)
+    _logger.propagate = False

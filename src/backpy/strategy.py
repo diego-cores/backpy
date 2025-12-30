@@ -4,6 +4,9 @@ Strategy module
 This module contains the main class that must be inherited to create your 
 own strategy.
 
+Variables:
+    logger (Logger): Logger variable.
+
 Classes:
     StrategyClass: This is the class you have to inherit to create your strategy.
 
@@ -14,6 +17,7 @@ Hidden Functions:
     _data_info: Gathers information about the dataset.
 """
 
+from tkinter.tix import Tree
 import pandas as pd
 import numpy as np
 
@@ -22,11 +26,14 @@ from typing import Callable, Any, cast
 from functools import wraps
 from uuid import uuid4
 from time import time
+import logging
 
 from . import flex_data as flx
 from . import _commons as cm_
 from . import exception
 from . import utils
+
+logger:logging.Logger = logging.getLogger(__name__)
 
 def idc_decorator(func:Callable) -> Callable[..., flx.DataWrapper]:
     """
@@ -136,7 +143,7 @@ class StrategyClass(ABC):
         unique_id: Generates a random id quickly.
         act_taker: Open a position.
         act_limit: Open a limit order.
-        act_close: Close an action.
+        act_close: Close an position.
         ord_put: Place a new order.
         ord_rmv: Remove the order you want.
         ord_mod: Modify the order you want.
@@ -174,7 +181,7 @@ class StrategyClass(ABC):
         __put_pos: Put a position in the simulation.
         __put_ord: Place a new order.
         __union_pos: Get all positions with the same union id.
-        __word_reduce: Take an order and reduce the corresponding action.
+        __word_reduce: Take an order and reduce the corresponding position.
         __order_execute: Executes an order based on the order type.
         __get_union: Find rows with the same 'unionId'.
         __price_check: Checks if 'price' is a correct value for the position.
@@ -310,9 +317,11 @@ class StrategyClass(ABC):
             if not callable(attr):
                 continue
             elif getattr(attr, '_store', False):
+                logger.debug("Adding __data_store decorator to '%s'", name)
                 decorator = getattr(self, '_StrategyClass__data_store')(attr)
                 setattr(self, name, decorator)
             elif getattr(attr, '_uidc', False):
+                logger.debug("Adding __uidc decorator to '%s'", name)
                 decorator = getattr(self, '_StrategyClass__uidc')(attr)
                 setattr(self, name, decorator)
 
@@ -385,7 +394,7 @@ class StrategyClass(ABC):
             DataWrapper: The value of the hidden variable `__balance_rec`.
         """
 
-        return flx.DataWrapper(self.__balance_rec)
+        return flx.DataWrapper(self.__balance_rec, alert=True)
 
     def get_spread(self) -> flx.CostsValue:
         """
@@ -489,6 +498,7 @@ class StrategyClass(ABC):
 
                 return self.__idc_data[id]
 
+            logger.debug('Generating indicator')
             result = flx.DataWrapper(func(*args, **kwargs))
 
             self.__idc_data[id] = result
@@ -533,6 +543,7 @@ class StrategyClass(ABC):
             if id in self.__idc_data.keys():
                 return self.__uidc_cut(self.__idc_data[id])
 
+            logger.debug('Generating user indicator')
             result = flx.DataWrapper(func(self.__data_adf, *args, **kwargs))
             self.__idc_data[id] = result
 
@@ -585,7 +596,7 @@ class StrategyClass(ABC):
         if len(data) != len(self.__data_adf):
             raise exception.UidcError('Length different from data.')
 
-        result = flx.DataWrapper(data[:self.__data_index], getattr(data, '_columns'))
+        result = flx.DataWrapper(data[:self.__data_index], getattr(data, '_columns'), alert=True)
         result._index = data._index
 
         return result
@@ -612,7 +623,7 @@ class StrategyClass(ABC):
             if last is not None and last < limit 
             else data[:limit],
             columns=data._columns, 
-            index=data._index)
+            index=data._index, alert=True)
 
     def __data_updater(self, index:int, balance:list[float] | None = None) -> None:
         """
@@ -624,6 +635,7 @@ class StrategyClass(ABC):
             index (int): Index at which the data must be cut.
         """
 
+        logger.debug('Updating data')
         data = flx.DataWrapper(self.__data_awr.unwrap()[:index])
         dates = flx.DataWrapper(self.__data_adf.index.values[:index])
 
@@ -632,7 +644,7 @@ class StrategyClass(ABC):
         self.low = data['low']
         self.close = data['close']
         self.volume = data['volume']
-        self.date = dates
+        self.date = flx.DataWrapper(dates, alert=True)
 
         last_date = dates[-1] if dates[-1].size > 0 else 0
         self.hour = float(last_date % self.__day_width / self.__day_width * 24)
@@ -659,6 +671,7 @@ class StrategyClass(ABC):
 
         # Check operations
         if self.__orders:
+            logger.debug('Checking orders')
             self.__orders.sort(
             key=lambda x: (
                 self.__orders_order.get(x['order'], 99),
@@ -706,6 +719,7 @@ class StrategyClass(ABC):
         if (psff:=self.__buff('__pos_record')): 
             self.__pos_record = self.__cn_insert(self.__pos_record, psff)
 
+        logger.debug("Executing 'next'")
         # Execute strategy
         self.next()
 
@@ -823,6 +837,7 @@ class StrategyClass(ABC):
             str: unionId integer.
         """
 
+        logger.debug("Executes 'act_taker'")
         buy = bool(buy)
         ui = self.unique_id()
 
@@ -853,6 +868,7 @@ class StrategyClass(ABC):
             str: unionId integer.
         """
 
+        logger.debug("Executes 'act_limit'")
         buy = bool(buy)
 
         return self.__put_ord(
@@ -867,15 +883,16 @@ class StrategyClass(ABC):
 
     def act_close(self, index:int) -> None:
         """
-        Action close
+        Position close
 
-        Close an action.
+        Close an position.
         Will be applied as a 'taker'.
 
         Args:
             index (int): Real index of the position.
         """
 
+        logger.debug("Executes 'act_close'")
         self.__act_reduce(index, self.__data['close'][-1], mode='taker')
 
     def __act_reduce(self, index:int, price:float, 
@@ -985,6 +1002,7 @@ class StrategyClass(ABC):
             union_id (str): unionId that will have.
         """
 
+        logger.debug('Placing position')
         position_price = price
         where_date = np.where(self.__data_dates.unwrap() == date)[0][0]
 
@@ -1051,7 +1069,7 @@ class StrategyClass(ABC):
         """
         With order reduce
 
-        Take an order and reduce the corresponding action.
+        Take an order and reduce the corresponding position.
 
         Args:
             order (dict): Dict with the order.
@@ -1059,10 +1077,13 @@ class StrategyClass(ABC):
 
         Returns:
             bool|None: 
-                Returns True if the action was reduced, otherwise returns None.
+                Returns True if the position was reduced, otherwise returns None.
         """
 
+        logger.debug("Reducing position")
         if not (u_pos:=self.__union_pos(order['unionId'])):
+            logger.debug(
+                "The reduction was cancelled: No position was found with the same 'unionId'")
             return
 
         self.__act_reduce(
@@ -1286,6 +1307,7 @@ class StrategyClass(ABC):
             str: unionId integer.
         """
 
+        logger.debug('Creating an order')
         amount = amount or None
 
         close_id = str(int(close_id)) if close_id else None
@@ -1351,6 +1373,7 @@ class StrategyClass(ABC):
             str: unionId integer.
         """
 
+        logger.debug("Executes 'ord_put'")
         if not order_type in (
             'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit'):
             raise ValueError('Bad op type')
@@ -1391,9 +1414,12 @@ class StrategyClass(ABC):
             index (int): Real index of the order to be deleted.
         """
 
+        logger.debug("Executes 'ord_rmv'")
         if not self.__orders:
             raise exception.OrderError('There are no active orders.')
         elif not isinstance(index, int):
+            logger.debug(
+                "The order deletion was cancelled: 'index' is not a valid type.")
             return
 
         order = self.__orders[index]
@@ -1421,6 +1447,7 @@ class StrategyClass(ABC):
                 Leave it as np.nan if you want to remove the amount.
         """
 
+        logger.debug("Executes 'ord_mod'")
         if price is None and amount is None:
             raise exception.OrderError('Nothing to modify.')
 
@@ -1473,7 +1500,7 @@ class StrategyClass(ABC):
 
         __pos_rec = self.__pos_record.values()
         if len(__pos_rec) == 0: 
-            return flx.DataWrapper()
+            return flx.DataWrapper(alert=True)
         elif (last != None and 
               (last <= 0 or last > len(self.__data))): 
 
@@ -1493,7 +1520,7 @@ class StrategyClass(ABC):
 
             data = data[label]
 
-        return flx.DataWrapper(data)
+        return flx.DataWrapper(data, alert=True)
 
     def prev_positions(self, label:str | None = None, 
                        uid:int | None = None, last:int | None = None
@@ -1528,7 +1555,7 @@ class StrategyClass(ABC):
 
         __pos = self.__positions
         if not __pos or len(__pos) == 0: 
-            return flx.DataWrapper()
+            return flx.DataWrapper(alert=True)
         elif (last != None and 
               (last <= 0 or last > len(self.__data))): 
 
@@ -1540,7 +1567,7 @@ class StrategyClass(ABC):
         data_lf = lambda x: x[
             len(x) - last if last is not None and last < len(x) else 0:]
         if label and label.lower() == 'index':
-            return flx.DataWrapper(data_lf(np.arange(0, len(__pos))))
+            return flx.DataWrapper(data_lf(np.arange(0, len(__pos))), alert=True)
 
         keys = list(__pos[0].keys())
         data_columns = keys.copy()
@@ -1560,7 +1587,7 @@ class StrategyClass(ABC):
         if label != None and data_columns and arr_data.size:
             arr_data = arr_data[label]
 
-        return flx.DataWrapper(arr_data, columns=data_columns)
+        return flx.DataWrapper(arr_data, columns=data_columns, alert=True)
 
     def prev_orders(self, label:str | None = None, or_type:str | None = None,
                     ids:dict | None = None, last:int | None = None
@@ -1603,7 +1630,7 @@ class StrategyClass(ABC):
 
         __ord = self.__orders
         if not __ord or len(__ord) == 0: 
-            return flx.DataWrapper()
+            return flx.DataWrapper(alert=True)
         elif (last != None and 
               (last <= 0 or last > len(self.__data))): 
 
@@ -1621,7 +1648,7 @@ class StrategyClass(ABC):
         data_lf = lambda x: x[
             len(x) - last if last is not None and last < len(x) else 0:]
         if label and label.lower() == 'index':
-            return flx.DataWrapper(data_lf(np.arange(0, len(__ord))))
+            return flx.DataWrapper(data_lf(np.arange(0, len(__ord))), alert=True)
 
         keys = list(__ord[0].keys())
         data_columns = keys.copy()
@@ -1644,7 +1671,7 @@ class StrategyClass(ABC):
         if label != None and data_columns and arr_data.size:
             arr_data = arr_data[label]
 
-        return flx.DataWrapper(arr_data, columns=data_columns)
+        return flx.DataWrapper(arr_data, columns=data_columns, alert=True)
 
     def idc_fibonacci(self, lv0:float = 10, lv1:float = 1) -> flx.DataWrapper:
         """
@@ -1758,7 +1785,7 @@ class StrategyClass(ABC):
         v_data = self.__data_adf[source] if data is None else data
         ema = v_data.ewm(span=length, adjust=False).mean()
 
-        return cast(pd.Series, ema)
+        return ema
 
     def idc_sma(self, length:int, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
@@ -1824,7 +1851,7 @@ class StrategyClass(ABC):
         v_data = self.__data_adf[source] if data is None else data
         sma = v_data.rolling(window=length).mean()
 
-        return cast(pd.Series, sma)
+        return sma
 
     def idc_wma(self, length:int, source:str = 'close', 
                 invt_weight:bool = False, last:int | None = None) -> flx.DataWrapper:
@@ -1896,7 +1923,7 @@ class StrategyClass(ABC):
         wma = v_data.rolling(window=length).apply(
             lambda x: (x*weight).sum() / weight.sum(), raw=True)
 
-        return cast(pd.Series, wma)
+        return wma
     
     def idc_smma(self, length:int, source:str = 'close', 
                  last:int | None = None) -> flx.DataWrapper:
@@ -1964,7 +1991,7 @@ class StrategyClass(ABC):
         smma = v_data.ewm(alpha=1/length, adjust=False).mean()
         smma.shift(1)
 
-        return cast(pd.Series, smma)
+        return smma
 
     def idc_sema(self, length:int = 9, method:str = 'sma', 
                   smooth:int = 5, only:bool = False, 
@@ -2794,7 +2821,7 @@ class StrategyClass(ABC):
     @__store_decorator
     def __idc_rlinreg(self, data:pd.Series | None = None, 
                       length:int = 5, offset:int = 1,
-                      cut:bool = False) -> np.ndarray:
+                      cut:bool = False) -> pd.Series:
         """
         Calculate rolling linear regression values.
 
@@ -2820,9 +2847,9 @@ class StrategyClass(ABC):
         y = v_data.rolling(window=length)
 
         m = y.apply(lambda y: np.polyfit(x, y.values, 1)[0])
-        b = y.mean() - (m * np.mean(x)) 
+        b = y.mean() - (m * float(np.mean(x))) 
 
-        return m * (length - 1 - offset) + b
+        return cast(pd.Series, m * (length - 1 - offset) + b)
 
     def idc_mom(self, length:int = 10, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
@@ -3079,7 +3106,7 @@ class StrategyClass(ABC):
     @__store_decorator
     def __idc_trange(self, data:pd.Series | None = None, 
                      handle_na: bool = True, last:int | None = None,
-                     cut:bool = False) -> flx.DataWrapper:
+                     cut:bool = False) -> pd.Series:
         """
         Calculate the true range.
 
@@ -3110,7 +3137,7 @@ class StrategyClass(ABC):
         hl = v_data.loc[:, 'high'] - v_data.loc[:, 'low']
         hyc = abs(v_data['high'] - close)
         lyc = abs(v_data['low'] - close)
-        tr = pd.concat([hl, hyc, lyc], axis=1).max(axis=1)
+        tr:pd.Series[float] = pd.concat([hl, hyc, lyc], axis=1).max(axis=1)
 
         if not handle_na:
             tr[close.isna()] = np.nan

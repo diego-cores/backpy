@@ -255,5 +255,3 @@ class TestCustomPlt(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-# 'CustomToolbar' is missing

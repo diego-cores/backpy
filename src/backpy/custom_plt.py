@@ -3,6 +3,9 @@ Custom plot module
 
 Contains matplotlib embedding logic and colors.
 
+Variables:
+    logger (Logger): Logger variable.
+
 Classes:
     CustomWin: Create a custom window with BackPy using 'tkinter' and 'matplotlib'.
     CustomToolbar: Inherits from the 'NavigationToolbar2Tk' class to 
@@ -17,12 +20,12 @@ Functions:
     add_window: Add a tkinter window with 'CustomWin'.
 """
 
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk # type: ignore[import]
 from matplotlib.animation import FuncAnimation
+from typing import Callable, Never, Any, cast
 from PIL import Image, ImageTk, ImageOps
 from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
-from typing import Callable, Never
 import matplotlib.pyplot as plt
 from importlib import resources
 from types import MethodType
@@ -31,11 +34,14 @@ import matplotlib as mpl
 import tkinter as tk
 import random as rd
 import numpy as np
+import logging
 import os
 
 from . import _commons as _cm
 from . import exception
 from . import utils
+
+logger:logging.Logger = logging.getLogger(__name__)
 
 class CustomToolbar(NavigationToolbar2Tk):
     """
@@ -65,6 +71,9 @@ class CustomToolbar(NavigationToolbar2Tk):
         run_zoom: Function responsible for executing 'zoom' on all toolbars.
         run_pan: Function responsible for executing 'pan' on all toolbars.
     """
+
+    _buttons: dict[Any, Any]
+    winfo_children:Callable
 
     toolitems = (
         ('Home', 'Reset original view', 'home', 'home'),
@@ -107,7 +116,7 @@ class CustomToolbar(NavigationToolbar2Tk):
         """
 
         if not movement:
-            self.toolitems = (
+            self.toolitems = ( # type: ignore[assignment]
                 ('Home', 'Reset original view', 'home', 'home'),
                 (None, None, None, None),
                 ('Save', 'Save the figure', 'filesave', 'save_figure'),
@@ -617,6 +626,8 @@ class CustomWin:
                 the window from blocking when moving it, if that happens increase the interval.
         """
 
+        anim = cast(Any, anim)
+
         if anim.event_source:
             anim.event_source.stop()
 
@@ -807,10 +818,9 @@ class CustomWin:
 
         try:
             if self.toolbar_config and alert:
-                print(utils.text_fix("""
+                logger.warning(utils.text_fix("""
                     In this instance a toolbar was configured, 
-                    if so you will have visual problems with the panels, 
-                    if you want to disable this alert set the 'alert' argument to False.
+                    if so you will have visual problems with the panels.
                 """))
         except AttributeError:
             pass
@@ -1022,13 +1032,13 @@ def custom_ax(ax:Axes, bg:str|tuple|list = '#e5e5e5', edge:bool = False) -> None
     ax.spines['left'].set_color('white')
     ax.spines['top'].set_color('white')
     ax.spines['right'].set_color('white')
-    ax.title.set_color('white')
+    ax.title.set_color('white') # type: ignore[attr-defined]
     ax.xaxis.label.set_color('white')
     ax.yaxis.label.set_color('white')
     ax.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
     ax.set_axisbelow(True)
 
-    semi_transparent_white = mpl.colors.to_rgba('white', alpha=0.3)
+    semi_transparent_white = mpl.colors.to_rgba(cast(Any, "white"), alpha=0.3)
     for spine in ax.spines.values():
         spine.set_color(semi_transparent_white)
         spine.set_linewidth(1.2)
@@ -1175,6 +1185,7 @@ def add_window(fig:Figure, title:str|Callable|None = None, block:bool = True,
     """
 
     style = style or {}
+    anim = cast(Any, anim)
 
     if not new:
         if anim and anim.event_source: 

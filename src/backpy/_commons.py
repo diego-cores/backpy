@@ -4,7 +4,7 @@ Commons hidden module
 This module contains all global variables for better manipulation.
 
 Variables:
-    alert (bool): If True, shows alerts in the console.
+    logger (Logger): Logger variable.
     dots (bool): If false, the '.' will be replaced by commas "," in prints.
     run_timer (bool): If false the execution timer will never appear in the console.
     plt_style (str | None): Last style used, if you modify this variable 
@@ -48,8 +48,11 @@ Hidden Variables:
 
 Functions:
     get_backtest_names: Takes the names of the saved backtests.
+    del_backtest: Remove a backtest.
+    c_tf: It's the same as doing: cast(float, ...).
 
 Hidden Functions:
+    __del_backtest_uniq: Remove only one backtest.
     __get_names: Takes the names of an list of dictionaries.
     __get_trades: Take trades from 1 or more saved backtests.
     __get_dtrades: Does the same thing as '__get_trades' 
@@ -58,13 +61,15 @@ Hidden Functions:
     __gen_fname: Generates a name that is not duplicated in '__backtests'.
 """
 
-from typing import Any
+from typing import Any, Callable, cast
 import pandas as pd
+import logging
 
 from backpy.flex_data import CostsValue
 from . import exception
 
-alert:bool = True
+logger:logging.Logger = logging.getLogger(__name__)
+
 dots:bool = True
 run_timer:bool = True
 plt_style:str|None = None
@@ -216,6 +221,33 @@ __plt_styles:dict = {
     }
 }
 
+def del_backtest(names:list[str|int|None]|str|int|None = None) -> None:
+    """
+    Delete backtests
+
+    Remove a backtest; each backtest can consume a lot of memory, 
+    so if you don't need it, it's best to remove it.
+
+    Args:
+        names (list[str|int|None]|str|int|None, optional): 
+            Name or index of the backtests to be deleted.
+    """
+
+    if len(__backtests) == 0:
+        raise exception.DataError('There is no backtest to delete.')
+    elif isinstance(names, tuple):
+        raise exception.DataError("'names' cannot be a tuple.")
+
+    if isinstance(names, list):
+        nums:list[int] = sorted((x for x in names if isinstance(x, int)), reverse=True)
+        strings:list[str] = [x for x in names if isinstance(x, str)]
+        sorted_names = nums + strings
+
+        for v in sorted_names: __del_backtest_uniq(name=v)
+        return
+
+    __del_backtest_uniq(name=names)
+
 def get_backtest_names() -> list[str]:
     """
     Get names
@@ -228,18 +260,26 @@ def get_backtest_names() -> list[str]:
 
     return __get_names(__backtests)
 
-# Future implementation
-#def get_data_names() -> list[str]:
-#    """
-#    Get names
+def __del_backtest_uniq(name:str|int|None = None) -> None:
+    """
+    Delete only one backtests
 
-#    Takes the names of the saved data.
+    Remove a backtest; each backtest can consume a lot of memory, 
+    so if you don't need it, it's best to remove it.
 
-#    Returns:
-#        list[str]: names
-#    """
+    Args:
+        name (str|int|None, optional): 
+            Name or index of the backtests to be deleted.
+    """
 
-#    return __get_names(__data)
+    if isinstance(name, int) or name is None:
+        del __backtests[-1 if name is None else name]
+    elif not isinstance(name, str):
+        return __backtests[-1]
+
+    for i, backtest in enumerate(__backtests):
+        if backtest['name'] == name:
+            del __backtests[i]
 
 def __get_names(from_:list[dict]) -> list[str]:
     """
@@ -344,6 +384,7 @@ def __get_strategy(name:str|int|Any|None = None) -> dict:
     for i,v in enumerate(__backtests):
         if v['name'] == name:
             return __backtests[i]
+
     raise exception.DataError('Name not found.')
 
 def __gen_fname(name:str, from_:list[dict]) -> str:
@@ -373,3 +414,5 @@ def __gen_fname(name:str, from_:list[dict]) -> str:
         nm += 1
 
     return mname
+
+c_tf:Callable = lambda x: cast(float, x)

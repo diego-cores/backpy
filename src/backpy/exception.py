@@ -18,7 +18,7 @@ class RunError(Exception):pass
 
 class StyClassError(Exception):pass
 
-class ActionError(Exception):pass
+class PositionError(Exception):pass
 
 class ConvWrapperError(Exception):pass
 
