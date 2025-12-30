@@ -1,5 +1,6 @@
 ![BackPy logo](https://raw.githubusercontent.com/diego-cores/backpy/main/images/logo.png)
-![Version](https://img.shields.io/badge/version-0.9.72b5-blue) ![Status](https://img.shields.io/badge/status-beta-orange) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/backpyf?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pypi.org/project/backpyf/)
+![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Status](https://img.shields.io/badge/status-stable-brightgreen
+) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/backpyf?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pypi.org/project/backpyf/)
 
 ##### Light, realistic, fast and adaptable.
 
