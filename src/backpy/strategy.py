@@ -17,7 +17,6 @@ Hidden Functions:
     _data_info: Gathers information about the dataset.
 """
 
-from tkinter.tix import Tree
 import pandas as pd
 import numpy as np
 
