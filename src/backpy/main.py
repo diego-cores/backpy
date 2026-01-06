@@ -8,6 +8,7 @@ Variables:
     logger (Logger): Logger variable.
 
 Functions:
+    default_logging: Configure logging.
     load_binance_data_spot: Loads data using the binance-connector module.
     load_binance_data_futures: Loads data using the binance-futures-connector module.
     load_yfinance_data: Loads data using the yfinance module.
@@ -55,6 +56,24 @@ from . import utils
 from . import stats
 
 logger:logging.Logger = logging.getLogger(__name__)
+
+def default_logging(level:int = logging.WARNING) -> None:
+    """
+    Default logging
+
+    Configure logging.
+
+    Args:
+        level (int, optional): Logging level.
+    """
+
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter("%(levelname)s: %(message)s")
+    handler.setFormatter(formatter)
+
+    root = logging.getLogger()
+    root.addHandler(handler)
+    root.setLevel(level)
 
 def __load_binance_data(client:Callable, symbol:str = 'BTCUSDT', 
                         interval:str = '1d', start_time:str | None = None, 

@@ -1,6 +1,5 @@
 ![BackPy logo](https://raw.githubusercontent.com/diego-cores/backpy/main/images/logo.png)
-![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Status](https://img.shields.io/badge/status-stable-brightgreen
-) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/backpyf?period=total&units=NONE&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pypi.org/project/backpyf/)
+![Version](https://img.shields.io/badge/version-1.0.1-blue) ![Status](https://img.shields.io/badge/status-stable-brightgreen) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/backpyf?period=total&units=NONE&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pypi.org/project/backpyf/)
 
 ##### Light, realistic, fast and adaptable.
 
@@ -302,3 +301,6 @@ You can customize the style with the `style` argument (e.g., `darkmode`).
 There are more than 15 predefined styles, and you can also create your own using configuration functions like `style_c`.
 
 ---
+
+## ✨ Support
+If you found BackPy useful, please consider leaving a ⭐ — it would be much appreciated!
