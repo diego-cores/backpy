@@ -17,7 +17,7 @@ Hidden Functions:
     _data_info: Gathers information about the dataset.
 """
 
-from tkinter.tix import Tree
+from bs4.element import ResultSet
 import pandas as pd
 import numpy as np
 
@@ -180,6 +180,7 @@ class StrategyClass(ABC):
         __act_reduce: Reduce a position or close it.
         __put_pos: Put a position in the simulation.
         __put_ord: Place a new order.
+        __view_in_orders: Returns the unionId that have ordern and position in the order list.
         __union_pos: Get all positions with the same union id.
         __word_reduce: Take an order and reduce the corresponding position.
         __order_execute: Executes an order based on the order type.
@@ -656,6 +657,28 @@ class StrategyClass(ABC):
         self.__balance = balance[-1] if balance else self.__balance
         self.__balance_rec = balance if balance else self.__balance_rec
 
+    def __view_in_orders(self) -> dict[str, float]:
+        """
+        View in orders
+
+        Returns the unionId of current orders 
+            which have a pending order as their position.
+
+        Return:
+            dict[str,float]: 
+                The keys are the unionId and the 
+                value is the 'orderPrice' of the position.
+        """
+
+        ids = [v['unionId'] for v in self.__orders if v['unionId'].split('/')[0] == 'w']
+        result = {}
+
+        for i in self.__orders:
+            if i['order'] == 'op' and i['unionId'] and 'w/'+i['unionId'] in ids:
+                result['w/'+i['unionId']] = i['orderPrice'] 
+
+        return result
+
     def __before(self, index:int, balance:list[float] | None = None) -> None:
         """
         Before
@@ -672,10 +695,14 @@ class StrategyClass(ABC):
         # Check operations
         if self.__orders:
             logger.debug('Checking orders')
+
+            l_index = self.__view_in_orders()
             self.__orders.sort(
             key=lambda x: (
                 self.__orders_order.get(x['order'], 99),
-                (abs(x['orderPrice'] - self.__data['open'][-1]) 
+                (abs(x['orderPrice'] - (self.__data['open'][-1]
+                if x['order'] == 'op' or not x['unionId'] in l_index.keys()
+                else l_index[x['unionId']])) 
                  if not self.__orders_nclose else None)
             ))
 
@@ -701,7 +728,7 @@ class StrategyClass(ABC):
 
                 # Maker
                 limit = (row['limit'] and higher >= row['orderPrice']
-                and lower <= row['orderPrice'])
+                    and lower <= row['orderPrice'])
 
                 # Taker
                 pos_cn = (not row['limit'] and higher >= row['orderPrice'] 
@@ -1188,7 +1215,7 @@ class StrategyClass(ABC):
         return data_leak if not data_leak.empty else None
 
     def __price_check(self, price:float, union_id:str|None, 
-                      type_side:bool, price_cn:float | None = None
+                      type_side:bool, price_cn:float|None = None
                       ) -> tuple[bool|None, bool]:
         """
         Price check
@@ -1217,7 +1244,7 @@ class StrategyClass(ABC):
         union_id = union_id.split('/')[-1]
         func = np.max if type_side else np.min
 
-        def get_union_price(data, col_name:str) -> tuple[bool, float|bool]:
+        def get_union_price(data, col_name:str) -> tuple[None, float|bool]:
             """
             Get union price
 
@@ -1236,7 +1263,7 @@ class StrategyClass(ABC):
 
             nonlocal func
             if len(data) == 0:
-                return False, False
+                return None, False
 
             if type(data) is list:
                 leak = {k: [d[k] for d in data if d.get('unionId') == union_id 
@@ -1246,14 +1273,14 @@ class StrategyClass(ABC):
                 if any(map(bool, leak.values())):
                     leak_type_side = leak['typeSide'][0]
                 else:
-                    return False, False
+                    return None, False
             else:
                 leak = self.__get_union(data=data, union_id=union_id)
 
                 if not leak is None:
                     leak_type_side = leak['typeSide'].iloc[0]
                 else:
-                    return False, False
+                    return None, False
 
             comparision = leak_type_side == type_side
 
@@ -1263,19 +1290,21 @@ class StrategyClass(ABC):
         comp_ord, union_ord = get_union_price(self.__orders, 'orderPrice')
         comp_pos, union_pos = get_union_price(self.__positions, 'positionOpen')
 
-        comp_ord_bff = union_ord_bff = False
+        union_ord_bff = False
+        comp_ord_bff = None
+
         if '__orders' in self.__buffer:
             comp_ord_bff, union_ord_bff = get_union_price(
                 self.__buffer['__orders'], 'orderPrice')
 
-        comp = next(filter(lambda x: x is not False, (comp_pos, comp_ord_bff, comp_ord)), None)
+        comp = next(filter(lambda x: x is not None, (comp_pos, comp_ord_bff, comp_ord)), None)
 
         if price_cn is None:
-            union_pos = union_pos or union_ord or union_ord_bff or price
-            union_ord = union_ord or union_pos or union_ord_bff
-            union_ord_bff = union_ord_bff or union_ord or union_pos
+            union_pos_f:float = union_pos or union_ord or union_ord_bff or price
+            union_ord_f:float = union_ord or union_ord_bff or union_pos_f
+            union_ord_bff_f:float = union_ord_bff or union_ord_f or union_pos_f
 
-            price_cn = func([union_pos, union_ord, union_ord_bff])
+            price_cn = func([union_pos_f, union_ord_f, union_ord_bff_f])
         return comp, price >= price_cn if func == np.max else price <= price_cn
 
     def __put_ord(self, order_type:str, price: float, amount:float | None = None, 
@@ -1308,7 +1337,7 @@ class StrategyClass(ABC):
         """
 
         logger.debug('Creating an order')
-        amount = amount or None
+        amount = amount or np.nan
 
         close_id = str(int(close_id)) if close_id else None
         union_id = f'{"w/" if wait else ""}{int(union_id)}' if union_id else None
@@ -1575,7 +1604,8 @@ class StrategyClass(ABC):
 
         data:list = []
         dtype = [
-            (key, type(v)) for key, v in {**{'rIndex':0}, **__pos[0]}.items()]
+            (key, float if isinstance(v, int) else 'U50' if isinstance(v, str) or v is None else type(v)) 
+            for key, v in {**{'rIndex':0}, **__pos[0]}.items()]
 
         for i,v in enumerate(__pos):
             if uid != None and uid != v['unionId']:
@@ -1620,8 +1650,8 @@ class StrategyClass(ABC):
             - typeSide: Position type.
             - typeSideOrd: Order type True for positive type.
             - id: Unique order ID.
-            - unionId: Linked id to position.
-            - closeId: Close link.
+            - unionId: Linked id to position. If there is no id, 'none' is returned.
+            - closeId: Close link. If there is no id, 'none' is returned.
             - limit: Indicates execution type to be performed.
 
         Returns:
@@ -1656,7 +1686,8 @@ class StrategyClass(ABC):
 
         data:list = []
         dtype = [
-            (key, type(v)) for key, v in {**{'rIndex':0}, **__ord[0]}.items()]
+            (key, float if isinstance(v, int) else 'U50' if isinstance(v, str) or v is None else type(v)) 
+            for key, v in {**{'rIndex':0}, **__ord[0]}.items()]
 
         for i,v in enumerate(__ord):
             if or_type != None and v['order'] != or_type:
