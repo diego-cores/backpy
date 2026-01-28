@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "backpyf"
-version = "1.0.0.post1"
+version = "1.0.1"
 description = "BackPy is a library made in python for back testing in financial markets."
 authors = [{name = "Diego Cores", email = "89626622+diego-cores@users.noreply.github.com"}]
 readme = {file = "README.md", "content-type" = "text/markdown"}
@@ -26,8 +26,8 @@ dependencies = [
 [project.optional-dependencies]
 optional = [
     "yfinance==0.2.50",
-    "binance-connector==3.10.0",
-    "binance-futures-connector==4.1.0",
+    "binance-sdk-spot==6.3.0",
+    "binance-sdk-derivatives-trading-usds-futures==6.2.0",
 ]
 dev = [
     "matplotlib-stubs",

@@ -1,7 +1,7 @@
 ![BackPy logo](https://raw.githubusercontent.com/diego-cores/backpy/main/images/logo.png)
-![Version](https://img.shields.io/badge/version-1.0.0.post1-blue) ![Status](https://img.shields.io/badge/status-stable-brightgreen) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/backpyf?period=total&units=NONE&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pypi.org/project/backpyf/)
+![Version](https://img.shields.io/badge/version-1.0.1-blue) ![Status](https://img.shields.io/badge/status-stable-brightgreen) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/backpyf?period=total&units=NONE&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pypi.org/project/backpyf/)
 
-##### Light, realistic, fast and adaptable.
+## Light, realistic, fast and adaptable
 
 **BackPy** is a Python library for backtesting strategies in financial markets.
 You can provide your own historical data or use the built-in integration with the `yfinance` or `binance-connector` modules.
@@ -13,7 +13,7 @@ Official repository: [BackPy-binance-connector](https://github.com/diego-cores/b
 
 ## ❓ Why BackPy?
 
-### BackPy integrates in one place:
+### BackPy integrates in one place
 
 - **Backtesting**
 - **Data loading** from multiple sources (yfinance, Binance, your own files)
@@ -30,9 +30,9 @@ Strategy with simple logic but a moderate trading volume (~60,000 trades).
 🔴 Complex strategy
 Strategy with more complex logic and advanced indicators, more calculations per candle, and greater internal load (~130,000 trades).
 
-| Method                   | Simple strategy  🟢               | Complex strategy  🔴                |
-| ------------------------ | ---------------------------------- | ------------------------------------ |
-| Manual                   | ~76.4 hours          ⏳      | ~186.1 hours           🎈     |
+| Method | Simple strategy  🟢 | Complex strategy  🔴 |
+| ------ | ------ | ------ |
+| Manual | ~76.4 hours          ⏳ | ~186.1 hours           🎈 |
 | **BackPy v0.9.72** | **~18.6 seconds**     💸 | **~25.4 seconds**       🚀 |
 
 ### 📌 Important note and **conclusion**
@@ -303,4 +303,5 @@ There are more than 15 predefined styles, and you can also create your own using
 ---
 
 ## ✨ Support
+
 If you found BackPy useful, please consider leaving a ⭐ — it would be much appreciated!

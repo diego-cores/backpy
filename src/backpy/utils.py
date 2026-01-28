@@ -625,7 +625,7 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     patches = [Rectangle((xi, yi), width, hi) for xi, yi, hi in zip(x, y, height)]
     ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0, zorder=1)) # type: ignore[arg-type]
 
-    ax.set_ylim(_cm.c_tf(data['low'].min())*0.98+1, _cm.c_tf(data['high'].max())*1.02+1)
+    ax.set_ylim(data['low'].min()*0.98, data['high'].max()*1.02)
     ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
                 data.index.values[-1]+(width*len(data.index)/10))
 
@@ -683,7 +683,7 @@ def plot_line(ax:Axes, data:pd.Series,
     ax.plot(groups['u']['xy'][0], groups['u']['xy'][1], color=groups['u']['color'], zorder=u_z, alpha=alpha)
     ax.plot(groups['d']['xy'][0], groups['d']['xy'][1], color=groups['d']['color'], zorder=p_z, alpha=alpha)
 
-    ax.set_ylim(_cm.c_tf(data.min())*0.98+1, _cm.c_tf(data.max())*1.02+1)
+    ax.set_ylim(data.min()*0.98, data.max()*1.02)
     ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
                 data.index.values[-1]+(width*len(data.index)/10))
 
@@ -753,7 +753,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
     if operation_route:
         routes = [
             Rectangle(
-                (_cm.c_tf(xi), _cm.c_tf(yi)), (_cm.c_tf(pdi) - _cm.c_tf(xi)), hi)
+                (xi, yi), (pdi - xi), hi)
             for xi, yi, hi, pdi in zip(
                 trades['date'],
                 trades['positionOpen'],

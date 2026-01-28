@@ -3,5 +3,5 @@ numpy>=2.3.2
 matplotlib>=3.7.5
 pillow>=11.3.0
 yfinance==0.2.50
-binance-connector==3.10.0
-binance-futures-connector==4.1.0
+binance-sdk-spot==6.3.0
+binance-sdk-derivatives-trading-usds-futures==6.2.0

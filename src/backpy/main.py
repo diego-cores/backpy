@@ -22,8 +22,6 @@ Functions:
     plot_strategy: Plots statistics for your strategy.
     plot_strategy_decorator: Decorator function for the 'plot_strategy_add' function.
     plot_strategy_add: Add functions and then see them graphed with 'plot_strategy'.
-    stats_icon: Shows statistics related to the financial icon.
-    stats_trades: Statistics of the trades.
 
 Hidden Functions:
     __load_binance_data: Load data from Binance using a client.
@@ -57,7 +55,8 @@ from . import stats
 
 logger:logging.Logger = logging.getLogger(__name__)
 
-def default_logging(level:int = logging.WARNING) -> None:
+def default_logging(level:int = logging.WARNING, 
+                    name:str|None = None) -> None:
     """
     Default logging
 
@@ -65,17 +64,19 @@ def default_logging(level:int = logging.WARNING) -> None:
 
     Args:
         level (int, optional): Logging level.
+        name (str, optional): Logger name.
     """
 
     handler = logging.StreamHandler()
     formatter = logging.Formatter("%(levelname)s: %(message)s")
     handler.setFormatter(formatter)
 
-    root = logging.getLogger()
-    root.addHandler(handler)
-    root.setLevel(level)
+    logger_ = logging.getLogger(name or None)
+    logger_.setLevel(level)
+    logger_.addHandler(handler)
+    logger_.propagate = False
 
-def __load_binance_data(client:Callable, symbol:str = 'BTCUSDT', 
+def __load_binance_data(klines:Callable, symbol:str = 'BTCUSDT', 
                         interval:str = '1d', start_time:str | None = None, 
                         end_time:str | None = None, statistics:bool = True, 
                         progress:bool = True, data_extract:bool = False
@@ -86,7 +87,7 @@ def __load_binance_data(client:Callable, symbol:str = 'BTCUSDT',
     Loads data using the Binance client.
 
     Args:
-        client (Callable): Bianance client.
+        klines (Callable): Klines function of the client.
         symbol (str, optional): The trading pair.
         interval (str, optional): Data interval, e.g 1s, 1m, 5m, 1h, 1d, etc.
         start_time (str | None): Start date for load data in YYYY-MM-DD format.
@@ -112,11 +113,12 @@ def __load_binance_data(client:Callable, symbol:str = 'BTCUSDT',
     ini_time = 0
 
     def __loop_def(st_t):
-        dt = client.klines(symbol=symbol, 
-                        interval=interval, 
-                        startTime=st_t, 
-                        endTime=end, 
-                        limit=1000)
+        dt = klines(
+            symbol=symbol, 
+            interval=interval, 
+            start_time=st_t, 
+            end_time=end, 
+            limit=1000).data()
 
         if progress:
             nonlocal ini_time
@@ -132,7 +134,6 @@ def __load_binance_data(client:Callable, symbol:str = 'BTCUSDT',
         > (now:=int(datetime.now().timestamp() * 1000))):
         end = now
 
-    client = client()
     data = utils._loop_data(
         function=__loop_def,
         bpoint=lambda x, y=None: y == int(x[0].iloc[-1]) if y else int(x[0].iloc[-1]),
@@ -162,7 +163,7 @@ def __load_binance_data(client:Callable, symbol:str = 'BTCUSDT',
     data.index = date2num(pd.to_datetime(data.index, unit='ms', utc=True)) # type: ignore[arg-type]
     data_width = utils.calc_width(data.index)
 
-    if statistics: stats_icon(prnt=True, 
+    if statistics: stats.stats_icon(prnt=True, 
                             data=data, 
                             data_icon=symbol.strip(),
                             data_interval=interval.strip())
@@ -206,9 +207,11 @@ def load_binance_data_futures(symbol:str = 'BTCUSDT', interval:str = '1d',
             a tuple containing the data will be returned (data, data_width).
     """
     try:
-        from binance.um_futures import UMFutures as Client
+        from binance_sdk_derivatives_trading_usds_futures.derivatives_trading_usds_futures import (
+            DerivativesTradingUsdsFutures as Client
+        )
 
-        __load_binance_data(client=Client, 
+        __load_binance_data(klines=Client().rest_api.kline_candlestick_data, 
                             symbol=symbol, 
                             interval=interval, 
                             start_time=start_time, 
@@ -251,9 +254,9 @@ def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d',
             a tuple containing the data will be returned (data, data_width).
     """
     try:
-        from binance.spot import Spot as Client
+        from binance_sdk_spot.spot import Spot as Client
 
-        __load_binance_data(client=Client, 
+        __load_binance_data(klines=Client().rest_api.klines, 
                             symbol=symbol, 
                             interval=interval, 
                             start_time=start_time, 
@@ -264,8 +267,8 @@ def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d',
 
     except ModuleNotFoundError: 
         raise exception.BinanceError('Binance connector is not installed.')
-    except: 
-        raise exception.BinanceError('Binance parameters error.')
+    #except: 
+    #    raise exception.BinanceError('Binance parameters error.')
 
 def load_yfinance_data(ticker:str, start:str | None = None, 
                        end:str | None = None, interval:str = '1d', 
@@ -325,7 +328,7 @@ def load_yfinance_data(ticker:str, start:str | None = None,
 
         load_prgs.next()
 
-        if statistics: stats_icon(prnt=True, 
+        if statistics: stats.stats_icon(prnt=True, 
                                   data=data, 
                                   data_icon=ticker.strip(),
                                   data_interval=interval.strip())
@@ -411,7 +414,7 @@ def load_data(data:pd.DataFrame, icon:str | None = None,
     _cm.__data_year_days = days_op
     _cm.__data_width_day = utils.calc_day(interval, _cm.__data_width)
 
-    if statistics: stats_icon(prnt=True)
+    if statistics: stats.stats_icon(prnt=True)
 
 def load_data_bpd(path:str = 'data.bpd', start:int | None = None, 
                   end:int | None = None, days_op:int | None = None, 
@@ -442,13 +445,6 @@ def load_data_bpd(path:str = 'data.bpd', start:int | None = None,
         tuple[DataFrame,float]|None: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
-
-    if (start and end 
-        and ((start > 0 and start < end) 
-        or (start < 0 and start > end))):
-
-        raise exception.DataError(
-            "The resulting 'data' is empty. Bad: 'start' and 'end'.")
 
     t = time()
     load_prgs = utils.ProgressBar()
@@ -481,7 +477,7 @@ def load_data_bpd(path:str = 'data.bpd', start:int | None = None,
     data = data.iloc[start:end]
 
     if statistics: 
-        stats_icon(prnt=True, 
+        stats.stats_icon(prnt=True, 
                     data=data, 
                     data_icon=icon,
                     data_interval=interval)
@@ -698,11 +694,11 @@ def run(cls:type|list[type]|tuple[type], name:str|None = None, prnt:bool = True,
         step_t = time()
 
         for i in instances:
-            i._StrategyClass__before(index=f, balance=balance_rec)
+            i._StrategyClass__before(index=f, balance=balance_rec) # pyrefly: ignore
             if len(balance_rec) == f:
-                balance_rec[f-1] = i._StrategyClass__balance
+                balance_rec[f-1] = i._StrategyClass__balance # pyrefly: ignore
             else:
-                balance_rec.append(i._StrategyClass__balance)
+                balance_rec.append(i._StrategyClass__balance) # pyrefly: ignore
     if _cm.run_timer and not progress:
         print(f'RunTimer: {utils.num_align(time()-t)}') 
 
@@ -710,13 +706,13 @@ def run(cls:type|list[type]|tuple[type], name:str|None = None, prnt:bool = True,
     positions_list:np.ndarray|None = None
     positions_open_list = []
     for i in instances:
-        positions_open_list.extend(i._StrategyClass__positions)
+        positions_open_list.extend(i._StrategyClass__positions) # pyrefly: ignore
 
         if not positions_list is None:
-            positions_list = np.concatenate((positions_list, i._StrategyClass__pos_record[
+            positions_list = np.concatenate((positions_list, i._StrategyClass__pos_record[ # pyrefly: ignore
                 :i._StrategyClass__pos_record._pos]))
         else:
-            positions_list = np.array(i._StrategyClass__pos_record[
+            positions_list = np.array(i._StrategyClass__pos_record[ # pyrefly: ignore
                 :i._StrategyClass__pos_record._pos])
 
     act_trades = pd.DataFrame(positions_open_list).dropna(axis=1, how='all')
@@ -741,7 +737,7 @@ def run(cls:type|list[type]|tuple[type], name:str|None = None, prnt:bool = True,
         _cm.__backtests.append(backtest)
 
     try: 
-        return stats_trades(prnt=prnt)
+        return stats.stats_trades(prnt=prnt)
     except: pass
 
 def run_animation(cls:type, candles:int = 100, interval:int = 100, 
@@ -832,9 +828,9 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
                        color_down=market_colors.get('d', 'r'))
     utils.plot_volume(ax2, _cm.__data.iloc[[f]]['volume'], _cm.__data_width, 
                       color=plt_colors.get('vol', 'tab:orange'))
-    instance._StrategyClass__before(index=f)
+    instance._StrategyClass__before(index=f) # pyrefly: ignore
     trades_last = pd.DataFrame(
-        instance._StrategyClass__positions).dropna(axis=1, how='all')
+        instance._StrategyClass__positions).dropna(axis=1, how='all') # pyrefly: ignore
 
     def update(_):
         """
@@ -859,12 +855,12 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
                         color_down=market_colors.get('d', 'r'))
         utils.plot_volume(ax2, _cm.__data.iloc[[f]]['volume'], _cm.__data_width, 
                       color=plt_colors.get('vol', 'tab:orange'))
-        instance._StrategyClass__before(index=f)
+        instance._StrategyClass__before(index=f) # pyrefly: ignore
 
         act_trades = pd.DataFrame(
-            instance._StrategyClass__positions).dropna(axis=1, how='all')
+            instance._StrategyClass__positions).dropna(axis=1, how='all') # pyrefly: ignore
         trades = pd.DataFrame(
-            instance._StrategyClass__pos_record[
+            instance._StrategyClass__pos_record[ # pyrefly: ignore
                 :instance._StrategyClass__pos_record._pos]
         ).dropna(axis=1, how='all')
         
@@ -1273,7 +1269,7 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
                 if log: ax.set_yscale('symlog')
             case 'p':
                 values = trades['profit'].cumsum()
-                color = (market_colors.get('u', 'g') if trades['profit'].to_numpy().sum() > 0 
+                color = (market_colors.get('u', 'g') if np.nansum(trades['profit'].to_numpy()) > 0 
                          else market_colors.get('d', 'r'))
 
                 ax.plot(pos_date, values, c=color, 
@@ -1385,402 +1381,3 @@ def plot_strategy_add(func:Callable, name:str) -> Callable:
         raise exception.StatsError("Error assigning value to '__custom_plot'.")
     _cm.__custom_plot[name.strip()] = func
     return func
-
-def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None, 
-               data_icon:str | None = None, 
-               data_interval:str | None = None) -> str | None:
-    """
-    Icon Statistics.
-
-    Displays statistics of the uploaded data.
-
-    Args:
-        prnt (bool, optional): If True, prints the statistics. If False, returns
-            the statistics as a string. Default is True.
-        data (DataFrame | None, optional): The data with which the statistics 
-            are calculated, if left to None the loaded data will be used.
-            The DataFrame must contain the following columns: 
-            ('close', 'open', 'high', 'low', 'volume').
-        data_icon (str | None, optional): Icon shown in the statistics, 
-            if you leave it at None the loaded data will be the one used.
-        data_interval (str | None, optional): Interval shown in the statistics, 
-            if you leave it at None the loaded data will be the one used.
-
-    Returns:
-        str|None: Statistics.
-    """
-
-    data_interval = _cm.__data_interval if data_interval is None else data_interval
-    data_icon = _cm.__data_icon if data_icon is None else data_icon
-    data = _cm.__data if data is None else data
-
-    # Exceptions.
-    if data is None: 
-        raise exception.StatsError('Data not loaded.')
-    elif not data_icon is None and type(data_icon) != str: 
-        raise exception.StatsError('Icon bad type.')
-    elif not data_interval is None and type(data_interval) != str: 
-        raise exception.StatsError('Interval bad type.')
-
-    if isinstance(data.index[0], pd.Timestamp):
-        s_date = ".".join(str(val) for val in 
-                        [data.index[0].day, data.index[0].month, 
-                        data.index[0].year])
-
-        idx_last = data.index[-1]
-        e_date = ".".join(str(val) for val in 
-                        [idx_last.day, idx_last.month, 
-                        idx_last.year]
-                        ) if isinstance(idx_last, pd.Timestamp) else ""
-
-        r_date = f"{s_date}~{e_date}"
-    else: r_date = ""
-
-    text = utils.statistics_format({
-        'Last price':[utils.round_r(_cm.c_tf(data['close'].iloc[-1]),2),
-                      _cm.__COLORS['BOLD']],
-        'Maximum price':[utils.round_r(_cm.c_tf(data['high'].max()),2),
-                         _cm.__COLORS['GREEN']],
-        'Minimum price':[utils.round_r(_cm.c_tf(data['low'].min()),2),
-                         _cm.__COLORS['RED']],
-        'Maximum volume':[utils.round_r(_cm.c_tf(data['volume'].max()), 2),
-                          _cm.__COLORS['CYAN']],
-        'Sample size':[len(data.index)],
-        'Standard deviation':[utils.round_r(
-            np.std(data['close'].dropna(), ddof=1),2)],
-        'Average price':[utils.round_r(data.loc[:, 'close'].mean(),2),
-                         _cm.__COLORS['YELLOW']],
-        'Average volume':[utils.round_r(data.loc[:, 'volume'].mean(),2),
-                          _cm.__COLORS['YELLOW']],
-        f"'{data_icon}'":[f'{r_date} ~ {data_interval}',
-                          _cm.__COLORS['CYAN']],
-    }, f"---Statistics of '{data_icon}'---")
-
-    text = text if _cm.dots else text.replace('.', ',')
-    if prnt:print(text) 
-    else: return text
-
-def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None, 
-                 prnt:bool = True) -> str | None:
-    """
-    Trades Statistics.
-
-    Statistics of the results.
-
-    Args:
-        data (bool, optional): If True, `stats_icon` is also returned.
-        name (list[str|int|None]|str|int|None, optional): 
-            Backtest names to extract data from, None = -1, 
-            you can add multiple by passing an list.
-        prnt (bool, optional): If True, prints the statistics. If False, returns 
-            the statistics as a string. Default is True.
-
-    Info:
-        - Trades: The number of operations performed.
-        - Op years: Years operated from the first to the last.
-        - Return: The total equity earned.
-        - Profit: The total amount earned.
-        - Gross earnings: Only the profits.
-        - Gross losses: Only the losses.
-        - Max return: The historical maximum of returns.
-        - Return from max: Returns from the all-time high.
-        - Days from max: Days from the all-time return high.
-        - Return ann: The annualized return.
-        - Profit ann: The annualized profit.
-        - Return ann vol: The annualized daily standard deviation of return.
-        - Profit ann vol: The annualized daily standard deviation of profit.
-        - Average ratio: The average ratio.
-        - Average return: The average percentage earned.
-        - Average profit: The average profit earned.
-        - Profit fact: The profit factor is calculated by dividing 
-                total profits by total losses.
-        - Return diary std: The standard deviation of daily return, 
-                which indicates the variability in performance.
-        - Profit diary std: The standard deviation of daily profit, 
-                which indicates the variability in performance.
-        - Math hope: The mathematical expectation (or expected value) of returns, 
-                calculated as (Win rate * Average win) - (Loss rate * Average loss).
-        - Math hope r: The mathematical expectation, 
-                calculated as (Win rate * Average ratio) - (Loss rate * 1).
-        - Historical var: The Value at Risk (VaR) estimated using historical data, 
-                calculated as the profit at the (100 - confidence level) percentile.
-        - Parametric var: The Value at Risk (VaR) calculated assuming a normal distribution, 
-                defined as the mean profit minus z-alpha times the standard deviation.
-        - Sharpe ratio: The risk-adjusted return, calculated as the 
-                annualized return divided by the standard deviation of return.
-        - Sharpe ratio$: The risk-adjusted return, calculated as the annualized 
-                profit divided by the standard deviation of profits.
-        - Sortino ratio: The risk-adjusted return, calculated as the annualized 
-                return divided by the standard deviation of negative return.
-        - Sortino ratio$: The risk-adjusted return, calculated as the annualized 
-                profit divided by the standard deviation of negative profits.
-        - Duration ratio: It measures the average duration of trades relative 
-                to the total time traded, indicating whether the trades are 
-                short- or long-term. A low value suggests quick trades, 
-                while a high value indicates longer positions.
-        - Payoff ratio: Ratio between the average profit of winning trades and 
-                the average loss of losing trades (in absolute value).
-        - Expectation: Expected value per trade, calculated as 
-                (Win rate * Average win) - (Loss rate * Average loss).
-        - Skewness: It measures the asymmetry of the return distribution. 
-                A positive skewness indicates tails to the right (potentially large gains), 
-                while a negative skewness indicates tails to the left (potentially large losses).
-        - Kurtosis: It measures the "tailedness" or extremity of the return distribution. 
-                A high kurtosis indicates heavy tails (more frequent extreme returns, both gains and losses), 
-                while a low kurtosis suggests light tails (returns are more consistently close to the mean).
-        - Average winning op: Average winning trade is calculated as 
-                the average of only the winning trades.
-        - Average losing op: Average losing trade is calculated as 
-                the average of only the losing trades.
-        - Average duration winn: Calculate the average duration 
-                of each winner trade. 1 = 1 day.
-        - Average duration loss: Calculate the average duration 
-                of each losing trade. 1 = 1 day.
-        - Daily frequency op: It is calculated by dividing the number of t
-                ransactions by the number of trading days, where high 
-                values mean high frequency and low values mean the opposite.
-        - Max consecutive winn: Maximum consecutive winnings count. 
-        - Max consecutive loss: Maximum consecutive loss count. 
-        - Max losing streak: Maximum number of lost trades in drawdown.
-        - Max drawdown:  The biggest drawdown the equity has ever had.
-        - Average drawdown: The average of all drawdowns of equity curve, 
-                indicating the typical loss experienced before recovery.
-        - Max drawdown$: The biggest drawdown the profit has ever had.
-        - Average drawdown$: The average of all drawdowns, 
-                indicating the typical loss experienced before recovery.
-        - Long exposure: What percentage of traders are long.
-        - Winnings: Percentage of operations won.
-
-    Returns:
-        str|None: Statistics.
-    """
-
-    trades = _cm.__get_trades(name)
-
-    name = list(name)[0] if isinstance(name, (tuple, set, list)) else name
-    trades_data = _cm.__get_strategy(name=name)
-
-    # Exceptions.
-    if trades.empty: 
-        raise exception.StatsError('Trades not loaded.')
-    elif not 'profitPer' in trades.columns:  
-        raise exception.StatsError('There is no data to see.')
-    elif np.isnan(trades['profitPer'].mean()):
-        raise exception.StatsError('There is no data to see.') 
-
-    # Number of years operated.
-    op_years = abs(
-        (_cm.c_tf(trades['date'].iloc[-1]) - trades['date'].iloc[0])/
-        (trades_data['d_width_day']*trades_data['d_year_days']))
-
-    # Annualized trades calc.
-    trades_calc = trades.copy()
-    trades_calc['year'] = ((_cm.c_tf(trades_calc['date']) - trades_calc['date'].iloc[0]) / 
-                  (_cm.c_tf(trades_calc['date'].iloc[-1]) - trades_calc['date'].iloc[0]) * 
-                  op_years).astype(int)
-
-    trades_calc['diary'] = ((_cm.c_tf(trades_calc['date']) - trades_calc['date'].iloc[0]) / 
-                (_cm.c_tf(trades_calc['date'].iloc[-1]) - trades_calc['date'].iloc[0]) * 
-                op_years*trades_data['d_year_days']).astype(int)
-
-    trades_calc['duration'] = (trades_calc['positionDate']
-                               -trades_calc['date'])/trades_data['d_width_day']
-
-    ann_profit = trades_calc.groupby('year')['profit'].sum()
-    diary_profit:pd.Series = pd.Series(trades_calc.groupby('diary')['profit'].sum())
-
-    # Consecutive trades calc.
-    trades_count_cs = trades['profitPer'].apply(
-        lambda x: 1 if x > 0 else (-1 if x < 0 else 0)
-        )
-    trades_count_cs = pd.concat(
-        [pd.Series([0]), trades_count_cs], ignore_index=True)
-
-    group = (
-        (trades_count_cs != trades_count_cs.shift()) 
-        & (trades_count_cs != 0) 
-        & (trades_count_cs.shift() != 0)
-    ).cumsum()
-    
-    trades_csct = trades_count_cs.groupby(group).cumsum()
-
-    # Trade streak calc.
-    trades_streak = (trades_count_cs.cumsum() 
-                     - np.maximum.accumulate(trades_count_cs.cumsum()))
-
-    with np.errstate(over='ignore'):
-        trades_calc['multiplier'] = 1 + trades_calc['profitPer'] / 100
-
-        nan_inf = lambda x: x.where(~np.isinf(x), np.nan)
-        multiplier_cumprod = nan_inf(trades_calc.loc[:, 'multiplier'].cumprod().dropna())
-
-        ann_return = nan_inf(trades_calc.groupby('year')['multiplier'].prod())
-        diary_return = nan_inf(trades_calc.groupby('diary')['multiplier'].prod())
-
-        text = utils.statistics_format({
-        'Trades':[len(trades.index),
-                  _cm.__COLORS['BOLD']+_cm.__COLORS['CYAN']],
-
-        'Op years':[utils.round_r(op_years, 2), _cm.__COLORS['CYAN']],
-
-        'Return':[str(_return:=utils.round_r((_cm.c_tf(trades_calc.loc[:, 'multiplier'].prod())-1)*100,2))+'%',
-                  _cm.__COLORS['GREEN'] if float(_return) > 0 else _cm.__COLORS['RED'],],
-
-        'Profit':[str(_profit:=utils.round_r(trades['profit'].to_numpy().sum(),2)),
-                _cm.__COLORS['GREEN'] if float(_profit) > 0 else _cm.__COLORS['RED'],],
-
-        'Gross earnings':[utils.round_r((trades['profit'][_cm.c_tf(trades['profit'])>0].sum()
-                           if not pd.isna(trades['profit']).all() else 0), 4),
-                        _cm.__COLORS['GREEN']],
-
-        'Gross losses':[utils.round_r(abs(trades['profit'][_cm.c_tf(trades['profit'])<=0].sum())
-                           if not pd.isna(trades['profit']).all() else 0, 4),
-                        _cm.__COLORS['RED']],
-
-        'Max return':[str(utils.round_r((multiplier_cumprod.max()-1)*100,2))+'%'],
-
-        'Return from max':[str(utils.round_r(
-            -((multiplier_cumprod.max()-1)
-            - (_cm.c_tf(trades_calc.loc[:, 'multiplier'].prod())-1))*100,2))+'%'],
-
-        'Days from max':[str(utils.round_r(
-            (_cm.c_tf(trades_calc['date'].dropna().iloc[-1])
-                - trades_calc['date'].dropna().loc[
-                np.argmax(multiplier_cumprod)])
-            / trades_data['d_width_day'], 2)),
-            _cm.__COLORS['CYAN']],
-
-        'Return ann':[str(_return_ann:=utils.round_r((ann_return.prod()**(1/op_years)-1)*100,2))+'%',
-                  _cm.__COLORS['GREEN'] if float(_return_ann) > 0 else _cm.__COLORS['RED'],],
-
-        'Profit ann':[str(_profit_ann:=utils.round_r(float(ann_profit.mean()),2)),
-                  _cm.__COLORS['GREEN'] if float(_profit_ann) > 0 else _cm.__COLORS['RED'],],
-
-        'Return ann vol':[utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1)
-                                        *np.sqrt(trades_data['d_year_days']), 2),
-                          _cm.__COLORS['YELLOW']],
-
-        'Profit ann vol':[utils.round_r(np.std(diary_profit.dropna(),ddof=1)
-                                    *np.sqrt(trades_data['d_year_days']), 2),
-                        _cm.__COLORS['YELLOW']],
-
-        'Average ratio':[utils.round_r(stats.average_ratio(trades), 2),
-                        _cm.__COLORS['YELLOW'],],
-
-        'Average return':[str(utils.round_r((
-                trades_calc.loc[:, 'multiplier'].dropna().to_numpy().mean()-1)*100,2))+'%',
-            _cm.__COLORS['YELLOW'],],
-
-        'Average profit':[str(utils.round_r(trades.loc[:, 'profit'].mean(),2))+'%',
-                    _cm.__COLORS['YELLOW'],],
-
-        'Profit fact':[_profit_fact:=utils.round_r(stats.profit_fact(trades.loc[:, 'profit']), 3),
-                _cm.__COLORS['GREEN'] if float(_profit_fact) > 1 else _cm.__COLORS['RED'],],
-
-        'Return diary std':[(_return_std:=utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1), 2)),
-                    _cm.__COLORS['YELLOW'] if float(_return_std) > 1 else _cm.__COLORS['GREEN'],],
-
-        'Profit diary std':[(_profit_std:=utils.round_r(np.std(diary_profit.dropna(),ddof=1), 2)),
-                      _cm.__COLORS['YELLOW'] if float(_profit_std) > 1 else _cm.__COLORS['GREEN'],],
-
-        'Math hope':[_math_hope:=utils.round_r(stats.math_hope(trades.loc[:, 'profit']), 2),
-            _cm.__COLORS['GREEN'] if float(_math_hope) > 0 else _cm.__COLORS['RED'],],
-
-        'Math hope r':[_math_hope_r:=utils.round_r(
-                stats.math_hope_relative(trades, trades.loc[:, 'profitPer']), 2),
-            _cm.__COLORS['GREEN'] if float(_math_hope_r) > 0 else _cm.__COLORS['RED'],],
-
-        'Historical var':[0 if trades['profit'].dropna().empty else utils.round_r(
-                            stats.var_historical(trades.loc[:, 'profit'].dropna()), 2)],
-
-        'Parametric var':[0 if trades['profit'].dropna().empty else utils.round_r(
-                            stats.var_parametric(trades.loc[:, 'profit'].dropna()), 2)],
-
-        'Sharpe ratio':[utils.round_r(stats.sharpe_ratio(
-            (ann_return.prod()**(1/op_years)-1)*100,
-            trades_data['d_year_days'],
-            (diary_return.dropna()-1)*100), 2)],
-
-        'Sharpe ratio$':[utils.round_r(stats.sharpe_ratio(
-            np.average(ann_profit),
-            trades_data['d_year_days'],
-            diary_profit), 2)],
-
-        'Sortino ratio':[utils.round_r(stats.sortino_ratio(
-            (ann_return.prod()**(1/op_years)-1)*100,
-            trades_data['d_year_days'],
-            (diary_return.dropna()-1)*100), 2)],
-
-        'Sortino ratio$':[utils.round_r(stats.sortino_ratio(
-            np.average(ann_profit),
-            trades_data['d_year_days'],
-            diary_profit), 2)],
-
-        'Duration ratio':[utils.round_r(
-            _cm.c_tf(trades_calc['duration'].to_numpy().sum())/len(trades.index), 2),
-            _cm.__COLORS['CYAN']],
-
-        'Payoff ratio':[utils.round_r(stats.payoff_ratio(trades.loc[:, 'profitPer']), 3)],
-
-        'Expectation':[utils.round_r(stats.expectation(trades.loc[:, 'profitPer']))],
-
-        'Skewness':[utils.round_r((diary_return.dropna()-1).skew(), 2)],
-
-        'Kurtosis':[utils.round_r((diary_return.dropna()-1).kurt(), 2)],
-
-        'Average winning op':[str(utils.round_r(trades.loc[:, 'profitPer'][
-                _cm.c_tf(trades['profitPer']) > 0].dropna().mean(), 2))+'%',
-            _cm.__COLORS['GREEN']],
-
-        'Average losing op':[str(utils.round_r(trades.loc[:, 'profitPer'][
-                _cm.c_tf(trades['profitPer']) < 0].dropna().mean(), 2))+'%',
-            _cm.__COLORS['RED']],
-
-        'Average duration winn':[str(utils.round_r(trades_calc.loc[:, 'duration'][
-                _cm.c_tf(trades_calc['profitPer']) > 0].dropna().mean()))+'d',
-                _cm.__COLORS['CYAN']],
-
-        'Average duration loss':[str(utils.round_r(trades_calc.loc[:, 'duration'][
-                _cm.c_tf(trades_calc['profitPer']) < 0].dropna().mean()))+'d',
-                _cm.__COLORS['CYAN']],
-
-        'Daily frequency op':[utils.round_r(
-            len(trades.index) / (op_years*trades_data['d_year_days']), 2),
-            _cm.__COLORS['CYAN']],
-
-        'Max consecutive winn':[trades_csct.max(),
-                                _cm.__COLORS['GREEN']],
-
-        'Max consecutive loss':[abs(_cm.c_tf(trades_csct.min())),
-                                _cm.__COLORS['RED']],
-
-        'Max losing streak':[abs(trades_streak.min())],
-
-        'Max drawdown':[str(round(
-            stats.max_drawdown(multiplier_cumprod)*100,1)) + '%'],
-
-        'Average drawdown':[str(-round(np.mean(
-            stats.get_drawdowns(multiplier_cumprod))*100, 1)) + '%'],
-
-        'Max drawdown$':[str(round(
-            stats.max_drawdown(trades['profit'].dropna().cumsum()+
-                               trades_data['init_funds'])*100,1)) + '%'],
-
-        'Average drawdown$':[str(-round(np.mean(
-            stats.get_drawdowns(trades['profit'].dropna().cumsum()+
-                                trades_data['init_funds']))*100, 1)) + '%'],
-
-        'Long exposure':[str(round(
-            stats.long_exposure(trades.loc[:, 'typeSide'])*100)) + '%',
-            _cm.__COLORS['GREEN']],
-
-        'Winnings':[str(round(stats.winnings(trades.loc[:, 'profitPer'])*100)) + '%'],
-
-        }, f"---Statistics of '{trades_data['name']}'---")
-
-    text = text if _cm.dots else text.replace('.', ',')
-    if data: 
-        text += (stats_icon(False) or '')
-
-    if prnt: print(text)
-    else: return text
