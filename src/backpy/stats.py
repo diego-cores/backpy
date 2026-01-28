@@ -1287,20 +1287,22 @@ def earnings_intime(names:list[str|int|None]|str|int|None = None,
         trades['date'], op_years, trades_data['d_year_days'])
     trades['day'] = day_series
 
-    diary_profit = trades.groupby('day')['profit' if profit else 'profitPer'].sum()
-    indays_profit = diary_profit.groupby(
-        np.arange(len(diary_profit)) // in_days).sum()
+    indays_profit = trades.groupby(trades['day'] // in_days)[
+        'profit' if profit else 'profitPer'].sum()
 
     data = {}
     for i,v in enumerate(indays_profit):
-        value = {f'{i+1}-{in_days} days':[round(v, 1), 
+        value = {f'Group: {i+1}':[round(v, 1), 
             _cm.__COLORS['GREEN'] if round(v, 1) > 0 else _cm.__COLORS['RED']]}
         data.update(value)
 
-    data.update({'Winrate':[
+    data.update({
+        'Winrate':[
         str(round(winnings(indays_profit)*100)) + '%',
-        _cm.__COLORS['CYAN']]})
-    text = utils.statistics_format(data, f"---Earnings per days---")
+        _cm.__COLORS['CYAN']],
+        'Average':[round(indays_profit.mean(), 1)]
+    })
+    text = utils.statistics_format(data, f"---Earnings per {in_days} days---")
 
     text = text if _cm.dots else text.replace('.', ',')
     if prnt: print(text) 
