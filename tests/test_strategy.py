@@ -96,7 +96,7 @@ class TestStrategyClass(unittest.TestCase):
 
     def test__store_decorator(self) -> None:
         """
-        Test '__store_decorator'
+        Test '_store_decorator'
 
         Verify that it works correctly.
         """

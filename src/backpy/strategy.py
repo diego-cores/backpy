@@ -17,17 +17,18 @@ Hidden Functions:
     _data_info: Gathers information about the dataset.
 """
 
-from bs4.element import ResultSet
 import pandas as pd
 import numpy as np
 
-from abc import ABC, abstractmethod
 from typing import Callable, Any, cast
+from abc import ABC, abstractmethod
+from types import MethodType
 from functools import wraps
 from uuid import uuid4
 from time import time
 import logging
 
+from . import indicators as idc
 from . import flex_data as flx
 from . import _commons as cm_
 from . import exception
@@ -188,28 +189,10 @@ class StrategyClass(ABC):
         __price_check: Checks if 'price' is a correct value for the position.
         __uidc: Send data argument to the indicator and wraps it with '__data_store'.
         __func_idg: Generates an id for a function call.
-        __store_decorator: Give '_store' attribute to a function.
         __data_store: Save the function return and, if already saved, return it from storage.
         __uidc_cut: Slices data for the user based on the current index.
         __data_cut: Slices data for the user based on the current index.
         __data_updater: Updates all data with the provided DataFrame.
-        __idc_fibonacci: Calculates Fibonacci retracement levels.
-        __idc_ema: Calculates the Exponential Moving Average (EMA) indicator.
-        __idc_sma: Calculates the Simple Moving Average (SMA) indicator.
-        __idc_wma: Calculates the Weighted Moving Average (WMA) indicator.
-        __idc_smma: Calculates the Smoothed Moving Average (SMMA) indicator.
-        __idc_sema: Calculates the Smoothed Exponential Moving Average (SEMA) indicator.
-        __idc_bb: Calculates the Bollinger Bands indicator (BB).
-        __idc_rsi: Calculates the Relative Strength Index (RSI).
-        __idc_stochastic: Calculates the Stochastic Oscillator indicator.
-        __idc_adx: Calculates the Average Directional Index (ADX).
-        __idc_macd: Calculates the Moving Average Convergence Divergence (MACD).
-        __idc_sqzmom: Calculates the Squeeze Momentum indicator (SQZMOM).
-        __idc_rlinreg: This function calculates the rolling linear regression.
-        __idc_mom: Calculates the Momentum indicator (MOM).
-        __idc_ichimoku: Calculates the Ichimoku indicator.
-        __idc_atr: Calculates the Average True Range (ATR).
-        __idc_trange: This function calculates the true range.
         __before: This function is used to run trades and other operations.
     """
 
@@ -312,19 +295,20 @@ class StrategyClass(ABC):
         self.__to_delate = {}
 
         # Set decorators
-        for name in dir(self):
-            attr = getattr(self, name)
+        for instance in [self, idc]:
+            for name in dir(instance): 
+                attr = getattr(instance, name)
 
-            if not callable(attr):
-                continue
-            elif getattr(attr, '_store', False):
-                logger.debug("Adding __data_store decorator to '%s'", name)
-                decorator = getattr(self, '_StrategyClass__data_store')(attr)
-                setattr(self, name, decorator)
-            elif getattr(attr, '_uidc', False):
-                logger.debug("Adding __uidc decorator to '%s'", name)
-                decorator = getattr(self, '_StrategyClass__uidc')(attr)
-                setattr(self, name, decorator)
+                if not callable(attr):
+                    continue
+                elif getattr(attr, '_store', False):
+                    logger.debug("Adding __data_store decorator to '%s'", name)
+                    decorator = getattr(self, '_StrategyClass__data_store')(attr)
+                    setattr(instance, name, decorator)
+                elif getattr(attr, '_uidc', False):
+                    logger.debug("Adding __uidc decorator to '%s'", name)
+                    decorator = getattr(self, '_StrategyClass__uidc')(attr)
+                    setattr(instance, name, decorator)
 
     @abstractmethod
     def next(self) -> Any: ...
@@ -448,24 +432,6 @@ class StrategyClass(ABC):
 
         return self.__init_funds
 
-    @staticmethod
-    def __store_decorator(func:Callable) -> Callable:
-        """
-        Store decorator
-
-        Decorate a function with this to give it 
-            the attribute: '_store' and have it decorated with '__data_store'.
-
-        Args:
-            func (Callable): Function.
-
-        Returns:
-            Callable: Function.
-        """
-
-        setattr(func, '_store', True)
-        return func
-
     def __data_store(self, func:Callable) -> Callable:
         """
         Data store
@@ -491,7 +457,7 @@ class StrategyClass(ABC):
             """
 
             id, arguments = StrategyClass.__func_idg(func, *args, **kwargs)
-  
+
             if id in self.__idc_data:
                 if arguments.get('cut', False):
                     return self.__data_cut(self.__idc_data[id],
@@ -559,6 +525,10 @@ class StrategyClass(ABC):
         Generates an id for a function call 
             and returns all arguments with defaults.
 
+        Note:
+            If the first unknown argument is an instance of 
+            'StrategyClass', it is removed from the list.
+
         Args:
             func (Callable): Function.
 
@@ -574,6 +544,9 @@ class StrategyClass(ABC):
         arguments = dict(zip(name_df, df))
 
         arguments.update({k: kwargs[k] for k in name_df if k in kwargs})
+
+        if len(args) >= 1 and isinstance(args[0], StrategyClass):
+            args = args[1:]
         arguments.update(zip(name_df, args))
 
         args_wo = arguments.copy()
@@ -908,7 +881,7 @@ class StrategyClass(ABC):
             limit=True,
         )
 
-    def act_close(self, index:int) -> None:
+    def act_close(self, index:int, amount:float|None = None) -> None:
         """
         Position close
 
@@ -917,10 +890,12 @@ class StrategyClass(ABC):
 
         Args:
             index (int): Real index of the position.
+            amount (float|None, optional): Amount to reduce from the position, 
+                None = the entire position.
         """
 
         logger.debug("Executes 'act_close'")
-        self.__act_reduce(index, self.__data['close'][-1], mode='taker')
+        self.__act_reduce(index, self.__data['close'][-1], mode='taker', amount=amount)
 
     def __act_reduce(self, index:int, price:float, 
                      amount:float | None = None, mode:str = 'taker') -> None:
@@ -1724,33 +1699,7 @@ class StrategyClass(ABC):
         """
 
         # Fibonacci calc.
-        return self.__idc_fibonacci(lv0=lv0, lv1=lv1)
-
-    @__store_decorator
-    def __idc_fibonacci(self, lv0:int = 10, lv1:int = 1) -> pd.DataFrame:
-        """
-        Calculate Fibonacci retracement levels.
-
-        This function calculates the Fibonacci retracement levels.
-
-        Note:
-            This is a hidden function intended to prevent user modification.
-            It does not include exception handling.
-
-        Returns:
-            DataWrapper: A DataWrapper with Fibonacci levels and their corresponding
-                values.
-
-        Columns:
-            - 'Level'
-            - 'Value'
-        """
-
-        fibo_levels = np.array([0, 0.236, 0.382, 0.5, 0.618, 
-                                0.786, 1, 1.618, 2.618, 3.618, 4.236])
-
-        return pd.DataFrame({'Level':fibo_levels,
-                             'Value':lv0 - (lv0 - lv1) * fibo_levels})
+        return idc.idc_fibonacci(lv0=lv0, lv1=lv1)
 
     def idc_ema(self, length:int, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
@@ -1771,52 +1720,25 @@ class StrategyClass(ABC):
         """
 
         source = source.lower()
-        if length > 5000 or length <= 0: 
+        if length <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length' it has to be greater than 0 and 
-                             less than 5000.
-                             """, newline_exclude=True))
+                                'length' it has to be greater than 0.
+                                """, newline_exclude=True))
         elif not source in ('close','open','high','low','volume'): 
             raise ValueError(utils.text_fix("""
-                             'source' only one of these values: 
-                             ['close','open','high','low','volume'].
-                             """, newline_exclude=True))
+                                'source' only one of these values: 
+                                ['close','open','high','low','volume'].
+                                """, newline_exclude=True))
         elif (last != None and 
-              (last <= 0 or last > len(self.__data))): 
+                (last <= 0 or last > len(self.__data))): 
                 raise ValueError(utils.text_fix("""
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
 
         # Ema calc.
-        return self.__idc_ema(length=length, source=source, 
-                              last=last, cut=True)
-
-    @__store_decorator
-    def __idc_ema(self, data:pd.Series | None = None, length:int = 10, 
-                  source:str = 'close', last:int | None = None, 
-                  cut:bool = False) -> pd.Series:
-        """
-        Exponential Moving Average (EMA).
-
-        This function calculates the EMA.
-
-        Note:
-            This function is hidden to prevent user modification and does not 
-            include exception handling.
-
-        Args:
-            data (Series | None, optional): Series of data to perform the EMA calculation.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Returns:
-            DataWrapper: DataWrapper containing the EMA values for each step.
-        """
-
-        v_data = self.__data_adf[source] if data is None else data
-        ema = v_data.ewm(span=length, adjust=False).mean()
-
-        return ema
+        return idc.idc_ema(self, length=length, source=source, 
+                                last=last, cut=True)
 
     def idc_sma(self, length:int, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
@@ -1837,10 +1759,9 @@ class StrategyClass(ABC):
         """
 
         source = source.lower()
-        if length > 5000 or length <= 0: 
+        if length <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length' it has to be greater than 0 and 
-                             less than 5000.
+                             'length' it has to be greater than 0.
                              """, newline_exclude=True))
         elif not source in ('close','open','high','low','volume'): 
             raise ValueError(utils.text_fix("""
@@ -1855,34 +1776,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Sma calc.
-        return self.__idc_sma(length=length, source=source, 
+        return idc.idc_sma(self, length=length, source=source, 
                                 last=last, cut=True)
-
-    @__store_decorator
-    def __idc_sma(self, data:pd.Series | None = None, length:int = 10, 
-                  source:str = 'close', last:int | None = None, 
-                  cut:bool = False) -> pd.Series:
-        """
-        Simple Moving Average (SMA).
-
-        This function calculates the SMA.
-
-        Note:
-            This function is hidden to prevent user modification and does not 
-            include exception handling.
-
-        Args:
-            data (Series | None, optional): Series of data to perform the SMA calculation.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Returns:
-            DataWrapper: DataWrapper containing the SMA values for each step.
-        """
-
-        v_data = self.__data_adf[source] if data is None else data
-        sma = v_data.rolling(window=length).mean()
-
-        return sma
 
     def idc_wma(self, length:int, source:str = 'close', 
                 invt_weight:bool = False, last:int | None = None) -> flx.DataWrapper:
@@ -1904,10 +1799,9 @@ class StrategyClass(ABC):
         """
 
         source = source.lower()
-        if length > 5000 or length <= 0: 
+        if length <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length' it has to be greater than 0 and 
-                             less than 5000.
+                             'length' it has to be greater than 0.
                              """, newline_exclude=True))
         elif not source in ('close','open','high','low','volume'): 
             raise ValueError(utils.text_fix("""
@@ -1922,39 +1816,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Wma calc.
-        return self.__idc_wma(length=length, source=source, 
-                              invt_weight=invt_weight, last=last, cut=True)
-
-    @__store_decorator
-    def __idc_wma(self, data:pd.Series | None = None, 
-                  length:int = 10, source:str = 'close', 
-                  invt_weight:bool = False, last:int | None = None, 
-                  cut:bool = False) -> pd.Series:
-        """
-        Weighted Moving Average (WMA).
-
-        This function calculates the WMA.
-
-        Note:
-            This function is hidden to prevent user modification and does not 
-            include exception handling.
-
-        Args:
-            data (Series | None, optional): Series of data to perform the WMA calculation.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Returns:
-            DataWrapper: DataWrapper containing the WMA values for each step.
-        """
-
-        v_data = self.__data_adf[source] if data is None else data
-
-        weight = (np.arange(1, length+1)[::-1] 
-                  if invt_weight else np.arange(1, length+1))
-        wma = v_data.rolling(window=length).apply(
-            lambda x: (x*weight).sum() / weight.sum(), raw=True)
-
-        return wma
+        return idc.idc_wma(self, length=length, source=source, 
+                            invt_weight=invt_weight, last=last, cut=True)
     
     def idc_smma(self, length:int, source:str = 'close', 
                  last:int | None = None) -> flx.DataWrapper:
@@ -1975,10 +1838,9 @@ class StrategyClass(ABC):
         """
 
         source = source.lower()
-        if length > 5000 or length <= 0: 
+        if length <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length' it has to be greater than 0 and 
-                             less than 5000.
+                             'length' it has to be greater than 0.
                              """, newline_exclude=True))
         elif not source in ('close','open','high','low','volume'): 
             raise ValueError(utils.text_fix("""
@@ -1993,36 +1855,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Smma calc.
-        return self.__idc_smma(length=length, source=source, 
-                                last=last, cut=True)
-
-    @__store_decorator
-    def __idc_smma(self, data:pd.Series|None = None, length:int = 10, 
-                   source:str = 'close', last:int|None = None, 
-                   cut:bool = False) -> pd.Series:
-        """
-        Smoothed Moving Average (SMMA).
-
-        This function calculates the SMMA.
-
-        Note:
-            This function is hidden to prevent user modification and does not 
-            include exception handling.
-
-        Args:
-            data (Series | None, optional): Series of data to perform the SMMA calculation.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Returns:
-            DataWrapper: DataWrapper containing the SMMA values for each step.
-        """
-
-        v_data = self.__data_adf[source] if data is None else data
-
-        smma = v_data.ewm(alpha=1/length, adjust=False).mean()
-        smma.shift(1)
-
-        return smma
+        return idc.idc_smma(self, length=length, source=source, 
+                            last=last, cut=True)
 
     def idc_sema(self, length:int = 9, method:str = 'sma', 
                   smooth:int = 5, only:bool = False, 
@@ -2054,20 +1888,18 @@ class StrategyClass(ABC):
         """
 
         source = source.lower()
-        if length > 5000 or length <= 0: 
+        if length <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length' it has to be greater than 0 and 
-                             less than 5000.
+                             'length' it has to be greater than 0.
                              """, newline_exclude=True))
         elif not method in ('sma','ema','smma','wma'): 
             raise ValueError(utils.text_fix("""
                              'method' only one of these values: 
                              ['sma','ema','smma','wma'].
                              """, newline_exclude=True))
-        elif smooth > 5000 or smooth <= 0: 
+        elif smooth <= 0: 
             raise ValueError(utils.text_fix("""
-                             'smooth' it has to be greater than 0 and 
-                             less than 5000.
+                             'smooth' it has to be greater than 0.
                              """, newline_exclude=True))
         elif not source in ('close','open','high','low','volume'): 
             raise ValueError(utils.text_fix("""
@@ -2082,53 +1914,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Sema calc.
-        return self.__idc_sema(length=length, method=method, smooth=smooth, 
-                                only=only, source=source, last=last, cut=True)
-    
-    @__store_decorator
-    def __idc_sema(self, data:pd.Series | None = None, length:int = 9, 
-                    method:str = 'sma', smooth:int = 5, only:bool = False, 
-                    source:str = 'close', last:int | None = None, 
-                    cut:bool = False) -> pd.DataFrame|np.ndarray:
-        """
-        Smoothed Exponential Moving Average (SEMA).
-
-        This function calculates the SEMA.
-
-        Note:
-            This function is hidden to prevent user modification and does not 
-            include exception handling.
-
-        Args:
-            data (Series | None, optional): Series of data to perform the SEMA calculation.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Columns:
-            - 'ema'
-            - 'smoothed'
-
-        Returns:
-            DataWrapper: DataWrapper containing 'ema' and 'smoothed' values for 
-                          each step.
-        """
-
-        v_data = self.__data_adf[source] if data is None else data
-        ema = v_data.ewm(span=length, adjust=False).mean()
-
-        match method:
-            case 'sma': smema = self.__idc_sma(data=ema, length=smooth).unwrap()
-            case 'ema': smema = self.__idc_ema(data=ema, length=smooth).unwrap()
-            case 'smma': smema = self.__idc_smma(data=ema, length=smooth).unwrap()
-            case 'wma': smema = self.__idc_wma(data=ema, length=smooth).unwrap()
-            case _: smema = self.__idc_sma(data=ema, length=smooth).unwrap()
-
-        if only: 
-            smema = np.flip(smema)
-            return np.flip(smema[len(smema)-last 
-                                 if last != None and last < len(smema) else 0:])
-        
-        smema = pd.DataFrame({'ema':ema, 'smoothed':smema}, index=ema.index)
-        return smema
+        return idc.idc_sema(self, length=length, method=method, smooth=smooth, 
+                            only=only, source=source, last=last, cut=True)
 
     def idc_bb(self, length:int = 20, std_dev:float = 2, ma_type:str = 'sma', 
                source:str = 'close', last:int | None = None) -> flx.DataWrapper:
@@ -2159,15 +1946,13 @@ class StrategyClass(ABC):
 
         source = source.lower()
         ma_type = ma_type.lower()
-        if length > 5000 or length <= 0: 
+        if length <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length' it has to be greater than 0 and 
-                             less than 5000.
+                             'length' it has to be greater than 0.
                              """, newline_exclude=True))
-        elif std_dev > 50 or std_dev < 0.001: 
+        elif std_dev < 0.001: 
             raise ValueError(utils.text_fix("""
-                             'std_dev' it has to be greater than 0.001 and 
-                             less than 50.
+                             'std_dev' it has to be greater than 0.001.
                              """, newline_exclude=True))
         elif not source in ('close','open','high','low'): 
             raise ValueError(utils.text_fix("""
@@ -2187,52 +1972,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Bb calc.
-        return self.__idc_bb(length=length, std_dev=std_dev, 
-                            ma_type=ma_type, source=source, last=last, cut=True)
-
-    @__store_decorator
-    def __idc_bb(self, data:pd.Series | None = None, length:int = 20, 
-                 std_dev:float = 2, ma_type:str = 'sma', source:str = 'close', 
-                 last:int | None = None, cut:bool = False) -> pd.DataFrame:
-        """
-        Bollinger Bands (BB).
-
-        This function calculates the BB.
-
-        Note:
-            This function is hidden to prevent user modification and does not 
-            include exception handling.
-
-        Args:
-            data (Series | None, optional): Series of data to perform the Bollinger Bands 
-                calculation.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Columns:
-            - 'upper'
-            - '{ma_type}'
-            - 'lower'
-
-        Returns:
-            DataWrapper: DataWrapper containing 'upper', '{ma_type}', and 'lower' 
-                          values for each step.
-        """
-
-        v_data = self.__data_adf[source] if data is None else data
-
-        match ma_type:
-            case 'sma': ma = self.__idc_sma(data=v_data, length=length).to_series()
-            case 'ema': ma = self.__idc_ema(data=v_data, length=length).to_series()
-            case 'wma': ma = self.__idc_wma(data=v_data, length=length).to_series()
-            case 'smma': ma = self.__idc_smma(data=v_data, length=length).to_series()
-            case _: ma = self.__idc_sma(data=v_data, length=length).to_series()
-
-        std_ = (std_dev * v_data.rolling(window=length).std())
-        bb = pd.DataFrame({'upper':ma + std_,
-                           ma_type:ma,
-                           'lower':ma - std_}, index=ma.index)
-
-        return bb
+        return idc.idc_bb(self, length=length, std_dev=std_dev, 
+                        ma_type=ma_type, source=source, last=last, cut=True)
 
     def idc_rsi(self, length_rsi:int = 14, length:int = 14, 
                 rsi_ma_type:str = 'smma', base_type:str = 'sma', 
@@ -2268,20 +2009,17 @@ class StrategyClass(ABC):
         """
 
         source = source.lower()
-        if length > 5000 or length <= 0: 
+        if length <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length' it has to be greater than 0 and 
-                             less than 5000.
+                             'length' it has to be greater than 0.
                              """, newline_exclude=True))
-        elif bb_std_dev > 50 or bb_std_dev < 0.001: 
+        elif bb_std_dev < 0.001: 
             raise ValueError(utils.text_fix("""
-                             'bb_std_dev' it has to be greater than 0.001 and 
-                             less than 50.
+                             'bb_std_dev' it has to be greater than 0.001.
                              """, newline_exclude=True))
-        elif length > 5000 or length <= 0: 
+        elif length_rsi <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length_rsi' it has to be greater than 0 and 
-                             less than 5000.
+                             'length_rsi' it has to be greater than 0.
                              """, newline_exclude=True))
         elif not source in ('close','open','high','low'): 
             raise ValueError(utils.text_fix("""
@@ -2306,68 +2044,10 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Rsi calc.
-        return self.__idc_rsi(length_rsi=length_rsi, length=length, 
-                              rsi_ma_type=rsi_ma_type, base_type=base_type, 
-                              bb_std_dev=bb_std_dev, source=source, 
-                              last=last, cut=True)
-
-    @__store_decorator
-    def __idc_rsi(self, data:pd.Series | None = None, length_rsi:int = 14, 
-                  length:int = 14, rsi_ma_type:str = 'smma', 
-                  base_type:str = 'sma', bb_std_dev:float = 2, 
-                  source:str = 'close', last:int | None = None, 
-                  cut:bool = False)  -> pd.DataFrame:
-        """
-        Relative Strength Index (RSI).
-
-        This function calculates the RSI.
-
-        Note:
-            This function is hidden to prevent user modification and does not 
-            include exception handling.
-
-        Args:
-            data (Series | None, optional): Series of data to perform the RSI calculation.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Columns:
-            - 'rsi'
-            - '{base_type}'
-
-        Returns:
-            DataWrapper: DataWrapper containing 'rsi' and '{base_type}' values for 
-                          each step.
-        """
-
-        delta = self.__data_adf[source].diff() if data is None else data.diff()
-
-        ma = self.__idc_sma
-        match rsi_ma_type:
-            case 'sma': ma = self.__idc_sma
-            case 'ema': ma = self.__idc_ema
-            case 'wma': ma = self.__idc_wma
-            case 'smma': ma = self.__idc_smma
-
-        ma_gain = ma(data = delta.where(delta > 0, 0), 
-                     length=length_rsi, source=source).to_series()
-        ma_loss = ma(data = -delta.where(delta < 0, 0), 
-                     length=length_rsi, source=source).to_series()
-        rsi = 100 - (100 / (1+ma_gain/ma_loss))
-
-        match base_type:
-            case 'sma': mv = self.__idc_sma(data=rsi, length=length).to_series()
-            case 'ema': mv = self.__idc_ema(data=rsi, length=length).to_series()
-            case 'wma': mv = self.__idc_wma(data=rsi, length=length).to_series()
-            case 'smma': mv = self.__idc_smma(data=rsi, length=length).to_series()
-            case 'bb': mv = self.__idc_bb(data=rsi, length=length,
-                                          std_dev=bb_std_dev).to_dataframe()
-            case _: mv = self.__idc_sma(data=rsi, length=length).to_series()
-
-        if type(mv) == pd.Series: mv.name = base_type
-
-        rsi:pd.DataFrame = pd.concat([pd.DataFrame({'rsi':rsi}), mv], axis=1)
-
-        return rsi
+        return idc.idc_rsi(self, length_rsi=length_rsi, length=length, 
+                            rsi_ma_type=rsi_ma_type, base_type=base_type, 
+                            bb_std_dev=bb_std_dev, source=source, 
+                            last=last, cut=True)
 
     def idc_stochastic(self, length_k:int = 14, smooth_k:int = 1, 
                        length_d:int = 3, d_type:str = 'sma', 
@@ -2399,20 +2079,17 @@ class StrategyClass(ABC):
         """
 
         source = source.lower()
-        if length_k > 5000 or length_k <= 0: 
+        if length_k <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length_k' it has to be greater than 0 and 
-                             less than 5000.
+                             'length_k' it has to be greater than 0.
                              """, newline_exclude=True))
-        elif smooth_k > 5000 or smooth_k <= 0: 
+        elif smooth_k <= 0: 
             raise ValueError(utils.text_fix("""
-                             'smooth_k' it has to be greater than 0 and 
-                             less than 5000.
+                             'smooth_k' it has to be greater than 0.
                              """, newline_exclude=True))
-        elif length_d > 5000 or smooth_k <= 0: 
+        elif smooth_k <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length_d' it has to be greater than 0 and 
-                             less than 5000.
+                             'length_d' it has to be greater than 0.
                              """, newline_exclude=True))
         elif not source in ('close','open','high','low'): 
             raise ValueError(utils.text_fix("""
@@ -2431,55 +2108,9 @@ class StrategyClass(ABC):
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
         # Calc stoch.
-        return self.__idc_stochastic(length_k=length_k, smooth_k=smooth_k, 
-                                    length_d=length_d, d_type=d_type, 
-                                    source=source, last=last, cut=True)
-
-    @__store_decorator
-    def __idc_stochastic(self, data:pd.Series | None = None, length_k:int = 14, 
-                         smooth_k:int = 1, length_d:int = 3, d_type:str = 'sma', 
-                         source:str = 'close', last:int | None = None, 
-                         cut:bool = False) -> pd.DataFrame:
-        """
-        Stochastic Oscillator.
-
-        This function calculates the stochastic oscillator.
-
-        Note:
-            This function is hidden to prevent user modification and does not 
-            include exception handling.
-
-        Args:
-            data (Series | None, optional): Series of data to perform the stochastic calculation.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Columns:
-            - 'stoch'
-            - '{d_type}'
-
-        Returns:
-            DataWrapper: DataWrapper containing 'stoch' and '{d_type}' values for each 
-                          step.
-        """
-
-        v_data:pd.DataFrame|pd.Series = self.__data_adf if data is None else data
-
-        low_data = v_data.loc[:, 'low'].rolling(window=length_k).min()
-        high_data = v_data.loc[:, 'high'].rolling(window=length_k).max()
-
-        ma = self.__idc_sma
-        match d_type:
-            case 'sma': ma = self.__idc_sma
-            case 'ema': ma = self.__idc_ema
-            case 'wma': ma = self.__idc_wma
-            case 'smma': ma = self.__idc_smma
-
-        stoch = (((v_data[source] - low_data) / 
-                  (high_data - low_data)) * 100).rolling(window=smooth_k).mean()
-        result = pd.DataFrame({'stoch':stoch, 
-                               d_type:ma(data=stoch, length=length_d).to_series()})
-
-        return result
+        return idc.idc_stochastic(self, length_k=length_k, smooth_k=smooth_k, 
+                                length_d=length_d, d_type=d_type, 
+                                source=source, last=last, cut=True)
 
     def idc_adx(self, smooth:int = 14, length_di:int = 14,
                 only:bool = False, last:int | None = None) -> flx.DataWrapper:
@@ -2505,15 +2136,13 @@ class StrategyClass(ABC):
                           each step.
         """
 
-        if smooth > 5000 or smooth <= 0: 
+        if smooth <= 0: 
             raise ValueError(utils.text_fix("""
-                             'smooth' it has to be greater than 0 and 
-                             less than 5000.
+                             'smooth' it has to be greater than 0.
                              """, newline_exclude=True))
-        elif length_di > 5000 or length_di <= 0: 
+        elif length_di <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length_di' it has to be greater than 0 and 
-                             less than 5000.
+                             'length_di' it has to be greater than 0.
                              """, newline_exclude=True))
         elif (last != None and 
               (last <= 0 or last > len(self.__data['close']))): 
@@ -2523,62 +2152,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc adx.
-        return self.__idc_adx(smooth=smooth, length_di=length_di, 
-                            only=only, last=last, cut=True)
-
-    @__store_decorator
-    def __idc_adx(self, data:pd.Series | None = None, smooth:int = 14, 
-                  length_di:int = 14, only:bool = False, 
-                  last:int | None = None, cut:bool = False) -> pd.DataFrame:
-        """
-        Average Directional Index (ADX).
-
-        This function calculates the ADX.
-
-        Note:
-            This function is hidden to prevent user modification and does not 
-            include exception handling.
-
-        Args:
-            data (Series | None, optional): Series of data to perform the ADX calculation.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Columns:
-            - 'adx'
-            - '+di'
-            - '-di'
-
-        Returns:
-            DataWrapper: DataWrapper containing 'adx', '+di', and '-di' values for 
-                          each step.
-        """
-
-        v_data = self.__data_adf if data is None else data
-
-        atr = self.__idc_atr(length=length_di, smooth='smma').unwrap()
-
-        dm_p_raw = v_data.loc[:, 'high'].diff()
-        dm_n_raw = -v_data.loc[:, 'low'].diff()
-        
-        dm_p = pd.Series(
-            np.where((dm_p_raw > dm_n_raw) & (dm_p_raw > 0), dm_p_raw, 0), 
-            index=v_data.index)
-        dm_n = pd.Series(
-            np.where((dm_n_raw > dm_p_raw) & (dm_n_raw > 0), dm_n_raw, 0), 
-            index=v_data.index)
-
-        di_p = 100 * self.__idc_smma(dm_p, length=length_di).to_series() / atr
-        di_n = 100 * self.__idc_smma(dm_n, length=length_di).to_series() / atr
-
-        adx = self.__idc_smma(
-            data=100 * np.abs((di_p - di_n) / (di_p + di_n).replace(0, 1)), 
-            length=smooth).to_series()
-
-        if only: 
-            return adx
-        adx = pd.DataFrame({'adx':adx, '+di':di_p, '-di':di_n})
-
-        return adx
+        return idc.idc_adx(self, smooth=smooth, length_di=length_di, 
+                        only=only, last=last, cut=True)
 
     def idc_macd(self, short_len:int = 12, long_len:int = 26, 
                  signal_len:int = 9, macd_ma_type:str = 'ema', 
@@ -2611,20 +2186,17 @@ class StrategyClass(ABC):
         """
 
         source = source.lower()
-        if short_len > 5000 or short_len <= 0: 
+        if short_len <= 0: 
             raise ValueError(utils.text_fix("""
-                             'short_len' it has to be greater than 0 and 
-                             less than 5000.
+                             'short_len' it has to be greater than 0.
                              """, newline_exclude=True))
-        elif long_len > 5000 or long_len <= 0: 
+        elif long_len <= 0: 
             raise ValueError(utils.text_fix("""
-                             'long_len' it has to be greater than 0 and 
-                             less than 5000.
+                             'long_len' it has to be greater than 0.
                              """, newline_exclude=True))
-        elif signal_len > 5000 or signal_len <= 0: 
+        elif signal_len <= 0: 
             raise ValueError(utils.text_fix("""
-                             'signal_len' it has to be greater than 0 and 
-                             less than 5000.
+                             'signal_len' it has to be greater than 0.
                              """, newline_exclude=True))
         elif not macd_ma_type in ('ema','sma'): 
             raise ValueError(utils.text_fix("""
@@ -2649,67 +2221,10 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc macd.
-        return self.__idc_macd(short_len=short_len, long_len=long_len, 
+        return idc.idc_macd(self, short_len=short_len, long_len=long_len, 
                             signal_len=signal_len, macd_ma_type=macd_ma_type, 
                             signal_ma_type=signal_ma_type, histogram=histogram, 
                             source=source, last=last, cut=True)
-
-    @__store_decorator
-    def __idc_macd(self, data:pd.Series | None = None, short_len:int = 12, 
-                   long_len:int = 26, signal_len:int = 9, 
-                   macd_ma_type:str = 'ema', signal_ma_type:str = 'ema', 
-                   histogram:bool = True, source:str = 'close', 
-                   last:int | None = None, cut:bool = False) -> pd.DataFrame:
-        """
-        Calculate the convergence/divergence of the moving average (MACD).
-
-        This function calculates the MACD.
-
-        Note:
-            This is a hidden function intended to prevent user modification.
-            It does not include exception handling.
-
-        Args:
-            data (Series | None, optional): The data used for calculation of MACD.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Columns:
-            - 'macd'
-            - 'signal'
-            - 'histogram'  
-
-        Returns:
-            DataWrapper: A DataWrapper with MACD values and signal line for each step.
-        """
-
-        v_data = self.__data_adf if data is None else data
-
-        macd_ma = self.__idc_ema
-        match macd_ma_type:
-            case 'ema':
-                macd_ma = self.__idc_ema
-            case 'sma':
-                macd_ma = self.__idc_sma
-
-        signal_ma = self.__idc_ema
-        match signal_ma_type:
-            case 'ema':
-                signal_ma = self.__idc_ema
-            case 'sma':
-                signal_ma = self.__idc_sma
-        
-        short_ema = macd_ma(data=v_data[source], length=short_len).to_series()
-        long_ema = macd_ma(data=v_data[source], length=long_len).to_series()
-        macd = short_ema - long_ema
-
-        signal_line = signal_ma(data=macd, length=signal_len).to_series()
-
-        result = pd.DataFrame({'macd':macd, 'signal':signal_line, 
-                               'histogram':macd-signal_line} 
-                               if histogram else 
-                               {'macd':macd, 'signal':signal_line})
-
-        return result
 
     def idc_sqzmom(self, bb_len:int = 20, bb_mult:float = 1.5, 
                    kc_len:int = 20, kc_mult:float = 1.5, 
@@ -2748,25 +2263,24 @@ class StrategyClass(ABC):
         """
 
         source = source.lower()
-        if bb_len > 5000 or bb_len <= 0: 
+        if bb_len <= 0: 
             raise ValueError(utils.text_fix("""
-                                            'bb_len' it has to be greater than 
-                                            0 and less than 5000.
+                                            'bb_len' it has to be greater than 0.
                                             """, newline_exclude=True))
-        elif bb_mult > 50 or bb_mult < 0.001: 
+        elif bb_mult < 0.001: 
             raise ValueError(utils.text_fix("""
                                             'bb_mult' it has to be greater than 
-                                            0.001 and less than 50.
+                                            0.001.
                                             """, newline_exclude=True))
-        elif kc_len > 5000 or kc_len <= 0: 
+        elif kc_len <= 0: 
             raise ValueError(utils.text_fix("""
                                             'kc_len' it has to be greater than 
-                                            0 and less than 5000.
+                                            0.
                                             """, newline_exclude=True))
-        elif kc_mult > 50 or kc_mult < 0.001: 
+        elif kc_mult < 0.001: 
             raise ValueError(utils.text_fix("""
                                             'bb_mult' it has to be greater than 
-                                            0.001 and less than 50.
+                                            0.001.
                                             """, newline_exclude=True))
         elif not source in ('close','open','high','low'): 
             raise ValueError(utils.text_fix("""
@@ -2781,106 +2295,10 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc sqzmom.
-        return self.__idc_sqzmom(bb_len=bb_len, bb_mult=bb_mult, 
-                                kc_len=kc_len, kc_mult=kc_mult, 
-                                use_tr=use_tr, source=source, 
-                                last=last, cut=True)
-
-    @__store_decorator
-    def __idc_sqzmom(self, data:pd.Series | None = None, 
-                     bb_len:int = 20, bb_mult:float = 1.5, 
-                     kc_len:int = 20, kc_mult:float = 1.5, 
-                     use_tr:bool = True, source:str = 'close', 
-                     last:int | None = None, cut:bool = False) -> pd.DataFrame:
-        """
-        Calculate Squeeze Momentum (SQZMOM).
-
-        This function calculates the Squeeze Momentum, inspired by the Squeeze 
-        Momentum Indicator available on TradingView. While the concept is based 
-        on the original indicator, this implementation may not fully replicate its 
-        exact functionality. The concept credit goes to its original developer. 
-        This function is intended for use in backtesting scenarios with real or 
-        simulated data for research and educational purposes only, and should not 
-        be considered financial advice.
-
-        Note:
-            This is a hidden function intended to prevent user modification.
-            It does not include exception handling.
-
-        Args:
-            data (Series | None, optional): The data used for calculating the Squeeze Momentum.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Columns:
-            - 'sqzmom'
-            - 'histogram'
-
-        Returns:
-            DataWrapper: A DataWrapper with Squeeze Momentum values and histogram for 
-                each step.
-        """
-
-        v_data = self.__data_adf if data is None else data
-
-        basis = self.__idc_sma(length=bb_len).unwrap()
-        dev = bb_mult * v_data.loc[:, source].rolling(window=bb_len).std(ddof=0)
-
-        upper_bb = basis + dev
-        lower_bb = basis - dev
-
-        ma = self.__idc_sma(length=kc_len).unwrap()
-        range_ = self.__idc_sma(data=self.__idc_trange().to_series()
-                                if use_tr else v_data['high']-v_data['low'], 
-                                length=kc_len).unwrap()
-
-        upper_kc = ma + range_ * kc_mult
-        lower_kc = ma - range_ * kc_mult
-
-        sqz = np.where((lower_bb > lower_kc) & (upper_bb < upper_kc), 1, 0)
-
-        d = v_data[source] - ((v_data.loc[:, 'low'].rolling(window=kc_len).min() + 
-                             v_data.loc[:, 'high'].rolling(window=kc_len).max()) / 2 + 
-                             self.__idc_sma(length=kc_len).unwrap()) / 2
-
-        histogram = self.__idc_rlinreg(data=d, length=kc_len, offset=0).unwrap()
-
-        result = pd.DataFrame({'sqzmom':pd.Series(sqz, index=v_data.index), 
-                               'histogram':histogram}, 
-                               index=v_data.index)
-        return result
-
-    @__store_decorator
-    def __idc_rlinreg(self, data:pd.Series | None = None, 
-                      length:int = 5, offset:int = 1,
-                      cut:bool = False) -> pd.Series:
-        """
-        Calculate rolling linear regression values.
-
-        This function calculates the rolling linear regression.
-
-        Note:
-            This is a hidden function intended to prevent user 
-            modification and does not include exception handling.
-
-        Args:
-            data (Series | None, optional): The data used for linear regression calculations.
-            length (int, optional): Length of each window for the rolling regression.
-            offset (int, optional): Offset used in the regression calculation.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Returns:
-            DataWrapper: Array with the linear regression values for each window.
-        """
-
-        v_data = self.__data_adf  if data is None else data
-
-        x = np.arange(length)
-        y = v_data.rolling(window=length)
-
-        m = y.apply(lambda y: np.polyfit(x, y.values, 1)[0])
-        b = y.mean() - (m * float(np.mean(x))) 
-
-        return cast(pd.Series, m * (length - 1 - offset) + b)
+        return idc.idc_sqzmom(self, bb_len=bb_len, bb_mult=bb_mult, 
+                            kc_len=kc_len, kc_mult=kc_mult, 
+                            use_tr=use_tr, source=source, 
+                            last=last, cut=True)
 
     def idc_mom(self, length:int = 10, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
@@ -2901,10 +2319,9 @@ class StrategyClass(ABC):
         """
 
         source = source.lower()
-        if length > 5000 or length <= 0: 
+        if length <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length' it has to be greater than 
-                             0 and less than 5000.
+                             'length' it has to be greater than 0.
                              """, newline_exclude=True))
         elif not source in ('close','open','high','low'): 
             raise ValueError(utils.text_fix("""
@@ -2919,34 +2336,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc momentum.
-        return self.__idc_mom(length=length, source=source, 
-                              last=last, cut=True)
-
-    @__store_decorator
-    def __idc_mom(self, data:pd.Series | None = None, length:int = 10, 
-                  source:str = 'close', last:int | None = None,
-                  cut:bool = False) -> pd.Series:
-        """
-        Calculate momentum values (MOM).
-
-        This function calculates the MOM.
-
-        Note:
-            This is a hidden function intended to prevent user modification.
-            It does not include exception handling.
-
-        Args:
-            data (Series | None, optional): The data used to calculate momentum.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Returns:
-            DataWrapper: DataWrapper with the momentum values for each step.
-        """
-
-        v_data = self.__data_adf if data is None else data
-        mom:pd.Series = v_data[source] - v_data.loc[:, source].shift(length)
-
-        return mom
+        return idc.idc_mom(self, length=length, source=source, 
+                            last=last, cut=True)
 
     def idc_ichimoku(self, tenkan_period:int = 9, kijun_period:int = 26, 
                      senkou_span_b_period:int = 52, ichimoku_lines:bool = True, 
@@ -2977,20 +2368,20 @@ class StrategyClass(ABC):
                 'tenkan_sen' and 'kijun_sen' columns if `ichimoku_lines` is True.
         """
 
-        if tenkan_period > 5000 or tenkan_period <= 0: 
+        if tenkan_period <= 0: 
             raise ValueError(utils.text_fix("""
                                             'tenkan_period' it has to be 
-                                            greater than 0 and less than 5000.
+                                            greater than 0.
                                             """, newline_exclude=True))
-        elif kijun_period > 5000 or kijun_period <= 0: 
+        elif kijun_period <= 0: 
             raise ValueError(utils.text_fix("""
                                             'kijun_period' it has to be 
-                                            greater than 0 and less than 5000.
+                                            greater than 0.
                                             """, newline_exclude=True))
-        elif senkou_span_b_period > 5000 or senkou_span_b_period <= 0: 
+        elif senkou_span_b_period <= 0: 
             raise ValueError(utils.text_fix("""
                                             'senkou_span_b_period' it has to be 
-                                            greater than 0 and less than 5000.
+                                            greater than 0.
                                             """, newline_exclude=True))
         elif (last != None and 
               (last <= 0 or last > len(self.__data['close']))): 
@@ -3000,62 +2391,11 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
         
         # Calc ichimoku.
-        return self.__idc_ichimoku(tenkan_period=tenkan_period, 
-                                    kijun_period=kijun_period, 
-                                    senkou_span_b_period=senkou_span_b_period, 
-                                    ichimoku_lines=ichimoku_lines, 
-                                    last=last, cut=True)
-
-    @__store_decorator
-    def __idc_ichimoku(self, data:pd.Series | None = None, tenkan_period:int = 9, 
-                       kijun_period:int = 26, senkou_span_b_period:int = 52, 
-                       ichimoku_lines:bool = True, 
-                       last:int | None = None, cut:bool = False) -> pd.DataFrame:
-        """
-        Calculate Ichimoku cloud values.
-
-        This function calculates the Ichimoku cloud.
-
-        Note:
-            This is a hidden function intended to prevent user modification.
-            It does not include exception handling.
-
-        Args:
-            data (Series | None, optional): The data used to calculate the Ichimoku cloud values.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Columns:
-            - 'senkou_a'
-            - 'senkou_b'
-            - 'tenkan_sen'
-            - 'kijun_sen'
-            - 'ichimoku_lines'
-
-        Returns:
-            DataWrapper: A DataWrapper with Ichimoku cloud values and optionally
-                'tenkan_sen' and 'kijun_sen' columns if `ichimoku_lines` is True.
-        """
-
-        v_data = self.__data_adf if data is None else data
-
-        tenkan_sen_val = (v_data.loc[:, 'high'].rolling(window=tenkan_period).max() + 
-                          v_data.loc[:, 'low'].rolling(window=tenkan_period).min()) / 2
-        kijun_sen_val = (v_data.loc[:, 'high'].rolling(window=kijun_period).max() + 
-                         v_data.loc[:, 'low'].rolling(window=kijun_period).min()) / 2
-
-        senkou_span_a_val = ((tenkan_sen_val + kijun_sen_val) / 2)
-        senkou_span_b_val = ((v_data.loc[:, 'high'].rolling(
-            window=senkou_span_b_period).max() + 
-            v_data.loc[:, 'low'].rolling(window=senkou_span_b_period).min()) / 2)
-        senkou_span = (pd.DataFrame({'senkou_a':senkou_span_a_val,
-                                    'senkou_b':senkou_span_b_val, 
-                                    'tenkan_sen':tenkan_sen_val,
-                                    'kijun_sen':kijun_sen_val}) 
-                      if ichimoku_lines else 
-                        pd.DataFrame({'senkou_a':senkou_span_a_val,
-                                      'senkou_b':senkou_span_b_val}))
-        
-        return senkou_span
+        return idc.idc_ichimoku(self, tenkan_period=tenkan_period, 
+                                kijun_period=kijun_period, 
+                                senkou_span_b_period=senkou_span_b_period, 
+                                ichimoku_lines=ichimoku_lines, 
+                                last=last, cut=True)
 
     def idc_atr(self, length:int = 14, smooth:str = 'smma', 
                 last:int | None = None) -> flx.DataWrapper:
@@ -3074,10 +2414,9 @@ class StrategyClass(ABC):
             DataWrapper: DataWrapper with the average true range values for each step.
         """
 
-        if length > 5000 or length <= 0: 
+        if length <= 0: 
             raise ValueError(utils.text_fix("""
-                             'length' it has to be greater than 
-                             0 and less than 5000.
+                             'length' it has to be greater than 0.
                              """, newline_exclude=True))
         elif not smooth in ('smma', 'sma','ema','wma'): 
             raise ValueError(utils.text_fix("""
@@ -3091,86 +2430,5 @@ class StrategyClass(ABC):
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
         # Calc atr.
-        return self.__idc_atr(length=length, smooth=smooth, 
-                              last=last, cut=True)
-
-    @__store_decorator
-    def __idc_atr(self, length:int = 14, smooth:str = 'smma', 
-                  last:int | None = None, cut:bool = False) -> np.ndarray:
-        """
-        Calculate the average true range (ATR).
-
-        This function calculates the ATR.
-
-        Note:
-            This is a hidden function intended to prevent user modification.
-            It does not include exception handling.
-
-        Args:
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Returns:
-            DataWrapper: Series with the average true range values for each step.
-        """
-
-        tr = self.__idc_trange().to_series()
-
-        match smooth:
-            case 'wma':
-                atr:np.ndarray = self.__idc_wma(data=tr, length=length, 
-                                                last=last).unwrap()
-            case 'sma':
-                atr:np.ndarray = self.__idc_sma(data=tr, length=length, 
-                                                last=last).unwrap()
-            case 'ema':
-                atr:np.ndarray = self.__idc_ema(data=tr, length=length, 
-                                                last=last).unwrap()
-            case 'smma':
-                atr:np.ndarray = self.__idc_smma(data=tr, length=length, 
-                                                 last=last).unwrap()
-            case _:
-                atr:np.ndarray = self.__idc_wma(data=tr, length=length, 
-                                                last=last).unwrap()
-
-        return atr
-
-    @__store_decorator
-    def __idc_trange(self, data:pd.Series | None = None, 
-                     handle_na: bool = True, last:int | None = None,
-                     cut:bool = False) -> pd.Series:
-        """
-        Calculate the true range.
-
-        This function calculates the true range.
-
-        Note:
-            This is a hidden function intended to prevent user modification.
-            It does not include exception handling.
-
-        Args:
-            data (Series | None, optional): The data used to perform the calculation.
-            handle_na (bool, optional): Whether to handle NaN values in 'close'.
-            last (int | None, optional): Number of data points to return starting from the 
-                present backward. If None, returns data for all available periods.
-            cut (bool, optional): True to return the trimmed data with current index.
-
-        Returns:
-            DataWrapper: DataWrapper with the true range values for each step.
-        """
-
-        v_data = self.__data_adf if data is None else data
-
-        close = v_data.loc[:, 'close'].shift(1)
-
-        if handle_na:
-                close.fillna(v_data['low'], inplace=True)
-                     
-        hl = v_data.loc[:, 'high'] - v_data.loc[:, 'low']
-        hyc = abs(v_data['high'] - close)
-        lyc = abs(v_data['low'] - close)
-        tr:pd.Series[float] = pd.concat([hl, hyc, lyc], axis=1).max(axis=1)
-
-        if not handle_na:
-            tr[close.isna()] = np.nan
-
-        return tr
+        return idc.idc_atr(self, length=length, smooth=smooth, 
+                            last=last, cut=True)

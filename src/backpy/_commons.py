@@ -52,6 +52,7 @@ Functions:
     c_tf: It's the same as doing: cast(float, ...).
 
 Hidden Functions:
+    _store_decorator: Give '_store' attribute to a function.
     __del_backtest_uniq: Remove only one backtest.
     __get_names: Takes the names of an list of dictionaries.
     __get_trades: Take trades from 1 or more saved backtests.
@@ -220,6 +221,30 @@ __plt_styles:dict = {
         'vol': '#DA70D6', 'mk': {'u': '#E84FFF', 'd': '#9400D3'},
     }
 }
+
+def _store_decorator(func:Callable) -> Callable:
+    """
+    Store decorator
+
+    Decorate a function with this to give it 
+        the attribute: '_store' and have it decorated with '__data_store'.
+
+    Note:
+        Add the 'cut' and 'last' arguments; they are used for '__data_store'.
+        cut (bool): Cut off the data, yes or no, depending on whether the 
+            user requests it or another indicator. Default False.
+        last (int): Cut the data as the user wishes. Default = None.
+        The implementation is made in the '__data_store' decorator.
+
+    Args:
+        func (Callable): Function.
+
+    Returns:
+        Callable: Function.
+    """
+
+    setattr(func, '_store', True)
+    return func
 
 def del_backtest(names:list[str|int|None]|str|int|None = None) -> None:
     """
