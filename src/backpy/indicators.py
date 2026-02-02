@@ -113,7 +113,6 @@ def idc_sma(self, data:pd.Series | None = None, length:int = 10,
         DataWrapper: DataWrapper containing the SMA values for each step.
     """
 
-    print('hola')
     v_data = self._StrategyClass__data_adf[source] if data is None else data
     sma = v_data.rolling(window=length).mean()
 
@@ -219,9 +218,7 @@ def idc_sema(self, data:pd.Series | None = None, length:int = 9,
 
     match method:
         case 'sma': 
-            print('holaowoaw')
             smema = idc_sma(self, data=ema, length=smooth).unwrap()
-            print(smema[-1])
         case 'ema': smema = idc_ema(self, data=ema, length=smooth).unwrap()
         case 'smma': smema = idc_smma(self, data=ema, length=smooth).unwrap()
         case 'wma': smema = idc_wma(self, data=ema, length=smooth).unwrap()
