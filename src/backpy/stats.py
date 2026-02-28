@@ -516,7 +516,9 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
     panel = panel.lower()
     valid_style = {'random', 'last'} | set(_cm.__plt_styles.keys())
 
-    if col and col not in ('profit', 'profitPer'):
+    if not data:
+        raise exception.StatsError("'data' empty.")
+    elif col and col not in ('profit', 'profitPer'):
         raise exception.StatsError(
             "'col' only 'profit', 'profitPer' or None is supported.")
     elif panel not in ('new', 'add'):
@@ -610,8 +612,8 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
 def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None, 
                     n_trades:int|None = None, n_sim:int|None = 10000, 
                     percentiles:list[int|float] = [1,5,10,24,50,75], 
-                    col:str|None = 'profitPer', prnt:bool = True 
-                    ) -> tuple[list[pd.DataFrame], str]:
+                    col:str|None = 'profitPer', replace:bool = True,
+                    prnt:bool = True) -> tuple[list[pd.DataFrame], str]:
     """
     Monte Carlo bootstrap simulation
 
@@ -630,6 +632,9 @@ def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None,
         col (str|None, optional): Column to do the simulation, 
             only 'profit' and 'profitPer' are supported, 
             None uses 'profitPer' and calculates equity curve.
+        replace (bool, optional): If False change the Monte Carlo simulation, 
+            remove the possibility of duplicates; 'n_trades' 
+            cannot exceed the length of the trades.
         prnt (bool, optional): If True, the statistics are 
             printed on the console.
 
@@ -647,14 +652,17 @@ def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None,
             "'n_trades' can only be greater than 1.")
     elif n_sim and n_sim <= 0:
         raise exception.StatsError(
-            "'n_trades' can only be greater than 0.")
+            "'n_sim' can only be greater than 0.")
 
     trades = _cm.__get_trades(names=names)
     name = list(names)[0] if isinstance(names, (tuple,set,list)) else names
     trades_data = _cm.__get_strategy(name=name)
     sim = []
 
-    if trades.empty:
+    if n_trades and not replace and (n_trades <= 1 or n_trades > len(trades)):
+        raise exception.StatsError(
+            f"'n_trades' has to be greater than 1 and less than the total number of trades ({len(trades)}).")
+    elif trades.empty:
         raise exception.StatsError('Trades not loaded.')
 
     stats = {
@@ -669,7 +677,7 @@ def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None,
 
     for i in range(n_sim or 10000):
         trades_s = trades.sample(
-            n=n_trades or len(trades), replace=True)
+            n=n_trades or len(trades), replace=replace)
 
         trades_calc = trades_s
         trades_calc['multiplier'] = 1 + trades_calc['profitPer'] / 100
