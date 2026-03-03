@@ -4,29 +4,29 @@ Indicators module
 This module contains the main logic of the indicators.
 
 Note:
-    These functions do not have exception handling.
+    To call a indicator within another, use self.
 
 Variables:
     logger (Logger): Logger variable.
 
 Functions:
-    idc_fibonacci: Calculates Fibonacci retracement levels.
-    idc_ema: Calculates the Exponential Moving Average (EMA) indicator.
-    idc_sma: Calculates the Simple Moving Average (SMA) indicator.
-    idc_wma: Calculates the Weighted Moving Average (WMA) indicator.
-    idc_smma: Calculates the Smoothed Moving Average (SMMA) indicator.
-    idc_sema: Calculates the Smoothed Exponential Moving Average (SEMA) indicator.
-    idc_bb: Calculates the Bollinger Bands indicator (BB).
-    idc_rsi: Calculates the Relative Strength Index (RSI).
-    idc_stochastic: Calculates the Stochastic Oscillator indicator.
-    idc_adx: Calculates the Average Directional Index (ADX).
-    idc_macd: Calculates the Moving Average Convergence Divergence (MACD).
-    idc_sqzmom: Calculates the Squeeze Momentum indicator (SQZMOM).
-    idc_rlinreg: This function calculates the rolling linear regression.
-    idc_mom: Calculates the Momentum indicator (MOM).
-    idc_ichimoku: Calculates the Ichimoku indicator.
-    idc_atr: Calculates the Average True Range (ATR).
-    idc_trange: This function calculates the true range.
+    idct_fibonacci: Calculates Fibonacci retracement levels.
+    idct_ema: Calculates the Exponential Moving Average (EMA) indicator.
+    idct_sma: Calculates the Simple Moving Average (SMA) indicator.
+    idct_wma: Calculates the Weighted Moving Average (WMA) indicator.
+    idct_smma: Calculates the Smoothed Moving Average (SMMA) indicator.
+    idct_sema: Calculates the Smoothed Exponential Moving Average (SEMA) indicator.
+    idct_bb: Calculates the Bollinger Bands indicator (BB).
+    idct_rsi: Calculates the Relative Strength Index (RSI).
+    idct_stochastic: Calculates the Stochastic Oscillator indicator.
+    idct_adx: Calculates the Average Directional Index (ADX).
+    idct_macd: Calculates the Moving Average Convergence Divergence (MACD).
+    idct_sqzmom: Calculates the Squeeze Momentum indicator (SQZMOM).
+    idct_rlinreg: This function calculates the rolling linear regression.
+    idct_mom: Calculates the Momentum indicator (MOM).
+    idct_ichimoku: Calculates the Ichimoku indicator.
+    idct_atr: Calculates the Average True Range (ATR).
+    idct_trange: This function calculates the true range.
 """
 
 import pandas as pd
@@ -38,7 +38,7 @@ from . import _commons as _cm
 logger:logging.Logger = logging.getLogger(__name__)
 
 @_cm._store_decorator
-def idc_fibonacci(lv0:int = 10, lv1:int = 1) -> pd.DataFrame:
+def idct_fibonacci(self, lv0:int = 10, lv1:int = 1) -> pd.DataFrame:
     """
     Calculate Fibonacci retracement levels.
 
@@ -64,7 +64,7 @@ def idc_fibonacci(lv0:int = 10, lv1:int = 1) -> pd.DataFrame:
                         'Value':lv0 - (lv0 - lv1) * fibo_levels})
 
 @_cm._store_decorator
-def idc_ema(self, data:pd.Series | None = None, length:int = 10, 
+def idct_ema(self, data:pd.Series | None = None, length:int = 10, 
                 source:str = 'close', last:int | None = None, 
                 cut:bool = False) -> pd.Series:
     """
@@ -90,9 +90,8 @@ def idc_ema(self, data:pd.Series | None = None, length:int = 10,
 
     return ema
 
-
 @_cm._store_decorator
-def idc_sma(self, data:pd.Series | None = None, length:int = 10, 
+def idct_sma(self, data:pd.Series | None = None, length:int = 10, 
                 source:str = 'close', last:int | None = None, 
                 cut:bool = False) -> pd.Series:
     """
@@ -119,7 +118,7 @@ def idc_sma(self, data:pd.Series | None = None, length:int = 10,
     return sma
 
 @_cm._store_decorator
-def idc_wma(self, data:pd.Series | None = None, 
+def idct_wma(self, data:pd.Series | None = None, 
                 length:int = 10, source:str = 'close', 
                 invt_weight:bool = False, last:int | None = None, 
                 cut:bool = False) -> pd.Series:
@@ -152,7 +151,7 @@ def idc_wma(self, data:pd.Series | None = None,
     return wma
 
 @_cm._store_decorator
-def idc_smma(self, data:pd.Series|None = None, length:int = 10, 
+def idct_smma(self, data:pd.Series|None = None, length:int = 10, 
                 source:str = 'close', last:int|None = None, 
                 cut:bool = False) -> pd.Series:
     """
@@ -181,7 +180,7 @@ def idc_smma(self, data:pd.Series|None = None, length:int = 10,
     return smma
 
 @_cm._store_decorator
-def idc_sema(self, data:pd.Series | None = None, length:int = 9, 
+def idct_sema(self, data:pd.Series | None = None, length:int = 9, 
                 method:str = 'sma', smooth:int = 5, only:bool = False, 
                 source:str = 'close', last:int | None = None, 
                 cut:bool = False) -> pd.DataFrame|np.ndarray:
@@ -218,11 +217,11 @@ def idc_sema(self, data:pd.Series | None = None, length:int = 9,
 
     match method:
         case 'sma': 
-            smema = idc_sma(self, data=ema, length=smooth).unwrap()
-        case 'ema': smema = idc_ema(self, data=ema, length=smooth).unwrap()
-        case 'smma': smema = idc_smma(self, data=ema, length=smooth).unwrap()
-        case 'wma': smema = idc_wma(self, data=ema, length=smooth).unwrap()
-        case _: smema = idc_sma(self, data=ema, length=smooth).unwrap()
+            smema = self.idct_sma(data=ema, length=smooth).unwrap()
+        case 'ema': smema = self.idct_ema(data=ema, length=smooth).unwrap()
+        case 'smma': smema = self.idct_smma(data=ema, length=smooth).unwrap()
+        case 'wma': smema = self.idct_wma(data=ema, length=smooth).unwrap()
+        case _: smema = self.idct_sma(data=ema, length=smooth).unwrap()
 
     if only: 
         smema = np.flip(smema)
@@ -233,7 +232,7 @@ def idc_sema(self, data:pd.Series | None = None, length:int = 9,
     return smema
 
 @_cm._store_decorator
-def idc_bb(self, data:pd.Series | None = None, length:int = 20, 
+def idct_bb(self, data:pd.Series | None = None, length:int = 20, 
                 std_dev:float = 2, ma_type:str = 'sma', source:str = 'close', 
                 last:int | None = None, cut:bool = False) -> pd.DataFrame:
     """
@@ -267,11 +266,11 @@ def idc_bb(self, data:pd.Series | None = None, length:int = 20,
     v_data = self._StrategyClass__data_adf[source] if data is None else data
 
     match ma_type:
-        case 'sma': ma = idc_sma(self, data=v_data, length=length).to_series()
-        case 'ema': ma = idc_ema(self, data=v_data, length=length).to_series()
-        case 'wma': ma = idc_wma(self, data=v_data, length=length).to_series()
-        case 'smma': ma = idc_smma(self, data=v_data, length=length).to_series()
-        case _: ma = idc_sma(self, data=v_data, length=length).to_series()
+        case 'sma': ma = self.idct_sma(data=v_data, length=length).to_series()
+        case 'ema': ma = self.idct_ema(data=v_data, length=length).to_series()
+        case 'wma': ma = self.idct_wma(data=v_data, length=length).to_series()
+        case 'smma': ma = self.idct_smma(data=v_data, length=length).to_series()
+        case _: ma = self.idct_sma(data=v_data, length=length).to_series()
 
     std_ = (std_dev * v_data.rolling(window=length).std())
     bb = pd.DataFrame({'upper':ma + std_,
@@ -281,7 +280,7 @@ def idc_bb(self, data:pd.Series | None = None, length:int = 20,
     return bb
 
 @_cm._store_decorator
-def idc_rsi(self, data:pd.Series | None = None, length_rsi:int = 14, 
+def idct_rsi(self, data:pd.Series | None = None, length_rsi:int = 14, 
                 length:int = 14, rsi_ma_type:str = 'smma', 
                 base_type:str = 'sma', bb_std_dev:float = 2, 
                 source:str = 'close', last:int | None = None, 
@@ -319,27 +318,27 @@ def idc_rsi(self, data:pd.Series | None = None, length_rsi:int = 14,
 
     delta = self._StrategyClass__data_adf[source].diff() if data is None else data.diff()
 
-    ma = idc_sma
+    ma = self.idct_sma
     match rsi_ma_type:
-        case 'sma': ma = idc_sma
-        case 'ema': ma = idc_ema
-        case 'wma': ma = idc_wma
-        case 'smma': ma = idc_smma
+        case 'sma': ma = self.idct_sma
+        case 'ema': ma = self.idct_ema
+        case 'wma': ma = self.idct_wma
+        case 'smma': ma = self.idct_smma
 
-    ma_gain = ma(self, data = delta.where(delta > 0, 0), 
+    ma_gain = ma(data = delta.where(delta > 0, 0), 
                     length=length_rsi, source=source).to_series()
-    ma_loss = ma(self, data = -delta.where(delta < 0, 0), 
+    ma_loss = ma(data = -delta.where(delta < 0, 0), 
                     length=length_rsi, source=source).to_series()
     rsi = 100 - (100 / (1+ma_gain/ma_loss))
 
     match base_type:
-        case 'sma': mv = idc_sma(self, data=rsi, length=length).to_series()
-        case 'ema': mv = idc_ema(self, data=rsi, length=length).to_series()
-        case 'wma': mv = idc_wma(self, data=rsi, length=length).to_series()
-        case 'smma': mv = idc_smma(self, data=rsi, length=length).to_series()
-        case 'bb': mv = idc_bb(self, data=rsi, length=length,
+        case 'sma': mv = self.idct_sma(data=rsi, length=length).to_series()
+        case 'ema': mv = self.idct_ema(data=rsi, length=length).to_series()
+        case 'wma': mv = self.idct_wma(data=rsi, length=length).to_series()
+        case 'smma': mv = self.idct_smma(data=rsi, length=length).to_series()
+        case 'bb': mv = self.idct_bb(data=rsi, length=length,
                                         std_dev=bb_std_dev).to_dataframe()
-        case _: mv = idc_sma(self, data=rsi, length=length).to_series()
+        case _: mv = self.idct_sma(data=rsi, length=length).to_series()
 
     if type(mv) == pd.Series: mv.name = base_type
 
@@ -348,7 +347,7 @@ def idc_rsi(self, data:pd.Series | None = None, length_rsi:int = 14,
     return rsi
 
 @_cm._store_decorator
-def idc_stochastic(self, data:pd.DataFrame | None = None, length_k:int = 14, 
+def idct_stochastic(self, data:pd.DataFrame | None = None, length_k:int = 14, 
                         smooth_k:int = 1, length_d:int = 3, d_type:str = 'sma', 
                         source:str = 'close', last:int | None = None, 
                         cut:bool = False) -> pd.DataFrame:
@@ -385,22 +384,22 @@ def idc_stochastic(self, data:pd.DataFrame | None = None, length_k:int = 14,
     low_data = v_data.loc[:, 'low'].rolling(window=length_k).min()
     high_data = v_data.loc[:, 'high'].rolling(window=length_k).max()
 
-    ma = idc_sma
+    ma = self.idct_sma
     match d_type:
-        case 'sma': ma = idc_sma
-        case 'ema': ma = idc_ema
-        case 'wma': ma = idc_wma
-        case 'smma': ma = idc_smma
+        case 'sma': ma = self.idct_sma
+        case 'ema': ma = self.idct_ema
+        case 'wma': ma = self.idct_wma
+        case 'smma': ma = self.idct_smma
 
     stoch = (((v_data[source] - low_data) / 
                 (high_data - low_data)) * 100).rolling(window=smooth_k).mean()
     result = pd.DataFrame({'stoch':stoch, 
-                            d_type:ma(self, data=stoch, length=length_d).to_series()})
+                            d_type:ma(data=stoch, length=length_d).to_series()})
 
     return result
 
 @_cm._store_decorator
-def idc_adx(self, data:pd.DataFrame | None = None, smooth:int = 14, 
+def idct_adx(self, data:pd.DataFrame | None = None, smooth:int = 14, 
                 length_di:int = 14, only:bool = False, 
                 last:int | None = None, cut:bool = False) -> pd.DataFrame:
     """
@@ -429,7 +428,7 @@ def idc_adx(self, data:pd.DataFrame | None = None, smooth:int = 14,
 
     v_data = self._StrategyClass__data_adf if data is None else data
 
-    atr = idc_atr(self, length=length_di, smooth='smma').unwrap()
+    atr = self.idct_atr(length=length_di, smooth='smma').unwrap()
 
     dm_p_raw = v_data.loc[:, 'high'].diff()
     dm_n_raw = -v_data.loc[:, 'low'].diff()
@@ -441,10 +440,10 @@ def idc_adx(self, data:pd.DataFrame | None = None, smooth:int = 14,
         np.where((dm_n_raw > dm_p_raw) & (dm_n_raw > 0), dm_n_raw, 0), 
         index=v_data.index)
 
-    di_p = 100 * idc_smma(self, dm_p, length=length_di).to_series() / atr
-    di_n = 100 * idc_smma(self, dm_n, length=length_di).to_series() / atr
+    di_p = 100 * self.idct_smma(dm_p, length=length_di).to_series() / atr
+    di_n = 100 * self.idct_smma(dm_n, length=length_di).to_series() / atr
 
-    adx = idc_smma(self,
+    adx = self.idct_smma(
         data=100 * np.abs((di_p - di_n) / (di_p + di_n).replace(0, 1)), 
         length=smooth).to_series()
 
@@ -455,7 +454,7 @@ def idc_adx(self, data:pd.DataFrame | None = None, smooth:int = 14,
     return adx
 
 @_cm._store_decorator
-def idc_macd(self, data:pd.Series | None = None, short_len:int = 12, 
+def idct_macd(self, data:pd.Series | None = None, short_len:int = 12, 
                 long_len:int = 26, signal_len:int = 9, 
                 macd_ma_type:str = 'ema', signal_ma_type:str = 'ema', 
                 histogram:bool = True, source:str = 'close', 
@@ -490,25 +489,25 @@ def idc_macd(self, data:pd.Series | None = None, short_len:int = 12,
 
     v_data = self._StrategyClass__data_adf[source] if data is None else data
 
-    macd_ma = idc_ema
+    macd_ma = self.idct_ema
     match macd_ma_type:
         case 'ema':
-            macd_ma = idc_ema
+            macd_ma = self.idct_ema
         case 'sma':
-            macd_ma = idc_sma
+            macd_ma = self.idct_sma
 
-    signal_ma = idc_ema
+    signal_ma = self.idct_ema
     match signal_ma_type:
         case 'ema':
-            signal_ma = idc_ema
+            signal_ma = self.idct_ema
         case 'sma':
-            signal_ma = idc_sma
+            signal_ma = self.idct_sma
     
-    short_ema = macd_ma(self, data=v_data, length=short_len).to_series()
-    long_ema = macd_ma(self, data=v_data, length=long_len).to_series()
+    short_ema = macd_ma(data=v_data, length=short_len).to_series()
+    long_ema = macd_ma(data=v_data, length=long_len).to_series()
     macd = short_ema - long_ema
 
-    signal_line = signal_ma(self, data=macd, length=signal_len).to_series()
+    signal_line = signal_ma(data=macd, length=signal_len).to_series()
 
     result = pd.DataFrame({'macd':macd, 'signal':signal_line, 
                             'histogram':macd-signal_line} 
@@ -518,7 +517,7 @@ def idc_macd(self, data:pd.Series | None = None, short_len:int = 12,
     return result
 
 @_cm._store_decorator
-def idc_sqzmom(self, data:pd.DataFrame | None = None, 
+def idct_sqzmom(self, data:pd.DataFrame | None = None, 
                     bb_len:int = 20, bb_mult:float = 1.5, 
                     kc_len:int = 20, kc_mult:float = 1.5, 
                     use_tr:bool = True, source:str = 'close', 
@@ -559,14 +558,14 @@ def idc_sqzmom(self, data:pd.DataFrame | None = None,
 
     v_data = self._StrategyClass__data_adf if data is None else data
 
-    basis = idc_sma(self, length=bb_len).unwrap()
+    basis = self.idct_sma(length=bb_len).unwrap()
     dev = bb_mult * v_data.loc[:, source].rolling(window=bb_len).std(ddof=0)
 
     upper_bb = basis + dev
     lower_bb = basis - dev
 
-    ma = idc_sma(self, length=kc_len).unwrap()
-    range_ = idc_sma(self, data=idc_trange(self).to_series()
+    ma = self.idct_sma(length=kc_len).unwrap()
+    range_ = self.idct_sma(data=self.idct_trange().to_series()
                             if use_tr else v_data['high']-v_data['low'], 
                             length=kc_len).unwrap()
 
@@ -577,9 +576,9 @@ def idc_sqzmom(self, data:pd.DataFrame | None = None,
 
     d = v_data[source] - ((v_data.loc[:, 'low'].rolling(window=kc_len).min() + 
                             v_data.loc[:, 'high'].rolling(window=kc_len).max()) / 2 + 
-                            idc_sma(self, length=kc_len).unwrap()) / 2
+                            self.idct_sma(length=kc_len).unwrap()) / 2
 
-    histogram = idc_rlinreg(self, data=d, length=kc_len, offset=0).unwrap()
+    histogram = self.idct_rlinreg(data=d, length=kc_len, offset=0).unwrap()
 
     result = pd.DataFrame({'sqzmom':pd.Series(sqz, index=v_data.index), 
                             'histogram':histogram}, 
@@ -587,7 +586,7 @@ def idc_sqzmom(self, data:pd.DataFrame | None = None,
     return result
 
 @_cm._store_decorator
-def idc_rlinreg(self, data:pd.Series | None = None, 
+def idct_rlinreg(self, data:pd.Series | None = None, 
                 source:str = 'close',
                 length:int = 5, offset:int = 1,
                 cut:bool = False) -> pd.Series:
@@ -619,7 +618,7 @@ def idc_rlinreg(self, data:pd.Series | None = None,
     return m * (length - 1 - offset) + b
 
 @_cm._store_decorator
-def idc_mom(self, data:pd.Series | None = None, length:int = 10, 
+def idct_mom(self, data:pd.Series | None = None, length:int = 10, 
                 source:str = 'close', last:int | None = None,
                 cut:bool = False) -> pd.Series:
     """
@@ -646,7 +645,7 @@ def idc_mom(self, data:pd.Series | None = None, length:int = 10,
     return mom
 
 @_cm._store_decorator
-def idc_ichimoku(self, data:pd.DataFrame | None = None, tenkan_period:int = 9, 
+def idct_ichimoku(self, data:pd.DataFrame | None = None, tenkan_period:int = 9, 
                     kijun_period:int = 26, senkou_span_b_period:int = 52, 
                     ichimoku_lines:bool = True, 
                     last:int | None = None, cut:bool = False) -> pd.DataFrame:
@@ -700,7 +699,7 @@ def idc_ichimoku(self, data:pd.DataFrame | None = None, tenkan_period:int = 9,
     return senkou_span
 
 @_cm._store_decorator
-def idc_atr(self, length:int = 14, smooth:str = 'smma', 
+def idct_atr(self, length:int = 14, smooth:str = 'smma', 
                 last:int | None = None, cut:bool = False) -> np.ndarray:
     """
     Calculate the average true range (ATR).
@@ -718,29 +717,29 @@ def idc_atr(self, length:int = 14, smooth:str = 'smma',
         DataWrapper: Series with the average true range values for each step.
     """
 
-    tr = idc_trange(self).to_series()
+    tr = self.idct_trange().to_series()
 
     match smooth:
         case 'wma':
-            atr:np.ndarray = idc_wma(self, data=tr, length=length, 
-                                    last=last).unwrap()
+            atr:np.ndarray = self.idct_wma(data=tr, length=length, 
+                                            last=last).unwrap()
         case 'sma':
-            atr:np.ndarray = idc_sma(self, data=tr, length=length, 
-                                    last=last).unwrap()
+            atr:np.ndarray = self.idct_sma(data=tr, length=length, 
+                                            last=last).unwrap()
         case 'ema':
-            atr:np.ndarray = idc_ema(self, data=tr, length=length, 
-                                    last=last).unwrap()
+            atr:np.ndarray = self.idct_ema(data=tr, length=length, 
+                                            last=last).unwrap()
         case 'smma':
-            atr:np.ndarray = idc_smma(self, data=tr, length=length, 
-                                    last=last).unwrap()
+            atr:np.ndarray = self.idct_smma(data=tr, length=length, 
+                                            last=last).unwrap()
         case _:
-            atr:np.ndarray = idc_wma(self, data=tr, length=length, 
-                                    last=last).unwrap()
+            atr:np.ndarray = self.idct_wma(data=tr, length=length, 
+                                            last=last).unwrap()
 
     return atr
 
 @_cm._store_decorator
-def idc_trange(self, data:pd.DataFrame | None = None, 
+def idct_trange(self, data:pd.DataFrame | None = None, 
                     handle_na: bool = True, last:int | None = None,
                     cut:bool = False) -> pd.Series:
     """

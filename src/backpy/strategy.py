@@ -295,20 +295,28 @@ class StrategyClass(ABC):
         self.__to_delate = {}
 
         # Set decorators
-        for instance in [self, idc]:
-            for name in dir(instance): 
-                attr = getattr(instance, name)
+        # Indicators
+        for name in dir(idc):
+            attr = getattr(idc, name)
 
-                if not callable(attr):
-                    continue
-                elif getattr(attr, '_store', False):
-                    logger.debug("Adding __data_store decorator to '%s'", name)
-                    decorator = getattr(self, '_StrategyClass__data_store')(attr)
-                    setattr(instance, name, decorator)
-                elif getattr(attr, '_uidc', False):
-                    logger.debug("Adding __uidc decorator to '%s'", name)
-                    decorator = getattr(self, '_StrategyClass__uidc')(attr)
-                    setattr(instance, name, decorator)
+            if not callable(attr):
+                continue
+            elif getattr(attr, '_store', False):
+                logger.debug("Adding __data_store decorator to '%s'", name)
+                decorator = getattr(self, '_StrategyClass__data_store')(attr)
+                setattr(self, name, lambda *args, dec=decorator, **kwargs: 
+                                        dec(self, *args, **kwargs))
+
+        # User indicators
+        for name in dir(self): 
+            attr = getattr(self, name)
+
+            if not callable(attr):
+                continue
+            elif getattr(attr, '_uidc', False):
+                logger.debug("Adding __uidc decorator to '%s'", name)
+                decorator = getattr(self, '_StrategyClass__uidc')(attr)
+                setattr(self, name, decorator)
 
     @abstractmethod
     def next(self) -> Any: ...
@@ -1699,7 +1707,7 @@ class StrategyClass(ABC):
         """
 
         # Fibonacci calc.
-        return idc.idc_fibonacci(lv0=lv0, lv1=lv1)
+        return self.idct_fibonacci(lv0=lv0, lv1=lv1) # type: ignore
 
     def idc_ema(self, length:int, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
@@ -1737,8 +1745,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Ema calc.
-        return idc.idc_ema(self, length=length, source=source, 
-                                last=last, cut=True)
+        return self.idct_ema(length=length, source=source, # type: ignore
+                            last=last, cut=True)
 
     def idc_sma(self, length:int, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
@@ -1776,8 +1784,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Sma calc.
-        return idc.idc_sma(self, length=length, source=source, 
-                                last=last, cut=True)
+        return self.idct_sma(length=length, source=source, # type: ignore
+                            last=last, cut=True)
 
     def idc_wma(self, length:int, source:str = 'close', 
                 invt_weight:bool = False, last:int | None = None) -> flx.DataWrapper:
@@ -1816,7 +1824,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Wma calc.
-        return idc.idc_wma(self, length=length, source=source, 
+        return self.idct_wma(length=length, source=source, # type: ignore
                             invt_weight=invt_weight, last=last, cut=True)
     
     def idc_smma(self, length:int, source:str = 'close', 
@@ -1855,7 +1863,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Smma calc.
-        return idc.idc_smma(self, length=length, source=source, 
+        return self.idct_smma(length=length, source=source, # type: ignore
                             last=last, cut=True)
 
     def idc_sema(self, length:int = 9, method:str = 'sma', 
@@ -1914,7 +1922,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Sema calc.
-        return idc.idc_sema(self, length=length, method=method, smooth=smooth, 
+        return self.idct_sema(length=length, method=method, smooth=smooth, # type: ignore
                             only=only, source=source, last=last, cut=True)
 
     def idc_bb(self, length:int = 20, std_dev:float = 2, ma_type:str = 'sma', 
@@ -1972,7 +1980,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Bb calc.
-        return idc.idc_bb(self, length=length, std_dev=std_dev, 
+        return self.idct_bb(length=length, std_dev=std_dev, # type: ignore
                         ma_type=ma_type, source=source, last=last, cut=True)
 
     def idc_rsi(self, length_rsi:int = 14, length:int = 14, 
@@ -2044,7 +2052,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Rsi calc.
-        return idc.idc_rsi(self, length_rsi=length_rsi, length=length, 
+        return self.idct_rsi(length_rsi=length_rsi, length=length, # type: ignore
                             rsi_ma_type=rsi_ma_type, base_type=base_type, 
                             bb_std_dev=bb_std_dev, source=source, 
                             last=last, cut=True)
@@ -2108,7 +2116,7 @@ class StrategyClass(ABC):
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
         # Calc stoch.
-        return idc.idc_stochastic(self, length_k=length_k, smooth_k=smooth_k, 
+        return self.idct_stochastic(length_k=length_k, smooth_k=smooth_k, # type: ignore
                                 length_d=length_d, d_type=d_type, 
                                 source=source, last=last, cut=True)
 
@@ -2152,7 +2160,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc adx.
-        return idc.idc_adx(self, smooth=smooth, length_di=length_di, 
+        return self.idct_adx(smooth=smooth, length_di=length_di, # type: ignore
                         only=only, last=last, cut=True)
 
     def idc_macd(self, short_len:int = 12, long_len:int = 26, 
@@ -2221,7 +2229,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc macd.
-        return idc.idc_macd(self, short_len=short_len, long_len=long_len, 
+        return self.idct_macd(short_len=short_len, long_len=long_len, # type: ignore
                             signal_len=signal_len, macd_ma_type=macd_ma_type, 
                             signal_ma_type=signal_ma_type, histogram=histogram, 
                             source=source, last=last, cut=True)
@@ -2295,7 +2303,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc sqzmom.
-        return idc.idc_sqzmom(self, bb_len=bb_len, bb_mult=bb_mult, 
+        return self.idct_sqzmom(bb_len=bb_len, bb_mult=bb_mult, # type: ignore
                             kc_len=kc_len, kc_mult=kc_mult, 
                             use_tr=use_tr, source=source, 
                             last=last, cut=True)
@@ -2336,7 +2344,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc momentum.
-        return idc.idc_mom(self, length=length, source=source, 
+        return self.idct_mom(length=length, source=source, # type: ignore
                             last=last, cut=True)
 
     def idc_ichimoku(self, tenkan_period:int = 9, kijun_period:int = 26, 
@@ -2391,7 +2399,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
         
         # Calc ichimoku.
-        return idc.idc_ichimoku(self, tenkan_period=tenkan_period, 
+        return self.idct_ichimoku(tenkan_period=tenkan_period, # type: ignore
                                 kijun_period=kijun_period, 
                                 senkou_span_b_period=senkou_span_b_period, 
                                 ichimoku_lines=ichimoku_lines, 
@@ -2430,5 +2438,5 @@ class StrategyClass(ABC):
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
         # Calc atr.
-        return idc.idc_atr(self, length=length, smooth=smooth, 
+        return self.idct_atr(length=length, smooth=smooth, # type: ignore
                             last=last, cut=True)
