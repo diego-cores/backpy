@@ -868,6 +868,8 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
         - Profit: The total amount earned.
         - Gross earnings: Only the profits.
         - Gross losses: Only the losses.
+        - Commission cost: Total commissions approximate calculation made 
+            with the total commission applied to the amount + profit.
         - Max return: The historical maximum of returns.
         - Return from max: Returns from the all-time high.
         - Days from max: Days from the all-time return high.
@@ -878,6 +880,8 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
         - Average ratio: The average ratio.
         - Average return: The average percentage earned.
         - Average profit: The average profit earned.
+        - Average return abs: The average percentage earned absolute values.
+        - Average profit abs: The average profit earned absolute values.
         - Profit fact: The profit factor is calculated by dividing 
                 total profits by total losses.
         - Return diary std: The standard deviation of daily return, 
@@ -987,6 +991,9 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
     trades_streak = (trades_count_cs.cumsum() 
                      - np.maximum.accumulate(trades_count_cs.cumsum()))
 
+    # Commission calc.
+    total_commission:float = (trades['amount'] * (1 + trades['profitPer'] / 100) * (trades['commission']/100)).sum()
+
     with np.errstate(over='ignore'):
         trades['multiplier'] = 1 + trades['profitPer'] / 100
 
@@ -1015,6 +1022,8 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
         'Gross losses':[utils.round_r(abs(trades['profit'][trades['profit']<=0].sum())
                            if not pd.isna(trades['profit']).all() else 0, 4),
                         _cm.__COLORS['RED']],
+
+        'Commission cost':[round(total_commission, 2), _cm.__COLORS['RED']],
 
         'Max return':[str(utils.round_r((multiplier_cumprod.max()-1)*100,2))+'%'],
 
@@ -1050,7 +1059,14 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
                 trades.loc[:, 'multiplier'].dropna().to_numpy().mean()-1)*100,2))+'%',
             _cm.__COLORS['YELLOW'],],
 
-        'Average profit':[str(round(trades.loc[:, 'profit'].mean(),2))+'%',
+        'Average profit':[str(round(trades.loc[:, 'profit'].mean(),2)),
+                    _cm.__COLORS['YELLOW'],],
+
+        'Average return abs':[str(round((
+                np.abs(trades.loc[:, 'multiplier'].dropna().to_numpy()).mean()-1)*100,2))+'%',
+            _cm.__COLORS['YELLOW'],],
+
+        'Average profit abs':[str(round(trades.loc[:, 'profit'].abs().mean(),2)),
                     _cm.__COLORS['YELLOW'],],
 
         'Profit fact':[_profit_fact:=utils.round_r(profit_fact(trades.loc[:, 'profit']), 3),
@@ -1130,7 +1146,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
         'Max consecutive winn':[trades_csct.max(),
                                 _cm.__COLORS['GREEN']],
 
-        'Max consecutive loss':[abs(trades_csct.min()),
+        'Max consecutive loss':[abs(trades_csct.min()), # pyrefly: ignore
                                 _cm.__COLORS['RED']],
 
         'Max losing streak':[abs(trades_streak.min())],
