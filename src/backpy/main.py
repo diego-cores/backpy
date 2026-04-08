@@ -18,6 +18,7 @@ Functions:
     run_config: Configure the module to execute the strategy as you prefer.
     run: Executes the backtesting process.
     run_animation: Run an animation with your strategy and data.
+    reg_indicator: Record an indicator to graph it.
     plot: Plots your data, highlighting the trades made.
     plot_strategy: Plots statistics for your strategy.
     plot_strategy_decorator: Decorator function for the 'plot_strategy_add' function.
@@ -27,12 +28,13 @@ Hidden Functions:
     __load_binance_data: Load data from Binance using a client.
 """
 
-from typing import Callable, Sequence, cast
+from typing import Callable, Sequence
 from datetime import datetime
 import logging
 
 from matplotlib.collections import LineCollection, PatchCollection, PathCollection
 from matplotlib.dates import DateFormatter, date2num, num2date
+from matplotlib.legend_handler import HandlerTuple
 from matplotlib.animation import FuncAnimation
 from matplotlib.axes._axes import Axes
 import matplotlib.pyplot as plt
@@ -526,9 +528,9 @@ def save_data_bpd(file_name:str = 'data') -> None:
 
 def run_config(initial_funds:int = 10000, commission:tuple | float = 0, 
         spread:tuple | float = 0, slippage:tuple | float = 0, 
-        gaps:bool = True, ord_closer:bool = True, 
-        order_ord:dict | None = None, on_limit:bool = True,
-        chunk_size:int | None = None) -> None:
+        nper_commission:bool = False, gaps:bool = True, 
+        ord_closer:bool = True, order_ord:dict | None = None, 
+        on_limit:bool = True, chunk_size:int | None = None) -> None:
     """
     Run Config
 
@@ -551,6 +553,8 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
             There is no variation between maker and taker.
         slippage (tuple | float, optional): It will be calculated at each entry and exit.
             There is no variation between maker and taker.
+        nper_commission (bool, optional): Non-percentage commission cost, 
+            the commission value is charged.
         gaps (bool, optional): If True, gaps are calculated at the entry price 
             in 'taker' orders.
         ord_closer (bool, optional): If True, orders are executed based on 
@@ -583,6 +587,7 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
     _cm.__min_gap = not gaps
     _cm.__orders_nclose = not ord_closer
     _cm.__limit_ig = not on_limit
+    _cm.__nper_commission = nper_commission
 
     if isinstance(order_ord, dict):
         _cm.__orders_order = {k:order_ord[k] for k in order_ord if k in 
@@ -722,7 +727,7 @@ def run(cls:type|list[type]|tuple[type], name:str|None = None, prnt:bool = True,
         trades = pd.concat([trades, act_trades], ignore_index=True)
 
     backtest = {
-        'name':_cm.__gen_fname(name or cls[0].__name__, _cm.__backtests), 
+        'name':_cm.__gen_fname(name or cls[0].__name__, _cm.__get_names(_cm.__backtests)), 
         'trades':trades, 
         'balance_rec':pd.Series(balance_rec, index=_cm.__data.index),
         'init_funds':_cm.__init_funds,
@@ -956,10 +961,315 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
         toolbar='limited'
     )
 
+def reg_indicator(panel:str|None=None, color:str|list|None=None, 
+                    name:str|None=None, **config:dict) -> Callable:
+    """
+    Register indicator
+
+    Record an indicator to graph it.
+
+    Example:
+    >>> backpy.reg_indicator(panel='volume')(
+    ...     backpy.idct_ema, length=3, dt_source='volume')
+
+    Function wrapped args:
+        func (Callable): Indicator function. The output must be aligned with 'data'.
+        *args (tuple): Indicator arguments.
+        dt_source (list|str|None, optional): Data to be passed to the indicator.
+            Columns of 'data': 'close', 'open', 'low', 'high', 'volume'.
+        **kwargs (dict): Indicator known arguments.
+
+    Args:
+        panel (str|None, optional): Name of panel to draw the indicator, 
+            panels: 'price', 'volume', another indicator.
+        color (str|list|None, optional): Indicator color, None = random color.
+        name (str|None, optional): If it already exists, a number will be added at the end.
+        **config (dict): Extra config update to the saved data.
+
+    Return:
+        Callable: Function wrapped up to take function and arguments from the indicator.
+    """
+
+    if _cm.__data is None:
+        raise ValueError()
+
+    def __add_indicator(func:Callable, *args:tuple, 
+        dt_source:list|str|None = ['close'], **kwargs:dict) -> str:
+        """
+        Add indicator
+
+        Function wrapped up to take function and arguments from the indicator.
+
+        Args:
+            func (Callable): Indicator function. The output must be aligned with 'data'.
+            *args (tuple): Indicator arguments.
+            dt_source (list|str|None, optional): Data to be passed to the indicator.
+                Columns of 'data': 'close', 'open', 'low', 'high', 'volume'.
+            **kwargs (dict): Indicator known arguments.
+
+        Return:
+            str: Indicator registered name.
+        """
+        nonlocal name, panel, color, config
+
+        if isinstance(dt_source, str):
+            dt_source = [dt_source]
+        
+        if dt_source and any([not src in _cm.__data.columns for src in dt_source]):
+            raise ValueError()
+
+        data = _cm.__data[dt_source if len(dt_source) > 1 else dt_source[0]] if dt_source else _cm.__data
+        idc_data = func(data, *args, **kwargs)
+        args_wdef = utils.get_darguments(func)
+        args_wdef.update({k: kwargs[k] for k in args_wdef.keys() if k in kwargs})
+        args_wdef.update(zip(args_wdef.keys(), args))
+        args_wdef.pop('cut', None); args_wdef.pop('last', None)
+
+        name = _cm.__gen_fname(
+            name or func.__name__, list(_cm.__plot_indicators.keys()))
+
+        if func.__name__ in _cm.__plot_indicators_def.keys():
+            def_config = _cm.__plot_indicators_def[func.__name__]
+        else:
+            def_config = _cm.__plot_indicators_def['def']
+
+        color = color or def_config['color']
+        panel = panel or  def_config['panel']
+
+        if isinstance(color, str):
+            color = [color]
+        elif len(color) < len(def_config['color']):
+            color = color[:1]
+        color[:len(def_config['color'])]
+
+        rname = func.__name__.replace('_', ' ').split(' ')
+        if rname[0] in ['idct', 'idc']:
+            del rname[0]
+
+        sdata = def_config.copy()
+        sdata.update({
+            'data':idc_data, 'panel':panel, 'color':color, 
+            'rname':''.join(rname), 'adef':args_wdef
+        })
+        sdata.update(config)
+
+        _cm.__plot_indicators.update({name:sdata})
+        return name
+
+    return __add_indicator
+
+# Wip
+def gen_axes(num:int, diff:int=0, sharex:Axes|None=None, sharey:Axes|None=None, autoget_sharex:bool = False, autoget_sharey:bool = False) -> list:
+    axes = []
+
+    for i in range(num):
+        ax = plt.subplot2grid((num+diff,1), (i+diff,0), rowspan=1, 
+            colspan=1, sharex=sharex, sharey=sharey)
+        axes.append(ax)
+
+        if autoget_sharex:
+            sharex = ax
+        if autoget_sharey:
+            sharey = ax
+
+    return axes
+
+# Wip
+def draw_indicators(indicators, named_axes, x_index, width):
+    if not indicators:
+        return
+
+    colorin_axes = {i:[] for i in named_axes.keys()}
+
+    legend_rname = True # Global Variable
+    legend_args = True # Global Variable
+    fontsize = 'xx-small' # Global Variable
+
+    def esc_latex(text):
+        replacements = {
+            '_': r'\_',
+            '^': r'\^{}',
+            '&': r'\&',
+            '%': r'\%',
+            '$': r'\$',
+            '#': r'\#',
+            '{': r'\{',
+            '}': r'\}',
+            '~': r'\textasciitilde{}',
+            '\\': r'\textbackslash{}',
+        }
+        return ''.join(replacements.get(c, c) for c in text)
+
+    mathform = lambda title, description: rf'$\bf{{{esc_latex(title)}}}$: $\it{{{esc_latex(description)}}}$.'
+    legends = {ax_nm:{'handles':[], 'labels':[]} for ax_nm in named_axes.keys()}
+
+    for idc in indicators:
+        color = _cm.__plot_indicators[idc]['color']
+        data = _cm.__plot_indicators[idc]['data']
+        panel = _cm.__plot_indicators[idc]['panel'] or idc
+        rname = _cm.__plot_indicators[idc]['rname'] if legend_rname else idc
+        adef = _cm.__plot_indicators[idc]['adef'] if legend_args else {}
+        names = None
+
+        if isinstance(data, pd.DataFrame):
+            names = data.columns
+        elif isinstance(data, np.ndarray) and data.dtype.names:
+            names = data.dtype.names
+
+        plot_data = [data[col].tolist() for col in names] if names is not None else [data]
+
+        if len(plot_data) > len(color):
+            color.extend([color[0]]*(len(plot_data)-len(color)))
+
+        # Draw style lines
+
+        # Ax lines
+        style_ax = _cm.__plot_indicators[idc].get('styleAxNew', [])
+        for stl in style_ax:
+            draw_st = _cm.__plot_indicators[idc].get(stl, {})
+            if not draw_st:
+                continue
+
+            cords = _cm.__plot_indicators[idc][stl].get('cords', None)
+            if not cords:
+                cords = _cm.__plot_indicators[idc][stl].get('btw', None)
+
+            axst_color = _cm.__plot_indicators[idc][stl].get('color', None)
+            line_style = _cm.__plot_indicators[idc][stl].get('style', 'solid')
+
+            if isinstance(cords, float|int):
+                named_axes[panel].axhline(cords, color=axst_color, linestyle=line_style, zorder=0.4)
+            elif isinstance(cords, tuple|list):
+                named_axes[panel].axhspan(*cords[:2], color=axst_color, zorder=0.4)
+
+        # Ar var
+        style_arvar = _cm.__plot_indicators[idc].get('styleArVar', [])
+        for stl in style_arvar:
+            draw_st = _cm.__plot_indicators[idc].get(stl, {})
+            if not draw_st:
+                continue
+
+            cords = _cm.__plot_indicators[idc][stl].get('btw', None)
+            if not cords:
+                continue
+
+            value_indexes = [plot_data[i] for i in cords][:2]
+            for i in cords:
+                plot_data[i]
+
+            arvarcl = _cm.__plot_indicators[idc][stl].get('color', None)
+            arvarclng = _cm.__plot_indicators[idc][stl].get('colorNeg', None)
+
+            named_axes[panel].fill_between(x_index, *value_indexes,
+                where=list(value_indexes[1][i]>=v for i,v in enumerate(value_indexes[0])),
+                interpolate=True,
+                color=arvarclng,
+                zorder=0.4)
+
+            named_axes[panel].fill_between(x_index, *value_indexes,
+                where=list(value_indexes[1][i]<v for i,v in enumerate(value_indexes[0])),
+                interpolate=True,
+                color=arvarcl,
+                zorder=0.4)
+
+        # Draw func
+        def default_draw(x, y, color, zorder):
+            return named_axes[panel].plot(x, y, color=color, zorder=zorder)
+
+        draw_functions = [default_draw]*len(plot_data)
+
+        style_ondraw = _cm.__plot_indicators[idc].get('styleOnDraw', [])
+        for stl in style_ondraw:
+            draw_st = _cm.__plot_indicators[idc].get(stl, {})
+            if not draw_st:
+                continue
+
+            index = _cm.__plot_indicators[idc][stl].get('value', None)
+            if not index or index>=len(plot_data):
+                continue
+
+            match _cm.__plot_indicators[idc][stl].get('func', None):
+                case 'hist':
+                    def draw_hist(x, y, color, zorder):
+                        y = np.array(y)
+                        x = np.array(x)
+                        diff = np.diff(y)
+                        diff = np.insert(diff, 0, 0)
+
+                        pos_color = _cm.__plot_indicators[idc][stl].get('color', None)
+                        neg_color = _cm.__plot_indicators[idc][stl].get('colorNeg', pos_color)
+
+                        p_mask = (y>0) & (diff>=0)
+                        d_mask = (y<=0) & (diff<=0)
+
+                        artist_p = named_axes[panel].bar(x[p_mask], y[p_mask], 
+                            width=width, color=pos_color, zorder=zorder)
+                        artist_d = named_axes[panel].bar(x[d_mask], y[d_mask], 
+                            width=width, color=neg_color, zorder=zorder)
+
+                        pos_color = _cm.__plot_indicators[idc][stl].get('colorF', None)
+                        neg_color = _cm.__plot_indicators[idc][stl].get('colorNegF', pos_color)
+
+                        pd_mask = (y>0) & (diff<0)
+                        dp_mask = (y<=0) & (diff>0)
+
+                        named_axes[panel].bar(x[pd_mask], y[pd_mask], 
+                            width=width, color=pos_color, zorder=zorder)
+                        named_axes[panel].bar(x[dp_mask], y[dp_mask], 
+                            width=width, color=neg_color, zorder=zorder)
+
+                        return [artist_p[0], artist_d[0]]
+
+                    draw_functions[index] = draw_hist
+                case _:
+                    continue
+
+        artists = []
+        _cm.__plot_indicators[idc].get('styleArVar', [])
+        for i,v in enumerate(plot_data):
+            plot_color = color[i]
+
+            if plot_color in colorin_axes[panel]:
+                plot_color = None
+
+            if plot_color:
+                colorin_axes[panel].append(plot_color)
+
+            # Draw
+            artist = draw_functions[i](
+                x_index, v, 
+                color=plot_color,
+                zorder=0.5,
+            )
+
+            if not isinstance(artist, list):
+                artist = [artist]
+
+            artists.extend(artist)
+
+        legends[panel]['handles'].append(tuple(i for i in artists))
+        legends[panel]['labels'].append(mathform(rname.upper(), 
+            f'{(', '.join(names) if not names is None else 'line')}{'; '+'; '.join(map(str,adef.values()))if adef else ''}'.lower()))
+
+    for panel in legends:
+        if not legends[panel]['handles'] or not legends[panel]['labels']:
+            continue
+
+        ndivide = max([len(handle) for handle in legends[panel]['handles']])
+        named_axes[panel].legend(
+            handles=legends[panel]['handles'], 
+            labels=legends[panel]['labels'],
+            handler_map={tuple: HandlerTuple(ndivide=ndivide, pad=0.5)},
+            fontsize=fontsize,
+            handlelength=ndivide,
+            loc=2,
+        )
+
 def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int|None = None,
-         position:str = 'complex', panel:str = 'new', style:str | None = 'last', 
-         draw_style:str | None = None, draw_style_vol:str | None = None, 
-         style_c:dict | None = None, block:bool = True) -> None:
+         idc_name:str|list[str]|None = None, panel:str = 'new', style:str | None = 'last', 
+         draw_style:str | None = None, draw_style_pos:str | None = None,
+         draw_style_vol:str | None = None, style_c:dict | None = None, 
+         block:bool = True) -> None:
     """
     Plot Graph with Trades.
 
@@ -981,6 +1291,11 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
         'line': A line traces the outline of the closures.
         'none': The data is not drawn.
 
+    Position draw styles:
+        'complex': Rectangles.
+        'simple': Arrows and closures.
+        'none': The positions are not drawn.
+
     Volume draw styles:
         'bar': Typical bar. 
         'none': The volume is not drawn.
@@ -993,16 +1308,16 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
         name (list[str|int|None]|str|int|None, optional): 
             Backtest names to extract trades from, None = -1, 
             you can add multiple by passing an list.
-        position (str, optional): Specifies how positions are drawn. Options 
-            are 'complex' or 'simple'. If None or 'none', positions will not 
-            be drawn. Default is 'complex'. The "complex" option may take longer 
-            to process.
+        idc_name (str | list[str] | None, optional): Name of registered indicators 
+            to display with the graph. Register the indicators with 'reg_indicator'.
         panel (str, optional): To create a new window or add a panel, 
             only 'new' or 'add' are possible.
         style (str | None, optional): Color style. 
             If you leave it as 'last' the last one will be used.
         draw_style (str | None, optional): Change the drawing style of the data.
             Current types: 'candle', 'line', 'none'. None = 'line'.
+        draw_style_pos (str | None, optional): Change the drawing style of the positions.
+            Current types: 'complex', 'simple', 'none', 'none'. None = 'complex'.
         draw_style_vol (str | None, optional): Change the drawing style of the
             volumen. Current types: 'bar', 'none'. None = 'bar'.
         style_c (dict | None, optional): Customize the defined style by 
@@ -1016,14 +1331,12 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
     # Exceptions.
     panel = panel.lower()
     valid_style = {'random', 'last'} | set(_cm.__plt_styles.keys())
-    draw_style = draw_style or 'line'
-    draw_style_vol = draw_style_vol or 'bar'
+    draw_style = (draw_style or 'line').lower()
+    draw_style_vol = (draw_style_vol or 'bar').lower()
+    draw_style_pos = (draw_style_pos or 'complex').lower()
 
     if _cm.__data is None or not type(_cm.__data) is pd.DataFrame or _cm.__data.empty: 
         raise exception.PlotError('Data not loaded.')
-    elif position and not position.lower() in ('complex', 'simple', 'none'):
-        raise exception.PlotError(
-            f"'{position}' Not a valid option for: 'position'.")
     elif panel not in ('new', 'add'):
         raise exception.PlotError(
             f"'{panel}' Not a valid option for: 'panel'.")
@@ -1033,6 +1346,8 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
         raise exception.PlotError(f"'{draw_style}' Not a draw style.")
     elif not draw_style_vol in {'none', 'bar'}:
         raise exception.PlotError(f"'{draw_style_vol}' Not a draw style.")
+    elif not draw_style_pos in {'none', 'simple', 'complex'}:
+        raise exception.PlotError(f"'{draw_style_pos}' Not a position style.")
 
     # Corrections.
     _cm.__data.index = utils.correct_index(_cm.__data.index)
@@ -1048,6 +1363,10 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
     plt_colors = _cm.__plt_styles[style]
     _cm.plt_style = style
 
+    if not isinstance(idc_name, list):
+        idc_name = [idc_name] if not idc_name is None else []
+    if idc_name and idc_name[0].strip() == '*':
+        idc_name = list(_cm.__plot_indicators.keys())
     if isinstance(style_c, dict):
         plt_colors.update(style_c)
 
@@ -1057,17 +1376,59 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
     if progress: 
         load_prgs.reset_size(5)
 
+    # Axes
     fig = plt.figure(figsize=(16,8))
-    ax1 = plt.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
-    ax2 = plt.subplot2grid((6,1), (5,0), rowspan=1, 
-                                  colspan=1, sharex=ax1)
 
-    gdir = plt_colors.get('gdir', False)
-    cpl.custom_ax(ax1, plt_colors['bg'], edge=gdir)
-    cpl.custom_ax(ax2, plt_colors['bg'], edge=gdir)
+    needed_axes = []
+    if not draw_style_vol == 'none':
+        needed_axes = ['volume']
 
-    if log: 
-        ax1.semilogy(); ax2.semilogy()
+    idc_fname = []
+    for i,v in enumerate(idc_name):
+        if not v in _cm.__plot_indicators.keys():
+            continue
+
+        idc_fname.append(v)
+        panel = _cm.__plot_indicators[v]['panel'] or v
+        if not panel in needed_axes and panel:
+            needed_axes.append(panel)
+
+    axes_num = len(needed_axes)
+    ax1 = None
+    diff = 0
+
+    if not draw_style == 'none' or not draw_style_pos == 'none':
+        if not 'price' in needed_axes: 
+            needed_axes.append('price')
+        else:
+            axes_num -= 1
+
+        diff = axes_num+2 # Global Variable
+        ax1 = plt.subplot2grid((axes_num+diff,1), (0,0), rowspan=diff, colspan=1)
+
+    axes_order = {'price':0, 'volume':1}
+    needed_axes.sort(key=lambda x: axes_order.get(x, 3))
+
+    axes = gen_axes(axes_num, diff=diff, sharex=ax1, autoget_sharex=True)
+    if ax1: axes.insert(0, ax1)
+
+    if not axes:
+        logger.warning('Nothing to draw')
+        return
+
+    # Drawn indicators
+    named_axes = dict(zip(needed_axes, axes))
+    draw_indicators(idc_name, named_axes, _cm.__data.index, _cm.__data_width*0.9)
+
+    def config_ax(ax, bg_color, gdir, log):
+        cpl.custom_ax(ax, bg_color, edge=gdir)
+        if log: ax.semilogy()
+
+        ax.yaxis.set_major_formatter(lambda y, _: str(y.real))
+        ax.xaxis.set_major_formatter(DateFormatter('%H:%M %d-%m-%Y'))
+
+        ax.tick_params(axis='x', labelbottom=False)
+        ax.tick_params(axis='y', labelleft=False)
 
     load_prgs.next()
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
@@ -1075,11 +1436,11 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
     # Draw style
     match draw_style:
         case 'candle':
-            utils.plot_candles(ax1, _cm.__data, _cm.__data_width*0.9,
+            utils.plot_candles(named_axes['price'], _cm.__data, _cm.__data_width*0.9,
                             color_up=market_colors.get('u', 'g'),
                             color_down=market_colors.get('d', 'r'))
         case 'line':
-            utils.plot_line(ax1, _cm.__data['close'], _cm.__data_width,
+            utils.plot_line(named_axes['price'], _cm.__data['close'], _cm.__data_width,
                             color_up=market_colors.get('u', 'g'),
                             color_down=market_colors.get('d', 'r'))
         case 'none' | _:
@@ -1089,34 +1450,28 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
     # Draw style volume
     match draw_style_vol:
         case 'bar':
-            utils.plot_volume(ax2, _cm.__data.loc[:, 'volume'], _cm.__data_width, 
+            utils.plot_volume(named_axes['volume'], _cm.__data.loc[:, 'volume'], _cm.__data_width, 
                             color=plt_colors.get('vol', 'tab:orange'))
         case 'none' | _:
             pass
     load_prgs.next()
 
-    if position and position.lower() != 'none' and len(_cm.get_backtest_names()) > 0:
-
-        trades = _cm.__get_trades(name)
-        if not trades.empty:
-            utils.plot_position(trades, ax1, 
-                            color_take=market_colors.get('u', 'green'),
-                            color_stop=market_colors.get('d', 'red'),
-                            operation_route=position.lower() == 'complex',
-                            alpha=0.3, alpha_arrow=0.8)
-
+    if len(_cm.get_backtest_names()) > 0 and not (trades:=_cm.__get_trades(name)).empty:
+        match draw_style_pos:
+            case 'complex'|'simple':
+                utils.plot_position(trades, named_axes['price'], 
+                                color_take=market_colors.get('u', 'green'),
+                                color_stop=market_colors.get('d', 'red'),
+                                operation_route=draw_style_pos == 'complex',
+                                alpha=0.3, alpha_arrow=0.8)
+            case 'none' | _:
+                pass
     load_prgs.next()
-    date_format = DateFormatter('%H:%M %d-%m-%Y')
 
-    ax2.yaxis.set_major_formatter(lambda y, _: str(y.real))
-    ax1.yaxis.set_major_formatter(lambda y, _: str(y.real))
-    ax1.xaxis.set_major_formatter(date_format)
-
-    ax1.tick_params(axis='x', labelbottom=False)
-    ax1.tick_params(axis='y', labelleft=False)
-
-    ax2.tick_params(axis='x', labelbottom=False)
-    ax2.tick_params(axis='y', labelleft=False)
+    gdir = plt_colors.get('gdir', False)
+    for i in named_axes:
+        cx_log = log if i in ['price', 'volume'] else False
+        config_ax(named_axes[i], plt_colors['bg'], gdir, cx_log)
 
     fig.autofmt_xdate()
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0, hspace=0)

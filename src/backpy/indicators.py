@@ -38,7 +38,7 @@ from . import _commons as _cm
 logger:logging.Logger = logging.getLogger(__name__)
 
 @_cm._store_decorator
-def idct_fibonacci(self, lv0:int = 10, lv1:int = 1) -> pd.DataFrame:
+def idct_fibonacci(lv0:int = 10, lv1:int = 1) -> pd.DataFrame:
     """
     Calculate Fibonacci retracement levels.
 
@@ -49,7 +49,7 @@ def idct_fibonacci(self, lv0:int = 10, lv1:int = 1) -> pd.DataFrame:
         lv1 (float, optional): Level 1 position.
 
     Returns:
-        DataWrapper: A DataWrapper with Fibonacci levels and their corresponding
+        DataFrame: A DataFrame with Fibonacci levels and their corresponding
             values.
 
     Columns:
@@ -64,194 +64,139 @@ def idct_fibonacci(self, lv0:int = 10, lv1:int = 1) -> pd.DataFrame:
                         'Value':lv0 - (lv0 - lv1) * fibo_levels})
 
 @_cm._store_decorator
-def idct_ema(self, data:pd.Series | None = None, length:int = 10, 
-                source:str = 'close', last:int | None = None, 
-                cut:bool = False) -> pd.Series:
+def idct_ema(data:pd.Series, length:int = 10) -> pd.Series:
     """
     Exponential Moving Average (EMA).
 
     This function calculates the EMA.
 
     Args:
-        data (Series | None, optional): Series of data to perform the EMA calculation.
+        data (Series): Series of data to perform the EMA calculation.
         length (int): The length of the EMA.
-        source (str, optional): The data source for the EMA calculation. Allowed 
-            parameters are 'close', 'open', 'high', 'low', and 'volume'.
-        last (int | None, optional): Number of data points to return from the 
-            present backwards. If None, returns data for all time.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Returns:
-        DataWrapper: DataWrapper containing the EMA values for each step.
+        Series: Series containing the EMA values for each step.
     """
 
-    v_data = self._StrategyClass__data_adf[source] if data is None else data
-    ema = v_data.ewm(span=length, adjust=False).mean()
-
-    return ema
+    return data.ewm(span=length, adjust=False).mean()
 
 @_cm._store_decorator
-def idct_sma(self, data:pd.Series | None = None, length:int = 10, 
-                source:str = 'close', last:int | None = None, 
-                cut:bool = False) -> pd.Series:
+def idct_sma(data:pd.Series, length:int = 10) -> pd.Series:
     """
     Simple Moving Average (SMA).
 
     This function calculates the SMA.
 
     Args:
-        data (Series | None, optional): Series of data to perform the SMA calculation.
+        data (Series): Series of data to perform the SMA calculation.
         length (int): Length of the SMA.
-        source (str, optional): Data source for SMA calculation. Allowed values are 
-                        ('close', 'open', 'high', 'low', 'volume').
-        last (int | None, optional): Number of data points to return from the present 
-                                backwards. If None, returns data for all times.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Returns:
-        DataWrapper: DataWrapper containing the SMA values for each step.
+        Series: Series containing the SMA values for each step.
     """
 
-    v_data = self._StrategyClass__data_adf[source] if data is None else data
-    sma = v_data.rolling(window=length).mean()
-
-    return sma
+    return data.rolling(window=length).mean()
 
 @_cm._store_decorator
-def idct_wma(self, data:pd.Series | None = None, 
-                length:int = 10, source:str = 'close', 
-                invt_weight:bool = False, last:int | None = None, 
-                cut:bool = False) -> pd.Series:
+def idct_wma(data:pd.Series, length:int = 10, 
+            invt_weight:bool = False) -> pd.Series:
     """
     Weighted Moving Average (WMA).
 
     This function calculates the WMA.
 
     Args:
-        data (Series | None, optional): Series of data to perform the WMA calculation.
+        data (Series): Series of data to perform the WMA calculation.
         length (int): Length of the WMA.
-        source (str, optional): Data source for WMA calculation. Allowed values are 
-                        ('close', 'open', 'high', 'low', 'volume').
         invt_weight (bool, optional): If True, the distribution of weights is reversed.
-        last (int | None, optional): Number of data points to return from the present 
-                                backwards. If None, returns data for all times.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Returns:
-        DataWrapper: DataWrapper containing the WMA values for each step.
+        Series: Series containing the WMA values for each step.
     """
-
-    v_data = self._StrategyClass__data_adf[source] if data is None else data
 
     weight = (np.arange(1, length+1)[::-1] 
                 if invt_weight else np.arange(1, length+1))
-    wma = v_data.rolling(window=length).apply(
+    wma = data.rolling(window=length).apply(
         lambda x: (x*weight).sum() / weight.sum(), raw=True)
 
     return wma
 
 @_cm._store_decorator
-def idct_smma(self, data:pd.Series|None = None, length:int = 10, 
-                source:str = 'close', last:int|None = None, 
-                cut:bool = False) -> pd.Series:
+def idct_smma(data:pd.Series, length:int = 10) -> pd.Series:
     """
     Smoothed Moving Average (SMMA).
 
     This function calculates the SMMA.
 
     Args:
-        data (Series | None, optional): Series of data to perform the SMMA calculation.
+        data (Series): Series of data to perform the SMMA calculation.
         length (int): Length of the SMMA.
-        source (str, optional): Data source for SMMA calculation. Allowed values are 
-                        ('close', 'open', 'high', 'low', 'volume').
-        last (int | None, optional): Number of data points to return from the present 
-                                backwards. If None, returns data for all times.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Returns:
-        DataWrapper: DataWrapper containing the SMMA values for each step.
+        Series: Series containing the SMMA values for each step.
     """
 
-    v_data = self._StrategyClass__data_adf[source] if data is None else data
-
-    smma = v_data.ewm(alpha=1/length, adjust=False).mean()
+    smma = data.ewm(alpha=1/length, adjust=False).mean()
     smma.shift(1)
 
     return smma
 
 @_cm._store_decorator
-def idct_sema(self, data:pd.Series | None = None, length:int = 9, 
-                method:str = 'sma', smooth:int = 5, only:bool = False, 
-                source:str = 'close', last:int | None = None, 
-                cut:bool = False) -> pd.DataFrame|np.ndarray:
+def idct_sema(data:pd.Series, length:int = 9, method:str = 'sma', 
+            smooth:int = 5, only:bool = False) -> pd.DataFrame:
     """
     Smoothed Exponential Moving Average (SEMA).
 
     This function calculates the SEMA.
 
     Args:
-        data (Series | None, optional): Series of data to perform the SEMA calculation.
+        data (Series): Series of data to perform the SEMA calculation.
         length (int, optional): Length of the EMA.
         method (str, optional): Smoothing method. Choices include various smoothing 
                         methods.
         smooth (int, optional): Length of the smoothing method.
         only (bool, optional): If True, returns only a Series with the values of the 
                     'method'.
-        source (str, optional): Data source for EMA calculation. Allowed values are 
-                        ('close', 'open', 'high', 'low', 'volume').
-        last (int | None, optional): Number of data points to return from the present 
-                                backwards. If None, returns data for all times.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Columns:
         - 'ema'
         - 'smoothed'
 
     Returns:
-        DataWrapper: DataWrapper containing 'ema' and 'smoothed' values for 
+        DataFrame: DataFrame containing 'ema' and 'smoothed' values for 
                         each step.
     """
 
-    v_data = self._StrategyClass__data_adf[source] if data is None else data
-    ema = v_data.ewm(span=length, adjust=False).mean()
+    ema = data.ewm(span=length, adjust=False).mean()
 
     match method:
         case 'sma': 
-            smema = self.idct_sma(data=ema, length=smooth).unwrap()
-        case 'ema': smema = self.idct_ema(data=ema, length=smooth).unwrap()
-        case 'smma': smema = self.idct_smma(data=ema, length=smooth).unwrap()
-        case 'wma': smema = self.idct_wma(data=ema, length=smooth).unwrap()
-        case _: smema = self.idct_sma(data=ema, length=smooth).unwrap()
+            smema = idct_sma(data=ema, length=smooth)
+        case 'ema': smema = idct_ema(data=ema, length=smooth)
+        case 'smma': smema = idct_smma(data=ema, length=smooth)
+        case 'wma': smema = idct_wma(data=ema, length=smooth)
+        case _: smema = idct_sma(data=ema, length=smooth)
 
-    if only: 
-        smema = np.flip(smema)
-        return np.flip(smema[len(smema)-last 
-                                if last != None and last < len(smema) else 0:])
+    if only: return smema
     
     smema = pd.DataFrame({'ema':ema, 'smoothed':smema}, index=ema.index)
     return smema
 
 @_cm._store_decorator
-def idct_bb(self, data:pd.Series | None = None, length:int = 20, 
-                std_dev:float = 2, ma_type:str = 'sma', source:str = 'close', 
-                last:int | None = None, cut:bool = False) -> pd.DataFrame:
+def idct_bb(data:pd.Series, length:int = 20, std_dev:float = 2, 
+            ma_type:str = 'sma') -> pd.DataFrame:
     """
     Bollinger Bands (BB).
 
     This function calculates the BB.
 
     Args:
-        data (Series | None, optional): Series of data to perform the Bollinger Bands 
+        data (Series): Series of data to perform the Bollinger Bands 
             calculation.
         length (int, optional): Window length for calculating Bollinger Bands.
         std_dev (float, optional): Number of standard deviations for the bands.
         ma_type (str, optional): Type of moving average. For example, 'sma' for simple 
                         moving average.
-        source (str, optional): Data source for calculation. Allowed values are 
-                        ('close', 'open', 'high', 'low').
-        last (int | None, optional): Number of data points to return from the present 
-                                backwards. If None, returns data for all times.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Columns:
         - 'upper'
@@ -259,39 +204,35 @@ def idct_bb(self, data:pd.Series | None = None, length:int = 20,
         - 'lower'
 
     Returns:
-        DataWrapper: DataWrapper containing 'upper', '{ma_type}', and 'lower' 
+        DataFrame: DataFrame containing 'upper', '{ma_type}', and 'lower' 
                         values for each step.
     """
 
-    v_data = self._StrategyClass__data_adf[source] if data is None else data
-
     match ma_type:
-        case 'sma': ma = self.idct_sma(data=v_data, length=length).to_series()
-        case 'ema': ma = self.idct_ema(data=v_data, length=length).to_series()
-        case 'wma': ma = self.idct_wma(data=v_data, length=length).to_series()
-        case 'smma': ma = self.idct_smma(data=v_data, length=length).to_series()
-        case _: ma = self.idct_sma(data=v_data, length=length).to_series()
+        case 'sma': ma = idct_sma(data=data, length=length)
+        case 'ema': ma = idct_ema(data=data, length=length)
+        case 'wma': ma = idct_wma(data=data, length=length)
+        case 'smma': ma = idct_smma(data=data, length=length)
+        case _: ma = idct_sma(data=data, length=length)
+    std_ = (std_dev * data.rolling(window=length).std())
 
-    std_ = (std_dev * v_data.rolling(window=length).std())
-    bb = pd.DataFrame({'upper':ma + std_,
-                        ma_type:ma,
-                        'lower':ma - std_}, index=ma.index)
-
-    return bb
+    return pd.DataFrame({
+        'upper':ma + std_, 
+        ma_type:ma,
+        'lower':ma - std_
+    }, index=ma.index)
 
 @_cm._store_decorator
-def idct_rsi(self, data:pd.Series | None = None, length_rsi:int = 14, 
-                length:int = 14, rsi_ma_type:str = 'smma', 
-                base_type:str = 'sma', bb_std_dev:float = 2, 
-                source:str = 'close', last:int | None = None, 
-                cut:bool = False)  -> pd.DataFrame:
+def idct_rsi(data:pd.Series, length_rsi:int = 14, 
+            length:int = 14, rsi_ma_type:str = 'smma', 
+            base_type:str = 'sma', bb_std_dev:float = 2)  -> pd.DataFrame:
     """
     Relative Strength Index (RSI).
 
     This function calculates the RSI.
 
     Args:
-        data (Series | None, optional): Series of data to perform the RSI calculation.
+        data (Series): Series of data to perform the RSI calculation.
         length_rsi (int, optional): Window length for the RSI calculation using 
                             `rsi_ma_type`. Default is 14.
         length (int, optional): Window length for the moving average applied to RSI. 
@@ -301,120 +242,103 @@ def idct_rsi(self, data:pd.Series | None = None, length_rsi:int = 14,
         base_type (str, optional): Type of moving average applied to RSI. For example, 
                         'sma' for simple moving average.
         bb_std_dev (float, optional): Standard deviation for Bollinger Bands. Default is 2.
-        source (str, optional): Data source for calculation. Allowed values are 
-                        ('close', 'open', 'high', 'low').
-        last (int | None, optional): Number of data points to return from the present 
-                                backwards. If None, returns data for all times.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Columns:
         - 'rsi'
         - '{base_type}'
 
     Returns:
-        DataWrapper: DataWrapper containing 'rsi' and '{base_type}' values for 
+        DataFrame: DataFrame containing 'rsi' and '{base_type}' values for 
                         each step.
     """
 
-    delta = self._StrategyClass__data_adf[source].diff() if data is None else data.diff()
+    delta = data.diff()
 
-    ma = self.idct_sma
+    ma = idct_sma
     match rsi_ma_type:
-        case 'sma': ma = self.idct_sma
-        case 'ema': ma = self.idct_ema
-        case 'wma': ma = self.idct_wma
-        case 'smma': ma = self.idct_smma
+        case 'sma': ma = idct_sma
+        case 'ema': ma = idct_ema
+        case 'wma': ma = idct_wma
+        case 'smma': ma = idct_smma
 
     ma_gain = ma(data = delta.where(delta > 0, 0), 
-                    length=length_rsi, source=source).to_series()
+                    length=length_rsi)
     ma_loss = ma(data = -delta.where(delta < 0, 0), 
-                    length=length_rsi, source=source).to_series()
+                    length=length_rsi)
     rsi = 100 - (100 / (1+ma_gain/ma_loss))
 
     match base_type:
-        case 'sma': mv = self.idct_sma(data=rsi, length=length).to_series()
-        case 'ema': mv = self.idct_ema(data=rsi, length=length).to_series()
-        case 'wma': mv = self.idct_wma(data=rsi, length=length).to_series()
-        case 'smma': mv = self.idct_smma(data=rsi, length=length).to_series()
-        case 'bb': mv = self.idct_bb(data=rsi, length=length,
-                                        std_dev=bb_std_dev).to_dataframe()
-        case _: mv = self.idct_sma(data=rsi, length=length).to_series()
+        case 'sma': mv = idct_sma(data=rsi, length=length)
+        case 'ema': mv = idct_ema(data=rsi, length=length)
+        case 'wma': mv = idct_wma(data=rsi, length=length)
+        case 'smma': mv = idct_smma(data=rsi, length=length)
+        case 'bb': mv = idct_bb(data=rsi, length=length,
+                                        std_dev=bb_std_dev)
+        case _: mv = idct_sma(data=rsi, length=length)
 
     if type(mv) == pd.Series: mv.name = base_type
 
-    rsi:pd.DataFrame = pd.concat([pd.DataFrame({'rsi':rsi}), mv], axis=1)
-
-    return rsi
+    return pd.concat([pd.DataFrame({'rsi':rsi}), mv], axis=1)
 
 @_cm._store_decorator
-def idct_stochastic(self, data:pd.DataFrame | None = None, length_k:int = 14, 
-                        smooth_k:int = 1, length_d:int = 3, d_type:str = 'sma', 
-                        source:str = 'close', last:int | None = None, 
-                        cut:bool = False) -> pd.DataFrame:
+def idct_stochastic(data:pd.DataFrame, length_k:int = 14, smooth_k:int = 1, 
+                    length_d:int = 3, d_type:str = 'sma', 
+                    source:str = 'close') -> pd.DataFrame:
     """
     Stochastic Oscillator.
 
     This function calculates the stochastic oscillator.
 
     Args:
-        data (DataFrame | None, optional): Series of data to perform the stochastic calculation.
+        data (DataFrame): The data used to perform the calculation. 
+            Columns used: source, 'low', 'high'.
         length_k (int, optional): Window length for calculating the stochastic values.
         smooth_k (int, optional): Smoothing window length for the stochastic values.
         length_d (int, optional): Window length for the moving average applied to 
                         the stochastic values.
         d_type (str, optional): Type of moving average used for the stochastic oscillator. 
                         For example, 'sma' for simple moving average.
-        source (str, optional): Data source for calculation. Allowed values are 
-                        ('close', 'open', 'high', 'low').
-        last (int | None, optional): Number of data points to return from the present 
-                                backwards. If None, returns data for all times.
-        cut (bool, optional): True to return the trimmed data with current index.
+        source (str, optional): Data source for calculation.
 
     Columns:
         - 'stoch'
         - '{d_type}'
 
     Returns:
-        DataWrapper: DataWrapper containing 'stoch' and '{d_type}' values for each 
-                        step.
+        DataFrame: DataFrame containing 'stoch' and '{d_type}' values for each step.
     """
 
-    v_data = self._StrategyClass__data_adf if data is None else data
+    low_data = data.loc[:, 'low'].rolling(window=length_k).min()
+    high_data = data.loc[:, 'high'].rolling(window=length_k).max()
 
-    low_data = v_data.loc[:, 'low'].rolling(window=length_k).min()
-    high_data = v_data.loc[:, 'high'].rolling(window=length_k).max()
-
-    ma = self.idct_sma
+    ma = idct_sma
     match d_type:
-        case 'sma': ma = self.idct_sma
-        case 'ema': ma = self.idct_ema
-        case 'wma': ma = self.idct_wma
-        case 'smma': ma = self.idct_smma
+        case 'sma': ma = idct_sma
+        case 'ema': ma = idct_ema
+        case 'wma': ma = idct_wma
+        case 'smma': ma = idct_smma
 
-    stoch = (((v_data[source] - low_data) / 
+    stoch = (((data[source] - low_data) / 
                 (high_data - low_data)) * 100).rolling(window=smooth_k).mean()
     result = pd.DataFrame({'stoch':stoch, 
-                            d_type:ma(data=stoch, length=length_d).to_series()})
+                            d_type:ma(data=stoch, length=length_d)})
 
     return result
 
 @_cm._store_decorator
-def idct_adx(self, data:pd.DataFrame | None = None, smooth:int = 14, 
-                length_di:int = 14, only:bool = False, 
-                last:int | None = None, cut:bool = False) -> pd.DataFrame:
+def idct_adx(data:pd.DataFrame, smooth:int = 14, 
+            length_di:int = 14, only:bool = False) -> pd.DataFrame:
     """
     Average Directional Index (ADX).
 
     This function calculates the ADX.
 
     Args:
-        data (DataFrame | None, optional): Series of data to perform the ADX calculation.
+        data (DataFrame): The data used to perform the calculation. 
+            Columns used: 'close', 'low', 'high'.
         smooth (int, optional): Smoothing length. Default is 14.
         length_di (int, optional): Window length for calculating +DI and -DI. Default is 14.
         only (bool, optional): If True, returns only a Series with the ADX values.
-        last (int | None, optional): Number of data points to return from the present 
-                                backwards. If None, returns data for all times.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Columns:
         - 'adx'
@@ -422,30 +346,28 @@ def idct_adx(self, data:pd.DataFrame | None = None, smooth:int = 14,
         - '-di'
 
     Returns:
-        DataWrapper: DataWrapper containing 'adx', '+di', and '-di' values for 
+        DataFrame: DataFrame containing 'adx', '+di', and '-di' values for 
                         each step.
     """
 
-    v_data = self._StrategyClass__data_adf if data is None else data
+    atr = idct_atr(data=data, length=length_di, smooth='smma')
 
-    atr = self.idct_atr(length=length_di, smooth='smma').unwrap()
-
-    dm_p_raw = v_data.loc[:, 'high'].diff()
-    dm_n_raw = -v_data.loc[:, 'low'].diff()
+    dm_p_raw = data.loc[:, 'high'].diff()
+    dm_n_raw = -data.loc[:, 'low'].diff()
     
     dm_p = pd.Series(
         np.where((dm_p_raw > dm_n_raw) & (dm_p_raw > 0), dm_p_raw, 0), 
-        index=v_data.index)
+        index=data.index)
     dm_n = pd.Series(
         np.where((dm_n_raw > dm_p_raw) & (dm_n_raw > 0), dm_n_raw, 0), 
-        index=v_data.index)
+        index=data.index)
 
-    di_p = 100 * self.idct_smma(dm_p, length=length_di).to_series() / atr
-    di_n = 100 * self.idct_smma(dm_n, length=length_di).to_series() / atr
+    di_p = 100 * idct_smma(dm_p, length=length_di) / atr
+    di_n = 100 * idct_smma(dm_n, length=length_di) / atr
 
-    adx = self.idct_smma(
+    adx = idct_smma(
         data=100 * np.abs((di_p - di_n) / (di_p + di_n).replace(0, 1)), 
-        length=smooth).to_series()
+        length=smooth)
 
     if only: 
         return adx
@@ -454,29 +376,23 @@ def idct_adx(self, data:pd.DataFrame | None = None, smooth:int = 14,
     return adx
 
 @_cm._store_decorator
-def idct_macd(self, data:pd.Series | None = None, short_len:int = 12, 
-                long_len:int = 26, signal_len:int = 9, 
-                macd_ma_type:str = 'ema', signal_ma_type:str = 'ema', 
-                histogram:bool = True, source:str = 'close', 
-                last:int | None = None, cut:bool = False) -> pd.DataFrame:
+def idct_macd(data:pd.Series, short_len:int = 12, 
+            long_len:int = 26, signal_len:int = 9, 
+            macd_ma_type:str = 'ema', signal_ma_type:str = 'ema', 
+            histogram:bool = True) -> pd.DataFrame:
     """
     Calculate the convergence/divergence of the moving average (MACD).
 
     This function calculates the MACD.
 
     Args:
-        data (Series | None, optional): The data used for calculation of MACD.
+        data (Series): The data used for calculation of MACD.
         short_len (int, optional): Length of the short moving average used to calculate MACD.
         long_len (int, optional): Length of the long moving average used to calculate MACD.
         signal_len (int, optional): Length of the moving average for the MACD signal line.
         macd_ma_type (str, optional): Type of moving average used to calculate MACD.
         signal_ma_type (str, optional): Type of moving average used to smooth the MACD.
         histogram (bool, optional): If True, includes an additional 'histogram' column.
-        source (str, optional): Data source for calculations. Allowed values: 'close', 
-            'open', 'high', 'low'.
-        last (int | None, optional): Number of data points to return starting from the
-            present backward. If None, returns data for all available periods.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Columns:
         - 'macd'
@@ -484,44 +400,39 @@ def idct_macd(self, data:pd.Series | None = None, short_len:int = 12,
         - 'histogram'  
 
     Returns:
-        DataWrapper: A DataWrapper with MACD values and signal line for each step.
+        DataFrame: A DataFrame with MACD values and signal line for each step.
     """
 
-    v_data = self._StrategyClass__data_adf[source] if data is None else data
-
-    macd_ma = self.idct_ema
+    macd_ma = idct_ema
     match macd_ma_type:
         case 'ema':
-            macd_ma = self.idct_ema
+            macd_ma = idct_ema
         case 'sma':
-            macd_ma = self.idct_sma
+            macd_ma = idct_sma
 
-    signal_ma = self.idct_ema
+    signal_ma = idct_ema
     match signal_ma_type:
         case 'ema':
-            signal_ma = self.idct_ema
+            signal_ma = idct_ema
         case 'sma':
-            signal_ma = self.idct_sma
+            signal_ma = idct_sma
     
-    short_ema = macd_ma(data=v_data, length=short_len).to_series()
-    long_ema = macd_ma(data=v_data, length=long_len).to_series()
+    short_ema = macd_ma(data=data, length=short_len)
+    long_ema = macd_ma(data=data, length=long_len)
     macd = short_ema - long_ema
 
-    signal_line = signal_ma(data=macd, length=signal_len).to_series()
+    signal_line = signal_ma(data=macd, length=signal_len)
 
-    result = pd.DataFrame({'macd':macd, 'signal':signal_line, 
-                            'histogram':macd-signal_line} 
-                            if histogram else 
-                            {'macd':macd, 'signal':signal_line})
-
-    return result
+    return pd.DataFrame({'macd':macd, 'signal':signal_line, 
+                        'histogram':macd-signal_line} 
+                        if histogram else 
+                        {'macd':macd, 'signal':signal_line})
 
 @_cm._store_decorator
-def idct_sqzmom(self, data:pd.DataFrame | None = None, 
-                    bb_len:int = 20, bb_mult:float = 1.5, 
-                    kc_len:int = 20, kc_mult:float = 1.5, 
-                    use_tr:bool = True, source:str = 'close', 
-                    last:int | None = None, cut:bool = False) -> pd.DataFrame:
+def idct_sqzmom(data:pd.DataFrame, bb_len:int = 20, 
+                bb_mult:float = 1.5, kc_len:int = 20, 
+                kc_mult:float = 1.5, use_tr:bool = True,
+                source:str = 'close') -> pd.DataFrame:
     """
     Calculate Squeeze Momentum (SQZMOM).
 
@@ -534,83 +445,68 @@ def idct_sqzmom(self, data:pd.DataFrame | None = None,
     be considered financial advice.
 
     Args:
-        data (DataFrame | None, optional): The data used for calculating the Squeeze Momentum.
+        data (DataFrame): The data used for calculating the Squeeze Momentum.
+            Columns used: source, 'close', 'low', 'high'.
         bb_len (int, optional): Bollinger band length.
         bb_mult (float, optional): Bollinger band standard deviation.
         kc_len (int, optional): Keltner channel length.
         kc_mult (float, optional): Keltner channel standard deviation.
         use_tr (bool, optional): If False, ('high' - 'low') is used instead of the true 
             range.
-        source (str, optional): Data source for calculations. Allowed values: 'close', 
-            'open', 'high', 'low'.
-        last (int | None, optional): Number of data points to return starting from the
-            present backward. If None, returns data for all available periods.
-        cut (bool, optional): True to return the trimmed data with current index.
+        source (str, optional): Data source for calculations.
 
     Columns:
         - 'sqzmom'
         - 'histogram'
 
     Returns:
-        DataWrapper: A DataWrapper with Squeeze Momentum values and histogram for 
+        DataFrame: A DataFrame with Squeeze Momentum values and histogram for 
             each step.
     """
 
-    v_data = self._StrategyClass__data_adf if data is None else data
-
-    basis = self.idct_sma(length=bb_len).unwrap()
-    dev = bb_mult * v_data.loc[:, source].rolling(window=bb_len).std(ddof=0)
+    basis = idct_sma(data=data[source], length=bb_len)
+    dev = bb_mult * data[source].rolling(window=bb_len).std(ddof=0)
 
     upper_bb = basis + dev
     lower_bb = basis - dev
 
-    ma = self.idct_sma(length=kc_len).unwrap()
-    range_ = self.idct_sma(data=self.idct_trange().to_series()
-                            if use_tr else v_data['high']-v_data['low'], 
-                            length=kc_len).unwrap()
+    ma = idct_sma(data=data[source], length=kc_len)
+    range_ = idct_sma(data=idct_trange(data=data) if use_tr else 
+                    data['high']-data['low'], length=kc_len)
 
     upper_kc = ma + range_ * kc_mult
     lower_kc = ma - range_ * kc_mult
 
     sqz = np.where((lower_bb > lower_kc) & (upper_bb < upper_kc), 1, 0)
 
-    d = v_data[source] - ((v_data.loc[:, 'low'].rolling(window=kc_len).min() + 
-                            v_data.loc[:, 'high'].rolling(window=kc_len).max()) / 2 + 
-                            self.idct_sma(length=kc_len).unwrap()) / 2
+    d = data[source] - ((data.loc[:, 'low'].rolling(window=kc_len).min() + 
+                            data.loc[:, 'high'].rolling(window=kc_len).max()) / 2 + 
+                            idct_sma(data=data[source], length=kc_len)) / 2
 
-    histogram = self.idct_rlinreg(data=d, length=kc_len, offset=0).unwrap()
+    histogram = idct_rlinreg(data=d, length=kc_len, offset=0)
 
-    result = pd.DataFrame({'sqzmom':pd.Series(sqz, index=v_data.index), 
-                            'histogram':histogram}, 
-                            index=v_data.index)
-    return result
+    return pd.DataFrame({'sqzmom':pd.Series(sqz, index=data.index), 
+                        'histogram':histogram}, 
+                        index=data.index)
 
 @_cm._store_decorator
-def idct_rlinreg(self, data:pd.Series | None = None, 
-                source:str = 'close',
-                length:int = 5, offset:int = 1,
-                cut:bool = False) -> pd.Series:
+def idct_rlinreg(data:pd.Series, length:int = 5, offset:int = 1) -> pd.Series:
     """
     Calculate rolling linear regression values.
 
     This function calculates the rolling linear regression.
 
     Args:
-        data (Series | None, optional): The data used for linear regression calculations.
-        source (str, optional): Data source for momentum calculation. Allowed values:
-            'close', 'open', 'high', 'low'.
+        data (Series): The data used for linear regression calculations.
         length (int, optional): Length of each window for the rolling regression.
         offset (int, optional): Offset used in the regression calculation.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Returns:
-        DataWrapper: Array with the linear regression values for each window.
+        Series: Series with the linear regression values for each window.
     """
 
-    v_data = self._StrategyClass__data_adf[source]  if data is None else data
-
     x = np.arange(length)
-    y = v_data.rolling(window=length)
+    y = data.rolling(window=length)
 
     m = y.apply(lambda y: np.polyfit(x, y.values, 1)[0])
     b = y.mean() - (m * float(np.mean(x))) 
@@ -618,52 +514,39 @@ def idct_rlinreg(self, data:pd.Series | None = None,
     return m * (length - 1 - offset) + b
 
 @_cm._store_decorator
-def idct_mom(self, data:pd.Series | None = None, length:int = 10, 
-                source:str = 'close', last:int | None = None,
-                cut:bool = False) -> pd.Series:
+def idct_mom(data:pd.Series, length:int = 10) -> pd.Series:
     """
     Calculate momentum values (MOM).
 
     This function calculates the MOM.
 
     Args:
-        data (Series | None, optional): The data used to calculate momentum.
+        data (Series): The data used to calculate momentum.
         length (int, optional): Length for calculating momentum.
-        source (str, optional): Data source for momentum calculation. Allowed values:
-            'close', 'open', 'high', 'low'.
-        last (int | None, optional): Number of data points to return starting from the
-            present backward. If None, returns data for all available periods.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Returns:
-        DataWrapper: DataWrapper with the momentum values for each step.
+        Series: Series with the momentum values for each step.
     """
 
-    v_data = self._StrategyClass__data_adf[source] if data is None else data
-    mom = v_data - v_data.shift(length)
-
-    return mom
+    return data - data.shift(length)
 
 @_cm._store_decorator
-def idct_ichimoku(self, data:pd.DataFrame | None = None, tenkan_period:int = 9, 
-                    kijun_period:int = 26, senkou_span_b_period:int = 52, 
-                    ichimoku_lines:bool = True, 
-                    last:int | None = None, cut:bool = False) -> pd.DataFrame:
+def idct_ichimoku(data:pd.DataFrame, tenkan_period:int = 9, 
+                kijun_period:int = 26, senkou_span_b_period:int = 52, 
+                ichimoku_lines:bool = True,) -> pd.DataFrame:
     """
     Calculate Ichimoku cloud values.
 
     This function calculates the Ichimoku cloud.
 
     Args:
-        data (DataFrame | None, optional): The data used to calculate the Ichimoku cloud values.
+        data (DataFrame): The data used to calculate the Ichimoku cloud values.
+            Columns used: 'low', 'high'.
         tenkan_period (int, optional): Window length to calculate the Tenkan-sen line.
         kijun_period (int, optional): Window length to calculate the Kijun-sen line.
         senkou_span_b_period (int, optional): Window length to calculate the Senkou Span B.
         ichimoku_lines (bool, optional): If True, adds the columns 'tenkan_sen' and
             'kijun_sen' to the returned DataFrame.
-        last (int | None, optional): Number of data points to return starting from the
-            present backwards. If None, returns data for all available periods.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Columns:
         - 'senkou_a'
@@ -673,21 +556,19 @@ def idct_ichimoku(self, data:pd.DataFrame | None = None, tenkan_period:int = 9,
         - 'ichimoku_lines'
 
     Returns:
-        DataWrapper: A DataWrapper with Ichimoku cloud values and optionally
+        DataFrame: A DataFrame with Ichimoku cloud values and optionally
             'tenkan_sen' and 'kijun_sen' columns if `ichimoku_lines` is True.
     """
 
-    v_data = self._StrategyClass__data_adf if data is None else data
-
-    tenkan_sen_val = (v_data.loc[:, 'high'].rolling(window=tenkan_period).max() + 
-                        v_data.loc[:, 'low'].rolling(window=tenkan_period).min()) / 2
-    kijun_sen_val = (v_data.loc[:, 'high'].rolling(window=kijun_period).max() + 
-                        v_data.loc[:, 'low'].rolling(window=kijun_period).min()) / 2
+    tenkan_sen_val = (data.loc[:, 'high'].rolling(window=tenkan_period).max() + 
+                        data.loc[:, 'low'].rolling(window=tenkan_period).min()) / 2
+    kijun_sen_val = (data.loc[:, 'high'].rolling(window=kijun_period).max() + 
+                        data.loc[:, 'low'].rolling(window=kijun_period).min()) / 2
 
     senkou_span_a_val = ((tenkan_sen_val + kijun_sen_val) / 2)
-    senkou_span_b_val = ((v_data.loc[:, 'high'].rolling(
+    senkou_span_b_val = ((data.loc[:, 'high'].rolling(
         window=senkou_span_b_period).max() + 
-        v_data.loc[:, 'low'].rolling(window=senkou_span_b_period).min()) / 2)
+        data.loc[:, 'low'].rolling(window=senkou_span_b_period).min()) / 2)
     senkou_span = (pd.DataFrame({'senkou_a':senkou_span_a_val,
                                 'senkou_b':senkou_span_b_val, 
                                 'tenkan_sen':tenkan_sen_val,
@@ -695,79 +576,68 @@ def idct_ichimoku(self, data:pd.DataFrame | None = None, tenkan_period:int = 9,
                     if ichimoku_lines else 
                     pd.DataFrame({'senkou_a':senkou_span_a_val,
                                     'senkou_b':senkou_span_b_val}))
-    
+
     return senkou_span
 
 @_cm._store_decorator
-def idct_atr(self, length:int = 14, smooth:str = 'smma', 
-                last:int | None = None, cut:bool = False) -> np.ndarray:
+def idct_atr(data:pd.DataFrame, length:int = 14, smooth:str = 'smma', 
+            handle_na:bool = True) -> np.ndarray:
     """
     Calculate the average true range (ATR).
 
     This function calculates the ATR.
 
     Args:
+        data (DataFrame): The data used to perform the calculation. 
+            Columns used: 'close', 'low', 'high'.
         length (int, optional): Window length used to smooth the average true range (ATR).
         smooth (str, optional): Type of moving average used to smooth the ATR. 
-        last (int | None, optional): Number of data points to return starting from the 
-            present backward. If None, returns data for all available periods.
-        cut (bool, optional): True to return the trimmed data with current index.
+        handle_na (bool, optional): Whether to handle NaN values in 'close' (TR).
 
     Returns:
-        DataWrapper: Series with the average true range values for each step.
+        ndarray: ndarray with the average true range values for each step.
     """
 
-    tr = self.idct_trange().to_series()
+    tr = idct_trange(data=data, handle_na=handle_na)
 
     match smooth:
         case 'wma':
-            atr:np.ndarray = self.idct_wma(data=tr, length=length, 
-                                            last=last).unwrap()
+            atr:np.ndarray = idct_wma(data=tr, length=length)
         case 'sma':
-            atr:np.ndarray = self.idct_sma(data=tr, length=length, 
-                                            last=last).unwrap()
+            atr:np.ndarray = idct_sma(data=tr, length=length)
         case 'ema':
-            atr:np.ndarray = self.idct_ema(data=tr, length=length, 
-                                            last=last).unwrap()
+            atr:np.ndarray = idct_ema(data=tr, length=length)
         case 'smma':
-            atr:np.ndarray = self.idct_smma(data=tr, length=length, 
-                                            last=last).unwrap()
+            atr:np.ndarray = idct_smma(data=tr, length=length)
         case _:
-            atr:np.ndarray = self.idct_wma(data=tr, length=length, 
-                                            last=last).unwrap()
+            atr:np.ndarray = idct_wma(data=tr, length=length)
 
     return atr
 
 @_cm._store_decorator
-def idct_trange(self, data:pd.DataFrame | None = None, 
-                    handle_na: bool = True, last:int | None = None,
-                    cut:bool = False) -> pd.Series:
+def idct_trange(data:pd.DataFrame, handle_na:bool = True) -> pd.Series:
     """
     Calculate the true range.
 
     This function calculates the true range.
 
     Args:
-        data (DataFrame | None, optional): The data used to perform the calculation.
+        data (DataFrame): The data used to perform the calculation. 
+            Columns used: 'close', 'low', 'high'.
         handle_na (bool, optional): Whether to handle NaN values in 'close'.
-        last (int | None, optional): Number of data points to return starting from the 
-            present backward. If None, returns data for all available periods.
-        cut (bool, optional): True to return the trimmed data with current index.
 
     Returns:
-        DataWrapper: DataWrapper with the true range values for each step.
+        Series: Series with the true range values for each step.
     """
 
-    v_data = self._StrategyClass__data_adf if data is None else data
-
-    close = v_data.loc[:, 'close'].shift(1)
+    close = data.loc[:, 'close'].shift(1)
 
     if handle_na:
-            close.fillna(v_data['low'], inplace=True)
+            close.fillna(data['low'], inplace=True)
                     
-    hl = v_data.loc[:, 'high'] - v_data.loc[:, 'low']
-    hyc = abs(v_data['high'] - close)
-    lyc = abs(v_data['low'] - close)
+    hl = data.loc[:, 'high'] - data.loc[:, 'low']
+    hyc = abs(data['high'] - close)
+    lyc = abs(data['low'] - close)
     tr:pd.Series[float] = pd.concat([hl, hyc, lyc], axis=1).max(axis=1)
 
     if not handle_na:

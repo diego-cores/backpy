@@ -391,7 +391,8 @@ def perf_tzone_chart(names:list[str|int|None]|str|int|None = None,
     trades_data = _cm.__get_strategy(name=name)
 
     if trades.empty:
-        raise exception.StatsError('Trades not loaded.')
+        logger.warning('Trades not loaded')
+        return
 
     hour = lambda index: ((index % trades_data['d_width_day']) 
                           / trades_data['d_width_day'] * 24).astype(int)
@@ -580,7 +581,7 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
             case 'd':
                 data_last = lambda df: (df[col].cumsum().dropna().iloc[-1] 
                                     if isinstance(col, str) else 
-                                    (np.cumprod(1 + df[i]['profitPer'] / 100).dropna()-1).iloc[-1])
+                                    ((1 + df[i]['profitPer'] / 100).cumprod().dropna()-1).iloc[-1])
                 last_result = np.array([data_last(df) for df in data])
 
                 parts = np.array_split(np.sort(last_result), 100)
@@ -700,7 +701,7 @@ def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None,
 
     data_last = lambda df: (df[col].cumsum().dropna().iloc[-1] 
                         if isinstance(col, str) else 
-                        (np.cumprod(1 + df['profitPer'] / 100).dropna()-1).iloc[-1])
+                        ((1 + df['profitPer'] / 100).dropna()-1).cumprod().iloc[-1])
     last_result = np.array([data_last(df) for df in sim])
     percentiles_r = np.percentile(last_result, percentiles)
 
@@ -770,7 +771,7 @@ def correlation(names:list[str|int|None], col:str|None = None,
         axis=1, 
         join='outer').sort_index().ffill().pct_change().dropna()
 
-    return returns.corr(method=method.lower() if method else 'pearson')
+    return returns.corr(method=method.lower() if method else 'pearson') # pyrefly: ignore
 
 def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None, 
                data_icon:str | None = None, 
@@ -863,13 +864,14 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
 
     Info:
         - Trades: The number of operations performed.
+        - Win trades: The number of winners operations.
+        - Loss trades: The number of losers operations.
         - Op years: Years operated from the first to the last.
         - Return: The total equity earned.
         - Profit: The total amount earned.
         - Gross earnings: Only the profits.
         - Gross losses: Only the losses.
-        - Commission cost: Total commissions approximate calculation made 
-            with the total commission applied to the amount + profit.
+        - Commission cost: Total commissions.
         - Max return: The historical maximum of returns.
         - Return from max: Returns from the all-time high.
         - Days from max: Days from the all-time return high.
@@ -975,7 +977,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
     # Consecutive trades calc.
     trades_count_cs = trades['profitPer'].apply(
         lambda x: 1 if x > 0 else (-1 if x < 0 else 0)
-        )
+    )
     trades_count_cs = pd.concat(
         [pd.Series([0]), trades_count_cs], ignore_index=True)
 
@@ -991,9 +993,6 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
     trades_streak = (trades_count_cs.cumsum() 
                      - np.maximum.accumulate(trades_count_cs.cumsum()))
 
-    # Commission calc.
-    total_commission:float = (trades['amount'] * (1 + trades['profitPer'] / 100) * (trades['commission']/100)).sum()
-
     with np.errstate(over='ignore'):
         trades['multiplier'] = 1 + trades['profitPer'] / 100
 
@@ -1006,6 +1005,12 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
         text = utils.statistics_format({
         'Trades':[len(trades.index),
                   _cm.__COLORS['BOLD']+_cm.__COLORS['CYAN']],
+
+        'Win trades':[(trades['profit'] > 0).sum(),
+                  _cm.__COLORS['BOLD']+_cm.__COLORS['GREEN']],
+
+        'Loss trades':[(trades['profit'] <= 0).sum(),
+                  _cm.__COLORS['BOLD']+_cm.__COLORS['RED']],
 
         'Op years':[utils.round_r(op_years, 2), _cm.__COLORS['CYAN']],
 
@@ -1023,7 +1028,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
                            if not pd.isna(trades['profit']).all() else 0, 4),
                         _cm.__COLORS['RED']],
 
-        'Commission cost':[round(total_commission, 2), _cm.__COLORS['RED']],
+        'Commission cost':[utils.round_r(float(trades['commission'].sum()), 4), _cm.__COLORS['RED']],
 
         'Max return':[str(utils.round_r((multiplier_cumprod.max()-1)*100,2))+'%'],
 
@@ -1055,15 +1060,15 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
         'Average ratio':[utils.round_r(average_ratio(trades), 2),
                         _cm.__COLORS['YELLOW'],],
 
-        'Average return':[str(round((
-                trades.loc[:, 'multiplier'].dropna().to_numpy().mean()-1)*100,2))+'%',
+        'Average return':[str(round(
+                trades.loc[:, 'profitPer'].dropna().to_numpy().mean(),2))+'%',
             _cm.__COLORS['YELLOW'],],
 
         'Average profit':[str(round(trades.loc[:, 'profit'].mean(),2)),
                     _cm.__COLORS['YELLOW'],],
 
-        'Average return abs':[str(round((
-                np.abs(trades.loc[:, 'multiplier'].dropna().to_numpy()).mean()-1)*100,2))+'%',
+        'Average return abs':[str(round(
+                trades.loc[:, 'profitPer'].dropna().abs().to_numpy().mean(),2))+'%',
             _cm.__COLORS['YELLOW'],],
 
         'Average profit abs':[str(round(trades.loc[:, 'profit'].abs().mean(),2)),

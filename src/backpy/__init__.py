@@ -4,7 +4,7 @@ Back Test Py
 BackPy is a library used to test strategies in the market.
 
 Version:
-    1.0.5
+    1.0.6
 
 Repository:
     https://github.com/diego-cores/backpy
@@ -57,6 +57,7 @@ from .main import (
     load_yfinance_data, 
     plot_strategy_add,
     default_logging,
+    reg_indicator,
     run_animation,
     plot_strategy,
     load_data_bpd,
@@ -79,9 +80,27 @@ from .stats import (
     stats_icon,
 )
 
+from .indicators import (
+    idct_stochastic,
+    idct_ichimoku,
+    idct_sqzmom,
+    idct_trange,
+    idct_macd,
+    idct_smma,
+    idct_sema,
+    idct_mom,
+    idct_atr,
+    idct_adx,
+    idct_ema,
+    idct_sma,
+    idct_wma,
+    idct_rsi,
+    idct_bb,
+)
+
 from . import utils
 
-__version__ = '1.0.5'
+__version__ = '1.0.6'
 
 __doc__ = """
 BackPy documentation
@@ -133,6 +152,9 @@ __all__ = [
     'perf_tzone_chart',
     'default_logging',
     'earnings_intime',
+    'idct_stochastic',
+    'idct_ichimoku',
+    'reg_indicator',
     'StrategyClass',
     'idc_decorator',
     'plot_strategy',
@@ -143,14 +165,27 @@ __all__ = [
     'max_drawdown',
     'stats_trades',
     'ChunkWrapper',
+    'idct_sqzmom',
+    'idct_trange',
     'DataWrapper',
     'correlation',
     'stats_icon',
     'CostsValue',
     'run_config',
+    'idct_macd',
+    'idct_smma',
+    'idct_sema',
     'load_data',
     'def_style',
     '_commons',
+    'idct_mom',
+    'idct_atr',
+    'idct_adx',
+    'idct_ema',
+    'idct_sma',
+    'idct_wma',
+    'idct_rsi',
+    'idct_bb',
     'utils',
     'plot',
     'run',

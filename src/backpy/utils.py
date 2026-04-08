@@ -25,6 +25,7 @@ Functions:
         if it has not been calculated already.
     calc_day: Function to calculate the width of the index that each day has.
     text_fix: Function to fix or adjust text.
+    get_darguments: Get default arguments.
     mult_color: Multiply a color.
     diff_color: Makes a color darker or lighter.
     diff_ccolor: Differentiate a color from another color.
@@ -476,6 +477,27 @@ def text_fix(text:str, newline_exclude:bool = True) -> str:
 
     return ''.join(line.lstrip() + ('\n' if not newline_exclude else '')  
                         for line in text.split('\n'))
+
+def get_darguments(func: Callable) -> dict:
+    """
+    Get default arguments
+
+    It takes the default arguments in a function.
+
+    Args:
+        func (Callable): Function.
+
+    Returns:
+        dict: Return dict with arg:default.
+    """
+
+    df = func.__defaults__ or () 
+    code = func.__code__
+
+    name_df = code.co_varnames[code.co_argcount-len(df):code.co_argcount]
+
+    def_arguments = dict(zip(name_df, df))
+    return def_arguments
 
 def mult_color(color:str, multiplier:float = 1) -> tuple[float, ...]:
     """

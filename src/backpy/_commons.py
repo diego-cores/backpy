@@ -9,6 +9,7 @@ Variables:
     run_timer (bool): If false the execution timer will never appear in the console.
     plt_style (str | None): Last style used, if you modify this variable 
         and put one that does not exist it will give an error.
+    mpl_warning_supp (bool): Suppresses ignorable warnings from matplotlib.
     max_bar_updates (int): Number of times the 'run' loading bar is updated, 
         a very high number will greatly increase the execution time. 
     lift (bool): Set to False if you don't want tkinter windows 
@@ -17,8 +18,8 @@ Variables:
 Hidden Variables:
     _random_titles: Random titles for windows (hidden variable).
     __panel_list: List of windows that will be joined into panels (hidden variable).
-    __panel_wmax = Maximum number of panels; if a value greater than 4 is given, an error will occur (hidden variable).
-    __linked_toolbars = List of connected toolbars (hidden variable).
+    __panel_wmax: Maximum number of panels; if a value greater than 4 is given, an error will occur (hidden variable).
+    __linked_toolbars: List of connected toolbars (hidden variable).
     __min_gap: If left as True, gaps will not be calculated on the entry 
         of 'taker' orders (hidden variable).
     __limit_ig: If in a 'stopLimit' or 'takeLimit' the order is within the 
@@ -32,6 +33,7 @@ Hidden Variables:
     __orders_nclose: If True, orders are not ordered to be executed based 
         on the closest one (hidden variable).
     __chunk_size: Size of each chunk of the engine (hidden variable).
+    __nper_commission: Non-percentage commission cost (hidden variable).
     __data_year_days: Number of operable days in 1 year (hidden variable).
     __data_width_day: Width of the day (hidden variable).
     __data_interval: Interval of the loaded data (hidden variable).
@@ -41,6 +43,8 @@ Hidden Variables:
     __backtests: List of data of each backtest, 
         containing trades and data needed for statistics (hidden variable).
     __custom_plot: Dict of custom graphical statistics (hidden variable).
+    __plot_indicators: Indicators saved for plotting (hidden variable).
+    __plot_indicators_def: Indicators default config for plotting (hidden variable).
     __binance_timeout: Time out between each request to the binance api 
         (hidden variable).
     __COLORS: Dictionary with printable colors (hidden variable).
@@ -63,6 +67,7 @@ Hidden Functions:
 """
 
 from typing import Any, Callable, cast
+from importlib.metadata import version
 import pandas as pd
 import logging
 
@@ -74,15 +79,18 @@ logger:logging.Logger = logging.getLogger(__name__)
 dots:bool = True
 run_timer:bool = True
 plt_style:str|None = None
+mpl_warning_supp:bool = True
 
 max_bar_updates:int = 1_000
 
 lift:bool = True
 _random_titles:list = [
+    f'BackPy v{version("backpyf")}',
     'Python > Others',
     'Nice strategy',
     'Python window',
     'BackPy > ⚡',
+    'Indicators!',
     'Many trades',
     'loading...',
     'Backtest',
@@ -114,8 +122,68 @@ __slippage_pct:None|CostsValue = None
 __orders_order:None|dict = None
 __orders_nclose:None|bool = None
 __chunk_size:None|int = None
+__nper_commission:None|bool = None
 
 __custom_plot:dict = {}
+__plot_indicators:dict[str, dict] = {}
+__plot_indicators_def:dict = {
+    'def':{'panel':None, 'color':[None]},
+    'idct_ema':{'panel':'price', 'color':['blue']},
+    'idct_bb':{'panel':'price', 'color':['#f23645', '#2D2DFF', '#089981'], 
+        'styleArVar':['extraAr'], 
+        'extraAr':{
+            'btw':(0,2),
+            'color':'#6565FF12',
+        }},
+    'idct_rsi':{'panel':None, 'color':['#9B40C8', '#FFF700'], 
+        'styleAxNew':['extraTopLn', 'extraBotLn', 'extraMidLn', 'extraAr'], 
+        'extraTopLn':{
+            'cords':70, 
+            'color':'#FFFFFF36', 
+            'style':(0, (1.5,1))
+        }, 
+        'extraBotLn':{
+            'cords':30, 
+            'color':'#FFFFFF36', 
+            'style':(0, (1.5,1))
+        }, 
+        'extraMidLn':{
+            'cords':50, 
+            'color':'#FFFFFF36', 
+            'style':(0, (1.5,1))
+        }, 
+        'extraAr':{
+            'btw':(30, 70),
+            'color':'#BB00D824',
+        }},
+    'idct_macd':{'panel':None, 'color':['blue', 'orange'], 
+        'styleOnDraw':['drawLn'], 
+        'drawLn':{
+            'func':'hist',
+            'value':2,
+            'colorNeg':'#f23645',
+            'color':'#089981',
+            'colorNegF':'#ffcdd2',
+            'colorF':'#B0D8D5',
+        }},
+    'idct_sqzmom':{'panel':None, 'color':['blue'],
+        'styleOnDraw':['drawLn'], 
+        'drawLn':{
+            'func':'hist',
+            'value':1,
+            'colorNeg':'#AF0909',
+            'color':'#0AAF0A',
+            'colorNegF':'#5C0909',
+            'colorF':'#0A5D0A',
+        }},
+    'idct_ichimoku':{'panel':'price', 'color':['#C4E293', '#E29393', '#2450C0', '#C0110B'], 
+        'styleArVar':['extraAr'], 
+        'extraAr':{
+            'btw':(0,1),
+            'colorNeg':'#AA2F2F24',
+            'color':'#81B13324',
+        }},
+}
 
 __binance_timeout:float = 0.08
 
@@ -412,29 +480,27 @@ def __get_strategy(name:str|int|Any|None = None) -> dict:
 
     raise exception.DataError('Name not found.')
 
-def __gen_fname(name:str, from_:list[dict]) -> str:
+def __gen_fname(name:str, from_:list[str]) -> str:
     """
     Generate frame name
 
     Generates a name based on 'name' that is not duplicated in 'from'.
 
     Args:
-        names (str, optional): Strategy name.
-        from (list[dict], optional): List of dictionaries 
-            from which the names will be obtained.
+        names (str): Name.
+        from_ (list[str]): List of names to not repeat
 
     Returns:
         str: Name not duplicated.
     """
 
-    if len(__backtests) == 0:
+    if len(from_) == 0:
         return name
 
-    names = __get_names(from_=from_)
     mname = name
     nm = 1
 
-    while mname in names:
+    while mname in from_:
         mname = f"{name}{nm}"
         nm += 1
 

@@ -20,12 +20,10 @@ Hidden Functions:
 import pandas as pd
 import numpy as np
 
-from typing import Callable, Any, cast
+from typing import Callable, Any
 from abc import ABC, abstractmethod
-from types import MethodType
 from functools import wraps
 from uuid import uuid4
-from time import time
 import logging
 
 from . import indicators as idc
@@ -134,7 +132,7 @@ class StrategyClass(ABC):
             the closest ones are executed first.
         __idc_data: Saved data from the indicators.
         __buffer: Buffer to concatenate DataFrame.
-        __to_delate: Lists of indexes to remove from lists.
+        __to_delete: Lists of indexes to remove from lists.
 
     Methods:
         tz_london: Return True if its London time zone.
@@ -175,7 +173,7 @@ class StrategyClass(ABC):
 
     Private Methods:
         __del: Adds items to '__to_delete'.
-        __deli: Removes indexes from '__to_delate'.
+        __deli: Removes indexes from '__to_delete'.
         __buff: Extracts values from '__buffer'.
         __cn_insert: Insert values into a ChunkWrapper.
         __act_reduce: Reduce a position or close it.
@@ -193,6 +191,7 @@ class StrategyClass(ABC):
         __uidc_cut: Slices data for the user based on the current index.
         __data_cut: Slices data for the user based on the current index.
         __data_updater: Updates all data with the provided DataFrame.
+        __run_orders: Logic responsible for ordering and executing orders.
         __before: This function is used to run trades and other operations.
     """
 
@@ -204,8 +203,8 @@ class StrategyClass(ABC):
     date:flx.DataWrapper
     hour:float
 
+    width:float
     icon:str|None
-    width:float|None
     interval:str|None
     __day_width:float
 
@@ -236,7 +235,7 @@ class StrategyClass(ABC):
     __orders:list
     __positions:list
     __pos_record:flx.ChunkWrapper
-    __to_delate:dict
+    __to_delete:dict
 
     def __init__(self, data:pd.DataFrame = pd.DataFrame()) -> None: 
         """
@@ -259,7 +258,7 @@ class StrategyClass(ABC):
         cmattr = lambda x: getattr(cm_, x)
 
         self.icon = cmattr('__data_icon')
-        self.width = cmattr('__data_width')
+        self.width = cmattr('__data_width') or 0
         self.interval = cmattr('__data_interval')
         self.__day_width = cmattr('__data_width_day') or 1
 
@@ -271,6 +270,7 @@ class StrategyClass(ABC):
         self.__chunk_size = cmattr('__chunk_size') or 10_000 
         self.__orders_order = {'op': 0, 'rd': 1, 'stopLimit': 2, 'stopLoss': 3, 
                                'takeLimit': 4, 'takeProfit': 5}
+        self.__nper_commission = cmattr('__nper_commission') or False
 
         if isinstance(cmattr('__orders_order'), dict):
             for k,v in cmattr('__orders_order').items():
@@ -292,7 +292,7 @@ class StrategyClass(ABC):
         self.__positions = []
         self.__pos_record = flx.ChunkWrapper([], chunk_size=self.__chunk_size)
 
-        self.__to_delate = {}
+        self.__to_delete = {}
 
         # Set decorators
         # Indicators
@@ -304,8 +304,8 @@ class StrategyClass(ABC):
             elif getattr(attr, '_store', False):
                 logger.debug("Adding __data_store decorator to '%s'", name)
                 decorator = getattr(self, '_StrategyClass__data_store')(attr)
-                setattr(self, name, lambda *args, dec=decorator, **kwargs: 
-                                        dec(self, *args, **kwargs))
+                setattr(self, name, 
+                    lambda *args, dec=decorator, **kwargs: dec(*args, **kwargs))
 
         # User indicators
         for name in dir(self): 
@@ -453,7 +453,7 @@ class StrategyClass(ABC):
             Callable: Wrapper function.
         """
 
-        def __wr_func(*args, **kwargs) -> flx.DataWrapper:
+        def __wr_func(*args, cut:bool = False, last:int|None = None, **kwargs) -> flx.DataWrapper:
             """
             Wrapper function
 
@@ -467,9 +467,7 @@ class StrategyClass(ABC):
             id, arguments = StrategyClass.__func_idg(func, *args, **kwargs)
 
             if id in self.__idc_data:
-                if arguments.get('cut', False):
-                    return self.__data_cut(self.__idc_data[id],
-                                           arguments.get('last', None))
+                if cut: return self.__data_cut(self.__idc_data[id], last)
 
                 return self.__idc_data[id]
 
@@ -477,9 +475,7 @@ class StrategyClass(ABC):
             result = flx.DataWrapper(func(*args, **kwargs))
 
             self.__idc_data[id] = result
-            if arguments.get('cut', False):
-                return self.__data_cut(result, 
-                                       arguments.get('last', None))
+            if cut: return self.__data_cut(result, last)
 
             return result
         return __wr_func
@@ -544,18 +540,12 @@ class StrategyClass(ABC):
             tuple[str,dict]: Generated id and arguments.
         """
 
-        df = func.__defaults__ or () 
-        code = func.__code__
-
-        name_df = code.co_varnames[code.co_argcount-len(df):code.co_argcount]
-
-        arguments = dict(zip(name_df, df))
-
-        arguments.update({k: kwargs[k] for k in name_df if k in kwargs})
+        arguments = utils.get_darguments(func)
+        arguments.update({k: kwargs[k] for k in arguments.keys() if k in kwargs})
 
         if len(args) >= 1 and isinstance(args[0], StrategyClass):
             args = args[1:]
-        arguments.update(zip(name_df, args))
+        arguments.update(zip(arguments.keys(), args))
 
         args_wo = arguments.copy()
         args_wo.pop('cut', None); args_wo.pop('last', None)
@@ -660,6 +650,68 @@ class StrategyClass(ABC):
 
         return result
 
+    def __run_orders(self) -> None:
+        """
+        Run orders
+
+        Logic for ordering and executing orders.
+        """
+
+        if not self.__orders:
+            return
+
+        logger.debug('Checking orders')
+
+        l_index = self.__view_in_orders()
+        self.__orders.sort(
+            key=lambda x: (
+                self.__orders_order.get(x['order'], 99),
+                (abs(x['orderPrice'] - (self.__data['open'][-1]
+                if x['order'] == 'op' or not x['unionId'] in l_index.keys()
+                else l_index[x['unionId']])) 
+                if not self.__orders_nclose else None)
+        ))
+
+        higher = self.__data['high'][-1]*(self.__spread_pct.get_taker()/100/2+1)
+        lower = self.__data['low'][-1]*(1-self.__spread_pct.get_taker()/100/2)
+
+        self.__to_delete.update({'__orders':set()})
+
+        for i, row in enumerate(self.__orders):
+            if i in self.__to_delete['__orders']:
+                continue
+
+            # If the id contains 'w' it means that it waits for the position with the same id
+            if isinstance(row['unionId'], str):
+                row_split = row['unionId'].split('/')
+
+                if (row_split[0] == 'w' and self.__positions
+                    and row_split[-1] in [v.get('unionId') for v in self.__positions]):
+
+                    row['unionId'] = self.__orders[i]['unionId'] = row_split[-1]
+                elif row_split[0] == 'w':
+                    continue
+
+            # Maker
+            limit = (row['limit'] and higher >= row['orderPrice']
+                and lower <= row['orderPrice'])
+
+            # Taker
+            pos_cn = (not row['limit'] and higher >= row['orderPrice'] 
+                        if row['typeSide'] else
+                        not row['limit'] and lower <= row['orderPrice'])
+
+            # Execute order and delete
+            if limit or pos_cn:
+                self.__order_execute(row)
+
+                self.__del('__orders', [i])
+
+        self.__deli('__orders')
+
+        if (psff:=self.__buff('__pos_record')): 
+            self.__pos_record = self.__cn_insert(self.__pos_record, psff)
+
     def __before(self, index:int, balance:list[float] | None = None) -> None:
         """
         Before
@@ -674,61 +726,10 @@ class StrategyClass(ABC):
         self.__data_updater(index=index, balance=balance)
 
         # Check operations
-        if self.__orders:
-            logger.debug('Checking orders')
+        self.__run_orders()
 
-            l_index = self.__view_in_orders()
-            self.__orders.sort(
-            key=lambda x: (
-                self.__orders_order.get(x['order'], 99),
-                (abs(x['orderPrice'] - (self.__data['open'][-1]
-                if x['order'] == 'op' or not x['unionId'] in l_index.keys()
-                else l_index[x['unionId']])) 
-                 if not self.__orders_nclose else None)
-            ))
-
-            higher = self.__data['high'][-1]*(self.__spread_pct.get_taker()/100/2+1)
-            lower = self.__data['low'][-1]*(1-self.__spread_pct.get_taker()/100/2)
-
-            self.__to_delate.update({'__orders':set()})
-
-            for i, row in enumerate(self.__orders):
-                if i in self.__to_delate['__orders']:
-                    continue
-
-                # If the id contains 'w' it means that it waits for the position with the same id
-                if isinstance(row['unionId'], str):
-                    row_split = row['unionId'].split('/')
-
-                    if (row_split[0] == 'w' and self.__positions
-                        and row_split[-1] in [v.get('unionId') for v in self.__positions]):
-
-                        row['unionId'] = self.__orders[i]['unionId'] = row_split[-1]
-                    elif row_split[0] == 'w':
-                        continue
-
-                # Maker
-                limit = (row['limit'] and higher >= row['orderPrice']
-                    and lower <= row['orderPrice'])
-
-                # Taker
-                pos_cn = (not row['limit'] and higher >= row['orderPrice'] 
-                            if row['typeSide'] else
-                            not row['limit'] and lower <= row['orderPrice'])
-
-                # Execute order and delete
-                if limit or pos_cn:
-                    self.__order_execute(row)
-
-                    self.__del('__orders', [i])
-
-            self.__deli('__orders')
-
-        if (psff:=self.__buff('__pos_record')): 
-            self.__pos_record = self.__cn_insert(self.__pos_record, psff)
-
-        logger.debug("Executing 'next'")
         # Execute strategy
+        logger.debug("Executing 'next'")
         self.next()
 
         # Concat buffer
@@ -784,16 +785,16 @@ class StrategyClass(ABC):
         """
         Delete index
 
-        Removes indexes from '__to_delate'.
+        Removes indexes from '__to_delete'.
         Removes them from the '_StrategyClass'+name attribute.
 
         Args:
-            name (str): Name saved in '__to_delate' and attribute name.
+            name (str): Name saved in '__to_delete' and attribute name.
         """
 
-        if (name in self.__to_delate 
-            and len(self.__to_delate[name]) > 0):
-            for i in sorted(self.__to_delate[name], 
+        if (name in self.__to_delete 
+            and len(self.__to_delete[name]) > 0):
+            for i in sorted(self.__to_delete[name], 
                             reverse=True):
 
                 del getattr(self, '_StrategyClass'+name)[i]
@@ -809,10 +810,10 @@ class StrategyClass(ABC):
             index (list): list of indexes to save.
         """
 
-        if name not in self.__to_delate:
-            self.__to_delate.update({name:set(index)}); return
+        if name not in self.__to_delete:
+            self.__to_delete.update({name:set(index)}); return
 
-        self.__to_delate[name].update(index)
+        self.__to_delete[name].update(index)
 
     def unique_id(self = None) -> str:
         """
@@ -960,12 +961,12 @@ class StrategyClass(ABC):
             profit_per_val = (open-position_close_spread)/open*100
         position['profitPer'] = profit_per_val
 
+        org_amount = position['amount']
         if pos_amount > amount:
             self.__positions[index]['amount'] -= amount
 
             position['amount'] = amount
             pos_amount = amount
-
         else:
             # Close and unionId
             del self.__positions[index]
@@ -978,20 +979,31 @@ class StrategyClass(ABC):
                                                         d.get('closeId')))
                 ])
 
+        exit_fee = 0.
         if not np.isnan(pos_amount):
             profit_per = position.get('profitPer')
-
             gross_profit = pos_amount * profit_per / 100
-            entry_fee = pos_amount * (position.get('commission') / 100)
-            exit_fee = ((gross_profit + pos_amount) 
-                        * (commission / 100))
 
-            position['profit'] = gross_profit - entry_fee - exit_fee
-            self.__balance += gross_profit - entry_fee - exit_fee
+            if not self.__nper_commission:
+                exit_fee = ((gross_profit + pos_amount) 
+                            * (commission / 100))
+            else:
+                exit_fee = commission
+
+            position['profit'] = gross_profit
+            self.__balance += gross_profit
+
+            if org_amount <= amount:
+                position['profit'] -=  position.get('commission')
+                self.__balance -= position.get('commission')
+                position['commission'] += exit_fee
+            else:
+                position['commission'] = exit_fee
+
+            position['profit'] -= exit_fee
+            self.__balance -= exit_fee
         else:
             position['profit'] = np.nan
-
-        position['commission'] += commission
 
         if not '__pos_record' in self.__buffer:
             self.__buffer['__pos_record'] = []
@@ -1035,10 +1047,15 @@ class StrategyClass(ABC):
             position_open = (position_price+spread+slippage
                             if type_side else position_price-spread-slippage)
 
+        if not self.__nper_commission:
+            entry_fee = amount * (commission / 100)
+        else:
+            entry_fee = commission
+
         position = {
             'date':self.__data_dates[-1],
             'positionOpen':position_open,
-            'commission':commission,
+            'commission':entry_fee,
             'amount':amount,
             'typeSide':type_side,
             'unionId':union_id,
@@ -1556,7 +1573,7 @@ class StrategyClass(ABC):
                 marks the real index of each row.
             - date: Creation date.
             - positionOpen: Opening price.
-            - commission: Position commissions.
+            - commission: Position real cost of commissions.
             - amount: Position amount
             - typeSide: Position type True for buy.
             - unionId: Id linked to orders.
@@ -1745,8 +1762,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Ema calc.
-        return self.idct_ema(length=length, source=source, # type: ignore
-                            last=last, cut=True)
+        return self.idct_ema(data=self.__data_adf[source], length=length, # type: ignore
+                            last=last, cut=True) 
 
     def idc_sma(self, length:int, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
@@ -1784,7 +1801,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Sma calc.
-        return self.idct_sma(length=length, source=source, # type: ignore
+        return self.idct_sma(data=self.__data_adf[source], length=length, # type: ignore
                             last=last, cut=True)
 
     def idc_wma(self, length:int, source:str = 'close', 
@@ -1824,7 +1841,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Wma calc.
-        return self.idct_wma(length=length, source=source, # type: ignore
+        return self.idct_wma(data=self.__data_adf[source], length=length, # type: ignore
                             invt_weight=invt_weight, last=last, cut=True)
     
     def idc_smma(self, length:int, source:str = 'close', 
@@ -1863,7 +1880,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Smma calc.
-        return self.idct_smma(length=length, source=source, # type: ignore
+        return self.idct_smma(data=self.__data_adf[source], length=length, # type: ignore
                             last=last, cut=True)
 
     def idc_sema(self, length:int = 9, method:str = 'sma', 
@@ -1922,8 +1939,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Sema calc.
-        return self.idct_sema(length=length, method=method, smooth=smooth, # type: ignore
-                            only=only, source=source, last=last, cut=True)
+        return self.idct_sema(data=self.__data_adf[source], length=length, method=method, # type: ignore
+                            smooth=smooth, only=only, last=last, cut=True)
 
     def idc_bb(self, length:int = 20, std_dev:float = 2, ma_type:str = 'sma', 
                source:str = 'close', last:int | None = None) -> flx.DataWrapper:
@@ -1980,8 +1997,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Bb calc.
-        return self.idct_bb(length=length, std_dev=std_dev, # type: ignore
-                        ma_type=ma_type, source=source, last=last, cut=True)
+        return self.idct_bb(data=self.__data_adf[source], length=length, # type: ignore
+                            std_dev=std_dev, ma_type=ma_type, last=last, cut=True)
 
     def idc_rsi(self, length_rsi:int = 14, length:int = 14, 
                 rsi_ma_type:str = 'smma', base_type:str = 'sma', 
@@ -2052,10 +2069,9 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Rsi calc.
-        return self.idct_rsi(length_rsi=length_rsi, length=length, # type: ignore
-                            rsi_ma_type=rsi_ma_type, base_type=base_type, 
-                            bb_std_dev=bb_std_dev, source=source, 
-                            last=last, cut=True)
+        return self.idct_rsi(data=self.__data_adf[source], length_rsi=length_rsi, # type: ignore
+                            length=length, rsi_ma_type=rsi_ma_type, base_type=base_type, 
+                            bb_std_dev=bb_std_dev, last=last, cut=True)
 
     def idc_stochastic(self, length_k:int = 14, smooth_k:int = 1, 
                        length_d:int = 3, d_type:str = 'sma', 
@@ -2116,9 +2132,10 @@ class StrategyClass(ABC):
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
         # Calc stoch.
-        return self.idct_stochastic(length_k=length_k, smooth_k=smooth_k, # type: ignore
-                                length_d=length_d, d_type=d_type, 
-                                source=source, last=last, cut=True)
+        return self.idct_stochastic(data=self.__data_adf, length_k=length_k, # type: ignore
+                                    smooth_k=smooth_k, length_d=length_d, 
+                                    d_type=d_type, source=source, 
+                                    last=last, cut=True)
 
     def idc_adx(self, smooth:int = 14, length_di:int = 14,
                 only:bool = False, last:int | None = None) -> flx.DataWrapper:
@@ -2160,8 +2177,8 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc adx.
-        return self.idct_adx(smooth=smooth, length_di=length_di, # type: ignore
-                        only=only, last=last, cut=True)
+        return self.idct_adx(data=self.__data_adf, smooth=smooth, length_di=length_di, # type: ignore
+                            only=only, last=last, cut=True)
 
     def idc_macd(self, short_len:int = 12, long_len:int = 26, 
                  signal_len:int = 9, macd_ma_type:str = 'ema', 
@@ -2229,10 +2246,10 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc macd.
-        return self.idct_macd(short_len=short_len, long_len=long_len, # type: ignore
-                            signal_len=signal_len, macd_ma_type=macd_ma_type, 
-                            signal_ma_type=signal_ma_type, histogram=histogram, 
-                            source=source, last=last, cut=True)
+        return self.idct_macd(data=self.__data_adf[source], short_len=short_len, # type: ignore
+                            long_len=long_len, signal_len=signal_len, 
+                            macd_ma_type=macd_ma_type, signal_ma_type=signal_ma_type, 
+                            histogram=histogram, last=last, cut=True)
 
     def idc_sqzmom(self, bb_len:int = 20, bb_mult:float = 1.5, 
                    kc_len:int = 20, kc_mult:float = 1.5, 
@@ -2303,10 +2320,9 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc sqzmom.
-        return self.idct_sqzmom(bb_len=bb_len, bb_mult=bb_mult, # type: ignore
-                            kc_len=kc_len, kc_mult=kc_mult, 
-                            use_tr=use_tr, source=source, 
-                            last=last, cut=True)
+        return self.idct_sqzmom(data=self.__data_adf, bb_len=bb_len, bb_mult=bb_mult, # type: ignore
+                                kc_len=kc_len, kc_mult=kc_mult, use_tr=use_tr, 
+                                source=source, last=last, cut=True)
 
     def idc_mom(self, length:int = 10, source:str = 'close', 
                 last:int | None = None) -> flx.DataWrapper:
@@ -2344,7 +2360,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc momentum.
-        return self.idct_mom(length=length, source=source, # type: ignore
+        return self.idct_mom(data=self.__data_adf[source], length=length, # type: ignore
                             last=last, cut=True)
 
     def idc_ichimoku(self, tenkan_period:int = 9, kijun_period:int = 26, 
@@ -2399,14 +2415,12 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
         
         # Calc ichimoku.
-        return self.idct_ichimoku(tenkan_period=tenkan_period, # type: ignore
-                                kijun_period=kijun_period, 
-                                senkou_span_b_period=senkou_span_b_period, 
-                                ichimoku_lines=ichimoku_lines, 
-                                last=last, cut=True)
+        return self.idct_ichimoku(data=self.__data_adf, tenkan_period=tenkan_period, # type: ignore
+                                kijun_period=kijun_period, senkou_span_b_period=senkou_span_b_period, 
+                                ichimoku_lines=ichimoku_lines, last=last, cut=True)
 
     def idc_atr(self, length:int = 14, smooth:str = 'smma', 
-                last:int | None = None) -> flx.DataWrapper:
+                handle_na:bool = True, last:int|None = None) -> flx.DataWrapper:
         """
         Calculate the average true range (ATR).
 
@@ -2415,6 +2429,7 @@ class StrategyClass(ABC):
         Args:
             length (int, optional): Window length used to smooth the average true range (ATR).
             smooth (str, optional): Type of moving average used to smooth the ATR. 
+            handle_na (bool, optional): Whether to handle NaN values in 'close' (TR).
             last (int | None, optional): Number of data points to return starting from the 
                 present backward. If None, returns data for all available periods.
 
@@ -2437,6 +2452,7 @@ class StrategyClass(ABC):
                                 Last has to be less than the length of 
                                 'data' and greater than 0.
                                 """, newline_exclude=True))
+
         # Calc atr.
-        return self.idct_atr(length=length, smooth=smooth, # type: ignore
-                            last=last, cut=True)
+        return self.idct_atr(data=self.__data_adf, length=length, # type: ignore
+                            smooth=smooth, handle_na=handle_na, last=last, cut=True)

@@ -34,6 +34,7 @@ import matplotlib as mpl
 import tkinter as tk
 import random as rd
 import numpy as np
+import warnings
 import logging
 import os
 
@@ -295,6 +296,7 @@ class CustomWin:
             do this if you're going to use 'tk_panels'.
         tk_panels: Generates 'PanedWindow' panels.
         mpl_panels_config: Configure the panels.
+        supp_warnings: Static method for suppress ignorable matplotlib wanings.
         show: Show the window.
 
     Private Methods:
@@ -894,6 +896,42 @@ class CustomWin:
         except tk.TclError:
             pass
 
+    @staticmethod
+    def supp_warnings(func:Callable) -> Callable:
+        """
+        Suppress warnings
+
+        Suppress ignorable matplotlib wanings.
+
+        Note:
+            'wrapper' or 'func' is returned depending 
+            on 'mpl_warning_supp' global variable.
+
+        Args:
+            func (Callable, optional): Function.
+
+        Return:
+            Callable: Wrapper.
+        """
+
+        def wrapper(*args, **kwargs) -> Any:
+            """
+            Wrapper function
+
+            Suppress warnings.
+
+            Returns:
+                Any: Function result.
+            """
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Attempt to set non-positive ylim")
+                warnings.filterwarnings("ignore", message="overflow encountered in power")
+                return func(*args, **kwargs)
+
+        return wrapper if _cm.mpl_warning_supp else func
+
+    @supp_warnings
     def show(self, block:bool = True) -> None:
         """
         Show.
@@ -998,10 +1036,17 @@ def gradient_ax(ax:Axes, colors:list|tuple, right:bool=False) -> None:
                 + (np.linspace(0, 1, 256) 
                    if right else -np.linspace(0, 1, 256)))
 
+    ylim = ax.get_ylim()
+    autoylim, autoxlim = ax.get_autoscaley_on(), ax.get_autoscalex_on() # pyrefly: ignore
+
     im = ax.imshow(gradient, aspect='auto', 
                    cmap=mpl.colors.LinearSegmentedColormap.from_list('custom_gradient', colors), 
                 extent=(0., 1., 0., 1.), transform=ax.transAxes, zorder=-1)
     im.get_cursor_data = lambda event: None
+    im.sticky_edges.x[:] = []; im.sticky_edges.y[:] = [] # pyrefly: ignore
+
+    ax.set_ylim(*ylim)
+    ax.set_autoscaley_on(autoylim); ax.set_autoscalex_on(autoxlim) # pyrefly: ignore
 
 def custom_ax(ax:Axes, bg:str|tuple|list = '#e5e5e5', edge:bool = False) -> None:
     """
