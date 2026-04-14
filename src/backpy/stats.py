@@ -44,7 +44,7 @@ import matplotlib as mpl
 import pandas as pd
 import numpy as np
 
-from typing import Literal, Callable
+from typing import Literal, Callable, Sequence
 import random as rd
 import logging
 
@@ -333,7 +333,7 @@ def get_drawdowns(
 
     return drawdowns
 
-def perf_tzone_chart(names:list[str|int|None]|str|int|None = None,
+def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
                      view:str = 'p/d', col:str|None = 'profitPer', 
                      panel:str = 'new', style:str|None = 'last', 
                      style_c:dict|None = None, block:bool = True) -> None:
@@ -352,7 +352,7 @@ def perf_tzone_chart(names:list[str|int|None]|str|int|None = None,
         Documentation of this in the 'plot' docstring.
 
     Args:
-        names (list[str|int|None]|str|int|None, optional): 
+        names (Sequence[str|int|None]|str|int|None, optional): 
             Backtest names to extract data from, None = -1, 
             you can add multiple by passing an list.
         view (str, optional): Specifies which graphics to display. 
@@ -610,9 +610,9 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
         toolbar='total'
     )
 
-def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None, 
+def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None, 
                     n_trades:int|None = None, n_sim:int|None = 10000, 
-                    percentiles:list[int|float] = [1,5,10,24,50,75], 
+                    percentiles:Sequence[int|float] = [1,5,10,24,50,75], 
                     col:str|None = 'profitPer', replace:bool = True,
                     prnt:bool = True) -> tuple[list[pd.DataFrame], str]:
     """
@@ -623,13 +623,13 @@ def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None,
     For documentation of statistics, read the 'stats_trades' docstring.
 
     Args:
-        names (list[str|int|None]|str|int|None, optional): 
+        names (Sequence[str|int|None]|str|int|None, optional): 
             Backtest names to extract data from, None = -1, 
             you can add multiple by passing an list.
         n_trades (int|None, optional): Number of trades per simulation, 
             None = length of loaded trades.
         n_sim (int|None, optional): Number of simulations.
-        percentiles (list[int|float], optional): Percentiles for statistics.
+        percentiles (Sequence[int|float], optional): Percentiles for statistics.
         col (str|None, optional): Column to do the simulation, 
             only 'profit' and 'profitPer' are supported, 
             None uses 'profitPer' and calculates equity curve.
@@ -733,7 +733,7 @@ def monte_carlo_bsim(names:list[str|int|None]|str|int|None = None,
 
     return (sim, text)
 
-def correlation(names:list[str|int|None], col:str|None = None, 
+def correlation(names:Sequence[str|int|None], col:str|None = None, 
                 method:str|None = None) -> pd.DataFrame:
     """
     Correlation
@@ -741,7 +741,7 @@ def correlation(names:list[str|int|None], col:str|None = None,
     Measures correlation with DataFrame.corr.
 
     Args:
-        names (list[str|int|None]): Backtest names which measure correlation.
+        names (Sequence[str|int|None]): Backtest names which measure correlation.
         col (str|None, optional): Column used to measure correlation, 
             only 'profit' and 'profitPer' are supported, None = 'profitPer'.
         method (str|None, optional): Correlation method: 'pearson', 
@@ -755,6 +755,10 @@ def correlation(names:list[str|int|None], col:str|None = None,
     if col and col not in ('profit', 'profitPer'):
         raise exception.StatsError(
             "'col' only 'profit', 'profitPer' or None is supported.")
+    elif isinstance(names, str) or len(names) <= 1:
+        raise exception.StatsError(
+            "'names' can only be a Sequence not str, with len > 1."
+        )
     elif method and method.lower() not in ('pearson', 'kendall', 'spearman'):
         raise exception.StatsError(
             "'method' only 'pearson', 'kendall', 'spearman' or None is supported.")
@@ -847,7 +851,7 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None,
     if prnt:print(text) 
     else: return text
 
-def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None, 
+def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = None, 
                  prnt:bool = True) -> str | None:
     """
     Trades Statistics.
@@ -856,7 +860,7 @@ def stats_trades(data:bool = False, name:list[str|int|None]|str|int|None = None,
 
     Args:
         data (bool, optional): If True, `stats_icon` is also returned.
-        name (list[str|int|None]|str|int|None, optional): 
+        name (Sequence[str|int|None]|str|int|None, optional): 
             Backtest names to extract data from, None = -1, 
             you can add multiple by passing an list.
         prnt (bool, optional): If True, prints the statistics. If False, returns 
@@ -1272,7 +1276,7 @@ def trades_group_day(trades_date:pd.Series, op_years:float, year_days:int) -> pd
                 (trades_date.iloc[-1] - trades_date.iloc[0]) * 
                 op_years*year_days).astype(int)
 
-def earnings_intime(names:list[str|int|None]|str|int|None = None,
+def earnings_intime(names:Sequence[str|int|None]|str|int|None = None,
                     in_days:float = 365, profit:bool = True, 
                     prnt:bool = True) -> tuple[pd.Series, str]|None:
     """
@@ -1285,7 +1289,7 @@ def earnings_intime(names:list[str|int|None]|str|int|None = None,
         in that case, it is possible that not all of it will be printed.
 
     Args:
-        names (list[str|int|None]|str|int|None, optional): 
+        names (Sequence[str|int|None]|str|int|None, optional): 
             Backtest names to extract data from, None = -1, 
             you can add multiple by passing an list.
         in_days (float, optional): Number of days per group, cannot be less than 1.

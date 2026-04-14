@@ -526,7 +526,7 @@ def save_data_bpd(file_name:str = 'data') -> None:
                 _cm.__data_interval, 
                 _cm.__data_year_days), file)
 
-def run_config(initial_funds:int = 10000, commission:tuple | float = 0, 
+def run_config(initial_funds:float = 10000, commission:tuple | float = 0, 
         spread:tuple | float = 0, slippage:tuple | float = 0, 
         nper_commission:bool = False, gaps:bool = True, 
         ord_closer:bool = True, order_ord:dict | None = None, 
@@ -544,7 +544,7 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
         For commissions, spreads and slippage, the `CostsValue` format will be followed.
 
     Args:
-        initial_funds (int, optional): Initial amount of funds to start with. Used for 
+        initial_funds (float, optional): Initial amount of funds to start with. Used for 
             statistics. Default is 10,000.
         commission (tuple | float, optional): The commission will be charged 
             for each purchase/sale execution.
@@ -600,7 +600,7 @@ def run_config(initial_funds:int = 10000, commission:tuple | float = 0,
     _cm.__spread_pct = flx.CostsValue(spread, cust_error="Error of 'spread'.")
     _cm.__chunk_size = chunk_size or None
 
-def run(cls:type|list[type]|tuple[type], name:str|None = None, prnt:bool = True, 
+def run(cls:type|Sequence[type], name:str|None = None, prnt:bool = True, 
         progress:bool = True, trades_r:bool = False) -> dict|str|None:
     """
     Run
@@ -613,7 +613,7 @@ def run(cls:type|list[type]|tuple[type], name:str|None = None, prnt:bool = True,
         To delete a backtest use the function: 'backpy._commons.del_backtest'.
 
     Args:
-        cls (type|list[type]|tuple[type]): A class inherited from `StrategyClass` where the strategy is implemented.
+        cls (type|Sequence[type]): A class inherited from `StrategyClass` where the strategy is implemented.
         name (str|None, optional): Backtest name, None = cls.__name__, 
             if the name is duplicated a number will be added at the end.
         prnt (bool, optional): If True, prints trade statistics. If False, returns a string 
@@ -628,7 +628,7 @@ def run(cls:type|list[type]|tuple[type], name:str|None = None, prnt:bool = True,
     # Exceptions.
     if _cm.__data is None: 
         raise exception.RunError('Data not loaded.')
-    elif not isinstance(cls, (tuple, list)):
+    elif not isinstance(cls, Sequence):
         cls = [cls]
 
     instances = []
@@ -1265,8 +1265,8 @@ def draw_indicators(indicators, named_axes, x_index, width):
             loc=2,
         )
 
-def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int|None = None,
-         idc_name:str|list[str]|None = None, panel:str = 'new', style:str | None = 'last', 
+def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str|int|None = None,
+         idc_name:str|Sequence[str]|None = None, panel:str = 'new', style:str | None = 'last', 
          draw_style:str | None = None, draw_style_pos:str | None = None,
          draw_style_vol:str | None = None, style_c:dict | None = None, 
          block:bool = True) -> None:
@@ -1305,10 +1305,10 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
             Default is False.
         progress (bool, optional): If True, shows a progress bar and timer. 
             Default is True.
-        name (list[str|int|None]|str|int|None, optional): 
+        name (Sequence[str | int | None] | str | int | None, optional): 
             Backtest names to extract trades from, None = -1, 
             you can add multiple by passing an list.
-        idc_name (str | list[str] | None, optional): Name of registered indicators 
+        idc_name (str | Sequence[str] | None, optional): Name of registered indicators 
             to display with the graph. Register the indicators with 'reg_indicator'.
         panel (str, optional): To create a new window or add a panel, 
             only 'new' or 'add' are possible.
@@ -1363,8 +1363,9 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
     plt_colors = _cm.__plt_styles[style]
     _cm.plt_style = style
 
-    if not isinstance(idc_name, list):
-        idc_name = [idc_name] if not idc_name is None else []
+    idc_name = idc_name or []
+    if isinstance(idc_name, str):
+        idc_name = [idc_name]
     if idc_name and idc_name[0].strip() == '*':
         idc_name = list(_cm.__plot_indicators.keys())
     if isinstance(style_c, dict):
@@ -1496,7 +1497,7 @@ def plot(log:bool = False, progress:bool = True, name:list[str|int|None]|str|int
         toolbar='total',
     )
 
-def plot_strategy(name:list[str|int|None]|str|int|None = None, 
+def plot_strategy(name:Sequence[str|int|None]|str|int|None = None, 
                   log:bool = False, view:str = 'b/w/r/e',  
                   custom_graph:dict = {}, panel:str = 'new',
                   style:str | None = 'last', style_c:dict | None = None, 
@@ -1517,7 +1518,7 @@ def plot_strategy(name:list[str|int|None]|str|int|None = None,
         Documentation of this in the 'plot' docstring.
 
     Args:
-        name (list[str|int|None]|str|int|None, optional): 
+        name (Sequence[str|int|None]|str|int|None, optional): 
             Backtest names to extract data from, None = -1, 
             you can add multiple by passing an list.
         log (bool, optional): If True, plots data using a logarithmic scale. 

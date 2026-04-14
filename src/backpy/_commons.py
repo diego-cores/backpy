@@ -66,7 +66,7 @@ Hidden Functions:
     __gen_fname: Generates a name that is not duplicated in '__backtests'.
 """
 
-from typing import Any, Callable, cast
+from typing import Any, Callable, Sequence, cast
 from importlib.metadata import version
 import pandas as pd
 import logging
@@ -115,7 +115,7 @@ __linked_toolbars:list = []
 
 __min_gap:None|bool = None
 __limit_ig:None|bool = None
-__init_funds:None|int = 100
+__init_funds:None|float = 100
 __commission:None|CostsValue = None
 __spread_pct:None|CostsValue = None
 __slippage_pct:None|CostsValue = None
@@ -314,7 +314,7 @@ def _store_decorator(func:Callable) -> Callable:
     setattr(func, '_store', True)
     return func
 
-def del_backtest(names:list[str|int|None]|str|int|None = None) -> None:
+def del_backtest(names:Sequence[str|int|None]|str|int|None = None) -> None:
     """
     Delete backtests
 
@@ -322,7 +322,7 @@ def del_backtest(names:list[str|int|None]|str|int|None = None) -> None:
     so if you don't need it, it's best to remove it.
 
     Args:
-        names (list[str|int|None]|str|int|None, optional): 
+        names (Sequence[str|int|None]|str|int|None, optional): 
             Name or index of the backtests to be deleted.
     """
 
@@ -331,7 +331,7 @@ def del_backtest(names:list[str|int|None]|str|int|None = None) -> None:
     elif isinstance(names, tuple):
         raise exception.DataError("'names' cannot be a tuple.")
 
-    if isinstance(names, list):
+    if not isinstance(names, str) and isinstance(names, Sequence):
         nums:list[int] = sorted((x for x in names if isinstance(x, int)), reverse=True)
         strings:list[str] = [x for x in names if isinstance(x, str)]
         sorted_names = nums + strings
@@ -391,7 +391,7 @@ def __get_names(from_:list[dict]) -> list[str]:
 
     return [i['name'] for i in from_]
 
-def __get_dtrades(names:list[str|int|None]|str|int|None = None) -> dict:
+def __get_dtrades(names:Sequence[str|int|None]|str|int|None = None) -> dict:
     """
     Get trades dict
 
@@ -402,7 +402,7 @@ def __get_dtrades(names:list[str|int|None]|str|int|None = None) -> dict:
     One key per backtest.
 
     Args:
-        names (list[str|int|None]|str|int|None, optional): You can pass an 
+        names (Sequence[str|int|None]|str|int|None, optional): You can pass an 
             integer index, a name, or a list of both; duplicates 
             are not allowed, None = -1.
 
@@ -418,7 +418,7 @@ def __get_dtrades(names:list[str|int|None]|str|int|None = None) -> dict:
 
     return trades
 
-def __get_trades(names:list[str|int|None]|str|int|None = None) -> pd.DataFrame:
+def __get_trades(names:Sequence[str|int|None]|str|int|None = None) -> pd.DataFrame:
     """
     Get trades
 
@@ -427,7 +427,7 @@ def __get_trades(names:list[str|int|None]|str|int|None = None) -> pd.DataFrame:
     Trades will be sorted ascending based on 'positionDate'.
 
     Args:
-        names (list[str|int|None]|str|int|None, optional): You can pass an 
+        names (Sequence[str|int|None]|str|int|None, optional): You can pass an 
             integer index, a name, or a list of both; duplicates 
             are not allowed, None = -1.
 
