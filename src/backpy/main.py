@@ -747,8 +747,10 @@ def run(cls:type|Sequence[type], name:str|None = None, prnt:bool = True,
 
 def run_animation(cls:type, candles:int = 100, interval:int = 100, 
                   operation_route:bool | None = True, pad:bool = False,
-                  panel:str = 'new', style:str | None = 'last', 
-                  style_c:dict | None = None, block:bool = True) -> None:
+                  candle_pov:bool|float = False, delete_after:bool = False, 
+                  draw_active:bool = True, panel:str = 'new', 
+                  style:str | None = 'last', style_c:dict | None = None, 
+                  block:bool = True) -> None:
     """
     Run animation
 
@@ -766,6 +768,10 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
             except the colored rectangle.
         pad (bool, optional): If it is True, a pad is added to the right 
             and the end of the candles is more in the center.
+        candle_pov (bool|float, optional): If True, the point of view will be focused on the candle.
+                If it is a float, it will be the percentage of the candle that will be focused on.
+        delete_after (bool, optional): If True, the elimination line is outside of xlim.
+        draw_active (bool, optional): If True, the active positions will be drawn.
         panel (str, optional): To create a new window or add a panel, 
             only 'new' or 'add' are possible.
         style (str|None, optional): Color style. 
@@ -796,6 +802,8 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
         raise exception.PlotError(f"'{style}' Not a style.")
     elif interval < 100:
         raise exception.PlotError(f"'interval' it can only be greater or equal than 100.")
+    elif not (isinstance(candle_pov, bool) or candle_pov is None) and candle_pov < 0.01:
+        raise exception.PlotError(f"'candle_pov' it can only be greater or equal than 0.01.")
 
     # Corrections.
     _cm.__data.index = utils.correct_index(_cm.__data.index)
@@ -836,6 +844,7 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
     instance._StrategyClass__before(index=f) # pyrefly: ignore
     trades_last = pd.DataFrame(
         instance._StrategyClass__positions).dropna(axis=1, how='all') # pyrefly: ignore
+    update_elements = []
 
     def update(_):
         """
@@ -844,7 +853,7 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
         Update animation.
         """
 
-        nonlocal f, trades_last, pad
+        nonlocal f, trades_last, pad, update_elements
 
         if (_cm.__data is None 
             or not isinstance(_cm.__data_width, float) 
@@ -854,6 +863,11 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
         f += 1
         l = f-candles
         if l <= 0: l = 0
+
+        if update_elements:
+            for el in update_elements:
+                el.remove()
+            update_elements = []
 
         utils.plot_candles(ax1, _cm.__data.iloc[[f]], _cm.__data_width*0.9,
                         color_up=market_colors.get('u', 'g'),
@@ -869,9 +883,18 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
                 :instance._StrategyClass__pos_record._pos]
         ).dropna(axis=1, how='all')
         
-        if not act_trades.empty: 
+        if not act_trades.empty:
             trades = pd.concat([trades, act_trades], ignore_index=True)
 
+            if draw_active:
+                act_trades['positionClose'] = _cm.__data['close'].values[f]
+                act_trades['positionDate'] = _cm.__data.index.values[f]
+                update_elements.extend(utils.plot_position(act_trades, ax1, 
+                    color_take=market_colors.get('u', 'g'),
+                    color_stop=market_colors.get('d', 'r'),
+                    operation_route=operation_route, alpha=0.3, 
+                    closing_markets=False,
+                    alpha_arrow=0.8))
 
         dupl_trades = pd.concat([trades, trades_last]).drop_duplicates(keep=False)
         trades_mask = trades.apply(tuple, axis=1).isin(dupl_trades.apply(tuple, axis=1))
@@ -886,21 +909,30 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
                             alpha_arrow=0.8)
 
         pad_l = (abs(_cm.__data.index[l:f][-1]-_cm.__data.index[l:f][0])/2 if pad else 0)
-        ax1.set_ylim(_cm.__data.iloc[l:f]['low'].to_numpy(dtype=float).min()*0.99,
-                     _cm.__data.iloc[l:f]['high'].to_numpy(dtype=float).max()*1.01,)
-        ax1.set_xlim(_cm.__data.index.values[l:f][0]-_cm.__data_width*(candles*0.03), 
+        ylim_range = (_cm.__data.iloc[l:f]['high'].to_numpy(dtype=float).max() 
+                - _cm.__data.iloc[l:f]['low'].to_numpy(dtype=float).min())
+
+        if not candle_pov:
+            ax1.set_ylim(_cm.__data.iloc[l:f]['low'].to_numpy(dtype=float).min()-ylim_range*0.1,
+                        _cm.__data.iloc[l:f]['high'].to_numpy(dtype=float).max()+ylim_range*0.1,)
+        else:
+            rng = candle_pov if isinstance(candle_pov, float|int) else 0.3
+            ax1.set_ylim(_cm.__data.iloc[f]['low']-ylim_range*rng,
+                        _cm.__data.iloc[f]['high']+ylim_range*rng,)       
+        ax1.set_xlim(_cm.__data.index.values[l:f][0]-_cm.__data_width*(candles*0.03),
                     _cm.__data.index.values[l:f][-1]+_cm.__data_width*2*(candles*0.03)+pad_l)
         ax2.set_ylim(top=_cm.__data.iloc[l:f]['volume'].to_numpy(dtype=float).max()*1.1 or 1)
 
-        def axes_xlim(ax:Axes):
+        def axes_xlim(ax:Axes, ln_val:float) -> None:
             """
             Axes xlim
 
             Delete: 'LineCollection', 'PatchCollection' and 'PathCollection'
-                if x value is less than 'data.index[l:f][0]-data_width/2'.
+                if x value is less than 'data.index[l:f][0]-ln_val'.
 
             Args:
                 ax (Axes): Axis.
+                ln_val (float): Value that defines the point where is deleted.
             """
 
             if _cm.__data is None or _cm.__data_width is None:
@@ -926,10 +958,11 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
                 else:
                     continue
 
-                if xs < _cm.__data.index[l:f][0]-_cm.__data_width/2:
+                if xs < _cm.__data.index[l:f][0]-ln_val:
                     coll.remove()
 
-        axes_xlim(ax1); axes_xlim(ax2)
+        delete_ln = _cm.__data_width*3 if delete_after else _cm.__data_width/2
+        axes_xlim(ax1, delete_ln); axes_xlim(ax2, delete_ln)
         return ()
 
     date_format = DateFormatter('%H:%M %d-%m-%Y')

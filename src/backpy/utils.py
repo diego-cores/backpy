@@ -38,7 +38,7 @@ Hidden Functions:
     _loop_data: Function to extract data from an API with a data per second limit.
 """
 
-from matplotlib.collections import PatchCollection, LineCollection
+from matplotlib.collections import PatchCollection, LineCollection, Collection
 from matplotlib.markers import MarkerStyle
 from matplotlib.patches import Rectangle 
 from matplotlib.axes._axes import Axes
@@ -647,7 +647,8 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     patches = [Rectangle((xi, yi), width, hi) for xi, yi, hi in zip(x, y, height)]
     ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0, zorder=1)) # type: ignore[arg-type]
 
-    ax.set_ylim(data['low'].min()*0.98, data['high'].max()*1.02)
+    ylim_range = data['high'].max() - data['low'].min()
+    ax.set_ylim(data['low'].min() - ylim_range*0.1, data['high'].max() + ylim_range*0.1)
     ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
                 data.index.values[-1]+(width*len(data.index)/10))
 
@@ -712,7 +713,8 @@ def plot_line(ax:Axes, data:pd.Series,
 def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green', 
                   color_stop:str = 'red', alpha:float = 1, 
                   alpha_arrow:float = 1, arrow_fact:float = 0.2, 
-                  operation_route:bool | None = True) -> None:
+                  operation_route:bool | None = True, closing_markets:bool | None = True
+                  ) -> list[PatchCollection|Collection]:
     """
     Position Draw.
 
@@ -727,6 +729,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
         alpha_arrow (float, optional): Opacity of arrow, type marker, and close marker. Default is 1.
         operation_route (bool | None, optional): If True, traces the route of the operation. Default is True.
             None, it doesn't draw the color but it does draw the arrow.
+        closing_markets (bool | None, optional): If True, draws markers for closing positions. Default is True.
         arrow_fact (float, optional): Indicates how much the colors of the arrows darken or lighten.
             If you don't want this to happen, leave it at 0.
         width_exit (callable, optional): Function that specifies how many time points the position 
@@ -738,6 +741,9 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
         The 'color_take' indicates where the take profit is placed and the 'color_stop'
         indicates where the stop loss is placed. If there is no take profit, its marker 
         will not be drawn; the same applies to the stop loss.
+    
+    Returns:
+        list[PatchCollection|Collection]: List of the collections added to the `ax`.
     """
 
     # Corrections
@@ -747,6 +753,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
         trades['positionClose'] = np.nan
     if 'profitPer' not in trades.columns:
         trades['profitPer'] = np.nan
+    collections:list[PatchCollection|Collection] = []
 
     # Draw routes of the operations.
     if operation_route or operation_route is None:
@@ -757,20 +764,20 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
             trades['positionDate'],
             trades['positionClose'],)]
 
-        ax.add_collection(LineCollection( # type: ignore[arg-type]
+        collections.append(ax.add_collection(LineCollection( # type: ignore[arg-type]
             segments,
             colors="grey",
             linestyles=(0, (5, 5)),
             linewidths=0.8,
             alpha=alpha_arrow,
             zorder=cast(int, 0.9)
-        ))
+        )))
 
     color_close:list = trades.apply(
         lambda x: (
             diff_ccolor('#089991', color_take, factor=0.2) 
-            if x['profitPer'] >= 0 
-            else diff_ccolor('#f23651', color_stop, factor=0.2)), axis=1).to_list()
+            if x['positionClose'] >= x['positionOpen'] else
+            diff_ccolor('#f23651', color_stop, factor=0.2)), axis=1).to_list()
 
     if operation_route:
         routes = [
@@ -783,29 +790,35 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
                 trades['positionDate']
         )]
 
-        ax.add_collection(PatchCollection(routes, color=color_close, # type: ignore[arg-type]
-                                        alpha=alpha, linewidth=0, zorder=0.8))
+        collections.append(ax.add_collection(PatchCollection(routes, color=color_close, # type: ignore[arg-type]
+                                        alpha=alpha, linewidth=0, zorder=0.8)))
 
     # Drawing of the closing marker of the operations.
     if ('positionDate' in trades.columns and 
-        'positionClose' in trades.columns):
+        'positionClose' in trades.columns and 
+        (closing_markets or closing_markets is None)):
 
-        ax.scatter(trades['positionDate'].to_numpy(), trades['positionClose'].to_numpy(), 
-                  c=color_close, s=30, marker=MarkerStyle('x'), alpha=alpha_arrow, zorder=1.1)
+        collections.append(
+            ax.scatter(trades['positionDate'].to_numpy(), trades['positionClose'].to_numpy(), 
+                  c=color_close, s=30, marker=MarkerStyle('x'), alpha=alpha_arrow, zorder=1.1))
 
     up_type:Callable = lambda x: x['positionOpen'] if x['typeSide'] == 1 else None
     down_type:Callable = lambda x: x['positionOpen'] if x['typeSide'] != 1 else None
 
     # Drawing of the position type marker.
-    ax.scatter(trades['date'].to_numpy(), 
-               trades.apply(up_type, axis=1), 
-               color=diff_color(color_take, factor=arrow_fact, line=0.2), s=30, 
-               marker=MarkerStyle('^'), alpha=alpha_arrow, zorder=1.1)
+    collections.append(
+        ax.scatter(trades['date'].to_numpy(), 
+                trades.apply(up_type, axis=1), 
+                color=diff_color(color_take, factor=arrow_fact, line=0.2), s=30, 
+                marker=MarkerStyle('^'), alpha=alpha_arrow, zorder=1.1))
 
-    ax.scatter(trades['date'].to_numpy(), 
+    collections.append(
+        ax.scatter(trades['date'].to_numpy(), 
                trades.apply(down_type, axis=1),
                color=diff_color(color_stop, factor=arrow_fact, line=0.2), s=30, 
-               marker=MarkerStyle('v'), alpha=alpha_arrow, zorder=1.1)
+               marker=MarkerStyle('v'), alpha=alpha_arrow, zorder=1.1))
+
+    return collections
 
 def _loop_data(function:Callable, bpoint:Callable, init:int, timeout:float) -> pd.DataFrame:
     """
