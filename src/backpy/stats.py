@@ -444,15 +444,7 @@ def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
 
     for i,v in enumerate(v_view):
         ax = axes[i]
-    
-        cpl.custom_ax(ax, plt_colors['bg'], edge=gdir)
-        ax.tick_params('x', which='both', bottom=False, 
-                        top=False, labelbottom=False)
-        ax.tick_params('y', which='both', left=False, 
-                        right=False, labelleft=False)
-
-        ax.yaxis.set_major_formatter(lambda y, _: str(y.real))
-        ax.xaxis.set_major_formatter(lambda x, _: str(x.real))
+        cpl.config_ax(ax, bg_color=plt_colors['bg'], date=False, gdir=gdir)
 
         match v:
             case 'p':
@@ -558,15 +550,7 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
 
     for i,v in enumerate(v_view):
         ax = axes[i]
-    
-        cpl.custom_ax(ax, plt_colors['bg'], edge=gdir)
-        ax.tick_params('x', which='both', bottom=False, 
-                        top=False, labelbottom=False)
-        ax.tick_params('y', which='both', left=False, 
-                        right=False, labelleft=False)
-
-        ax.yaxis.set_major_formatter(lambda y, _: str(y.real))
-        ax.xaxis.set_major_formatter(lambda x, _: str(x.real))
+        cpl.config_ax(ax, bg_color=plt_colors['bg'], date=False, gdir=gdir)
 
         match v:
             case 's':

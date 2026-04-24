@@ -14,6 +14,7 @@ Classes:
 
 Functions:
     statistics_format: Returns statistics into a structured string.
+    esc_latex: Caratheres escape LaTeX.
     num_align: Aligns a number to the left or right with a maximum number of digits.
     round_r: Function to round a number to a specified number of significant 
         digits to the right of the decimal point.
@@ -300,6 +301,33 @@ def statistics_format(data:dict, title:str | None = None,
     text = text_fix(text, False)
 
     return text
+
+def esc_latex(text:str) -> str:
+    """
+    Escape LaTeX
+
+    Caratheres escape LaTeX.
+
+    Args:
+        text (str): Text to escape.
+
+    Returns:
+        str: Resulting text.
+    """
+    replacements = {
+        '_': r'\_',
+        '^': r'\^{}',
+        '&': r'\&',
+        '%': r'\%',
+        '$': r'\$',
+        '#': r'\#',
+        '{': r'\{',
+        '}': r'\}',
+        '~': r'\textasciitilde{}',
+        '\\': r'\textbackslash{}',
+    }
+
+    return ''.join(replacements.get(c, c) for c in text)
 
 def num_align(num:float|np.floating, digits:int = 4, side:bool = True) -> str:
     """

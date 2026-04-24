@@ -18,11 +18,14 @@ Functions:
     ax_view: Based on a str generates axes.
     new_paneledw: Generate a window with panels using 'CustomWin'.
     add_window: Add a tkinter window with 'CustomWin'.
+    gen_axes: Generate 'num' number of axes.
+    config_ax: Backpy default axis configuration.
 """
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk # type: ignore[import]
 from matplotlib.animation import FuncAnimation
 from typing import Callable, Never, Any, cast
+from matplotlib.dates import DateFormatter
 from PIL import Image, ImageTk, ImageOps
 from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure
@@ -1264,3 +1267,63 @@ def add_window(fig:Figure, title:str|Callable|None = None, block:bool = True,
             window.mpl_toolbar_config(toolbar=custom_toolbar, mpl_canvas=mpl_canvas)
 
         window.show(block=block)
+
+def gen_axes(num:int, pad:int=0, sharex:Axes|None=None, 
+            sharey:Axes|None=None, autoget_sharex:bool = False, 
+            autoget_sharey:bool = False) -> list:
+    """
+    Generate axes
+
+    Generate 'num' of axes. 
+
+    Args:
+        num (int): Number of axes to generate.
+        pad (int, optional): Number of rows to pad at the top.
+        sharex (Axes|None, optional): Axes to share the x-axis.
+        sharey (Axes|None, optional): Axes to share the y-axis.
+        autoget_sharex (bool, optional): All new axes share the x-axis.
+        autoget_sharey (bool, optional): All new axes share the y-axis.
+
+    Returns:
+        list: A list of generated axes.
+    """
+
+    axes = []
+    for i in range(num):
+        ax = plt.subplot2grid((num+pad,1), (i+pad,0), rowspan=1, 
+            colspan=1, sharex=sharex, sharey=sharey)
+        axes.append(ax)
+
+        if autoget_sharex:
+            sharex = ax
+        if autoget_sharey:
+            sharey = ax
+
+    return axes
+
+def config_ax(ax:Axes, date:bool = True, bg_color:str|tuple|list = '#e5e5e5', 
+            gdir:bool = False, log:bool = False) -> None:
+    """
+    Config axis
+
+    Backpy default axis configuration.
+
+    Args:
+    ax (Axes): Axis to configure.
+    date (bool, optional): If true, the x-axis will display dates.
+    bg_color (str|tuple|list, optional): Background color of the axis,
+        if it is a list or tuple a gradient will be created.
+    gdir (bool, optional): If the background is a gradient, this
+        determines which corner you launch from, false left, true right.
+    log (bool, optional): Logarithmic y-axis.
+    """
+
+    custom_ax(ax, bg_color, edge=gdir)
+    if log: ax.semilogy()
+
+    ax.yaxis.set_major_formatter(lambda y, _: str(y.real))
+    ax.xaxis.set_major_formatter(
+        DateFormatter('%H:%M %d-%m-%Y') if date else lambda x, _: str(x.real))
+
+    ax.tick_params(axis='x', labelbottom=False)
+    ax.tick_params(axis='y', labelleft=False)

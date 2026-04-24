@@ -866,7 +866,8 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
 
         if update_elements:
             for el in update_elements:
-                el.remove()
+                if el.axes is not None:
+                    el.remove()
             update_elements = []
 
         utils.plot_candles(ax1, _cm.__data.iloc[[f]], _cm.__data_width*0.9,
@@ -916,11 +917,12 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
             ax1.set_ylim(_cm.__data.iloc[l:f]['low'].to_numpy(dtype=float).min()-ylim_range*0.1,
                         _cm.__data.iloc[l:f]['high'].to_numpy(dtype=float).max()+ylim_range*0.1,)
         else:
-            rng = candle_pov if isinstance(candle_pov, float|int) else 0.3
+            rng = candle_pov if isinstance(candle_pov, float|int) else 0.25
             ax1.set_ylim(_cm.__data.iloc[f]['low']-ylim_range*rng,
-                        _cm.__data.iloc[f]['high']+ylim_range*rng,)       
-        ax1.set_xlim(_cm.__data.index.values[l:f][0]-_cm.__data_width*(candles*0.03),
-                    _cm.__data.index.values[l:f][-1]+_cm.__data_width*2*(candles*0.03)+pad_l)
+                        _cm.__data.iloc[f]['high']+ylim_range*rng,)
+
+        ax1.set_xlim(_cm.__data.index.values[l:f][0]-_cm.__data_width*2,
+                    _cm.__data.index.values[l:f][-1]+_cm.__data_width*4+pad_l)
         ax2.set_ylim(top=_cm.__data.iloc[l:f]['volume'].to_numpy(dtype=float).max()*1.1 or 1)
 
         def axes_xlim(ax:Axes, ln_val:float) -> None:
@@ -1091,23 +1093,7 @@ def reg_indicator(panel:str|None=None, color:str|list|None=None,
 
     return __add_indicator
 
-# Wip
-def gen_axes(num:int, diff:int=0, sharex:Axes|None=None, sharey:Axes|None=None, autoget_sharex:bool = False, autoget_sharey:bool = False) -> list:
-    axes = []
-
-    for i in range(num):
-        ax = plt.subplot2grid((num+diff,1), (i+diff,0), rowspan=1, 
-            colspan=1, sharex=sharex, sharey=sharey)
-        axes.append(ax)
-
-        if autoget_sharex:
-            sharex = ax
-        if autoget_sharey:
-            sharey = ax
-
-    return axes
-
-# Wip
+# wip
 def draw_indicators(indicators, named_axes, x_index, width):
     if not indicators:
         return
@@ -1118,22 +1104,8 @@ def draw_indicators(indicators, named_axes, x_index, width):
     legend_args = True # Global Variable
     fontsize = 'xx-small' # Global Variable
 
-    def esc_latex(text):
-        replacements = {
-            '_': r'\_',
-            '^': r'\^{}',
-            '&': r'\&',
-            '%': r'\%',
-            '$': r'\$',
-            '#': r'\#',
-            '{': r'\{',
-            '}': r'\}',
-            '~': r'\textasciitilde{}',
-            '\\': r'\textbackslash{}',
-        }
-        return ''.join(replacements.get(c, c) for c in text)
-
-    mathform = lambda title, description: rf'$\bf{{{esc_latex(title)}}}$: $\it{{{esc_latex(description)}}}$.'
+    mathform = (lambda title, description: 
+        rf'$\bf{{{utils.esc_latex(title)}}}$: $\it{{{utils.esc_latex(description)}}}$.')
     legends = {ax_nm:{'handles':[], 'labels':[]} for ax_nm in named_axes.keys()}
 
     for idc in indicators:
@@ -1158,7 +1130,7 @@ def draw_indicators(indicators, named_axes, x_index, width):
 
         # Ax lines
         style_ax = _cm.__plot_indicators[idc].get('styleAxNew', [])
-        for stl in style_ax:
+        for stl in style_ax: # Global definitions
             draw_st = _cm.__plot_indicators[idc].get(stl, {})
             if not draw_st:
                 continue
@@ -1223,7 +1195,7 @@ def draw_indicators(indicators, named_axes, x_index, width):
 
             match _cm.__plot_indicators[idc][stl].get('func', None):
                 case 'hist':
-                    def draw_hist(x, y, color, zorder):
+                    def draw_hist(x, y, color, zorder): # global func
                         y = np.array(y)
                         x = np.array(x)
                         diff = np.diff(y)
@@ -1443,7 +1415,7 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
     axes_order = {'price':0, 'volume':1}
     needed_axes.sort(key=lambda x: axes_order.get(x, 3))
 
-    axes = gen_axes(axes_num, diff=diff, sharex=ax1, autoget_sharex=True)
+    axes = cpl.gen_axes(axes_num, pad=diff, sharex=ax1, autoget_sharex=True)
     if ax1: axes.insert(0, ax1)
 
     if not axes:
@@ -1453,16 +1425,6 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
     # Drawn indicators
     named_axes = dict(zip(needed_axes, axes))
     draw_indicators(idc_name, named_axes, _cm.__data.index, _cm.__data_width*0.9)
-
-    def config_ax(ax, bg_color, gdir, log):
-        cpl.custom_ax(ax, bg_color, edge=gdir)
-        if log: ax.semilogy()
-
-        ax.yaxis.set_major_formatter(lambda y, _: str(y.real))
-        ax.xaxis.set_major_formatter(DateFormatter('%H:%M %d-%m-%Y'))
-
-        ax.tick_params(axis='x', labelbottom=False)
-        ax.tick_params(axis='y', labelleft=False)
 
     load_prgs.next()
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
@@ -1505,7 +1467,8 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
     gdir = plt_colors.get('gdir', False)
     for i in named_axes:
         cx_log = log if i in ['price', 'volume'] else False
-        config_ax(named_axes[i], plt_colors['bg'], gdir, cx_log)
+        cpl.config_ax(named_axes[i], bg_color=plt_colors['bg'], 
+                    gdir=gdir, log=cx_log)
 
     fig.autofmt_xdate()
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0, hspace=0)
@@ -1628,15 +1591,8 @@ def plot_strategy(name:Sequence[str|int|None]|str|int|None = None,
 
     for i,v in enumerate(r_view):
         ax = axes[i]
-
-        cpl.custom_ax(ax, plt_colors['bg'], edge=gdir)
-        ax.tick_params('x', which='both', bottom=False, 
-                       top=False, labelbottom=False)
-        ax.tick_params('y', which='both', left=False, 
-                       right=False, labelleft=False)
-
-        ax.yaxis.set_major_formatter(lambda y, _: str(y.real))
-        ax.xaxis.set_major_formatter(DateFormatter('%H:%M %d-%m-%Y'))
+        cpl.config_ax(ax, bg_color=plt_colors['bg'], gdir=gdir, 
+                    log=log if v in ['b', 'e', 'p', 'r'] else False)
 
         pos_date = trades['positionDate']
         ax.set_xlim(pos_date.dropna().iloc[0]-(trades_data['d_width']*len(pos_date)/10), 
@@ -1655,7 +1611,6 @@ def plot_strategy(name:Sequence[str|int|None]|str|int|None = None,
                         label='Balance.', ds='steps-post')
 
                 ax.set_ylim(y_limit(values))
-                if log: ax.set_yscale('symlog')
             case 'p':
                 values = trades['profit'].cumsum()
                 color = (market_colors.get('u', 'g') if np.nansum(trades['profit'].to_numpy()) > 0 
@@ -1665,8 +1620,6 @@ def plot_strategy(name:Sequence[str|int|None]|str|int|None = None,
                         label='Profit.', ds='steps-post')
    
                 ax.set_ylim(y_limit(values))
-
-                if log: ax.set_yscale('symlog')
             case 'w':
                 values = (trades['profitPer'].apply(
                             lambda row: 1 if row>0 else -1)).cumsum()
@@ -1691,8 +1644,6 @@ def plot_strategy(name:Sequence[str|int|None]|str|int|None = None,
 
                 values = y_limit(values, 0.01)
                 ax.set_ylim(y_limit(values, 0.01))
-
-                if log: ax.set_yscale('symlog')
             case 'r':
                 values = trades['profitPer'].cumsum()
 
@@ -1703,8 +1654,6 @@ def plot_strategy(name:Sequence[str|int|None]|str|int|None = None,
                 ax.plot(pos_date, values, c=color, 
                         label='Return.', ds='steps-post')
                 ax.set_ylim(y_limit(values))
-
-                if log: ax.set_yscale('symlog')
             case key if key in _cm.__custom_plot.keys():
                 _cm.__custom_plot[v](ax, trades, 
                                     _cm.__data, log)
