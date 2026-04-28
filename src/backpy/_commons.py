@@ -69,6 +69,7 @@ Hidden Functions:
 from typing import Any, Callable, Sequence, cast
 from importlib.metadata import version
 import pandas as pd
+import numpy as np
 import logging
 
 from backpy.flex_data import CostsValue
@@ -126,64 +127,6 @@ __nper_commission:None|bool = None
 
 __custom_plot:dict = {}
 __plot_indicators:dict[str, dict] = {}
-__plot_indicators_def:dict = {
-    'def':{'panel':None, 'color':[None]},
-    'idct_ema':{'panel':'price', 'color':['blue']},
-    'idct_bb':{'panel':'price', 'color':['#f23645', '#2D2DFF', '#089981'], 
-        'styleArVar':['extraAr'], 
-        'extraAr':{
-            'btw':(0,2),
-            'color':'#6565FF12',
-        }},
-    'idct_rsi':{'panel':None, 'color':['#9B40C8', '#FFF700'], 
-        'styleAxNew':['extraTopLn', 'extraBotLn', 'extraMidLn', 'extraAr'], 
-        'extraTopLn':{
-            'cords':70, 
-            'color':'#FFFFFF36', 
-            'style':(0, (1.5,1))
-        }, 
-        'extraBotLn':{
-            'cords':30, 
-            'color':'#FFFFFF36', 
-            'style':(0, (1.5,1))
-        }, 
-        'extraMidLn':{
-            'cords':50, 
-            'color':'#FFFFFF36', 
-            'style':(0, (1.5,1))
-        }, 
-        'extraAr':{
-            'btw':(30, 70),
-            'color':'#BB00D824',
-        }},
-    'idct_macd':{'panel':None, 'color':['blue', 'orange'], 
-        'styleOnDraw':['drawLn'], 
-        'drawLn':{
-            'func':'hist',
-            'value':2,
-            'colorNeg':'#f23645',
-            'color':'#089981',
-            'colorNegF':'#ffcdd2',
-            'colorF':'#B0D8D5',
-        }},
-    'idct_sqzmom':{'panel':None, 'color':['blue'],
-        'styleOnDraw':['drawLn'], 
-        'drawLn':{
-            'func':'hist',
-            'value':1,
-            'colorNeg':'#AF0909',
-            'color':'#0AAF0A',
-            'colorNegF':'#5C0909',
-            'colorF':'#0A5D0A',
-        }},
-    'idct_ichimoku':{'panel':'price', 'color':['#C4E293', '#E29393', '#2450C0', '#C0110B'], 
-        'styleArVar':['extraAr'], 
-        'extraAr':{
-            'btw':(0,1),
-            'colorNeg':'#AA2F2F24',
-            'color':'#81B13324',
-        }},
-}
 
 __binance_timeout:float = 0.08
 
@@ -288,6 +231,123 @@ __plt_styles:dict = {
         'fr': '#250040', 'btn': '#E84FFF', 'btna': '#C23AD9',
         'vol': '#DA70D6', 'mk': {'u': '#E84FFF', 'd': '#9400D3'},
     }
+}
+
+# Wip
+def drawax_hline(cord, color, **kwargs):
+    def wrapper(ax, *a_, zorder=0.4, **kn_):
+        return ax.axhline(cord, color=color, **kwargs, zorder=zorder)
+    return wrapper
+
+def drawax_btw(btw, color, **kwargs):
+    def wrapper(ax, *a_, zorder=0.4, **kn_):
+
+        return ax.axhspan(*btw, color=color, **kwargs, zorder=zorder)
+    return wrapper
+
+def draw_btw(btw_index, color:str|tuple, color_d:str|tuple|None = None, **kwargs):
+    def wrapper(ax, index, values, zorder=0.4):
+        collections = []
+
+        get_values =[np.array(values[i]) for i in btw_index][:2]
+        hist = (get_values[0]-get_values[1])
+        hist_d = np.insert(np.diff(hist), 0, 0)
+
+        cpos, cneg = (
+            (color, color) if isinstance(color, str) or len(color) < 2 
+            else (color[0], color[1]))
+
+        where_pos, where_neg = (hist>=0), (hist<0)
+        if color_d:
+            where_pos = (hist>=0) & (hist>=hist_d)
+            where_neg = (hist<0) & (hist<hist_d)
+
+            cposd, cnegd = (
+                (color_d, color_d) if isinstance(color_d, str) or len(color_d) < 2 
+                else (color_d[0], color_d[1]))
+
+            collections.append(ax.fill_between( # Dont work
+                index,
+                *get_values,
+                where=((hist<0) & (hist>=hist_d)),
+                interpolate=True,
+                color=cposd,
+                zorder=zorder,
+                **kwargs
+                ))
+
+            collections.append(ax.fill_between(
+                index,
+                *get_values,
+                where=((hist>=0) & (hist<hist_d)),
+                interpolate=True,
+                color=cnegd,
+                zorder=zorder,
+                **kwargs
+                ))
+
+        collections.insert(0, ax.fill_between(
+            index,
+            *get_values,
+            where=where_pos,
+            interpolate=True,
+            color=cpos,
+            zorder=zorder,
+            **kwargs
+            ))
+
+        collections.insert(1, ax.fill_between(
+            index,
+            *get_values,
+            where=where_neg,
+            interpolate=True,
+            color=cneg,
+            zorder=zorder,
+            **kwargs
+            ))
+    return wrapper
+
+__plot_indicators_def:dict = {
+    'def':{'panel':None, 'color':[None], 'dt_source':'close'},
+    'idct_ema':{'panel':'price', 'color':['blue'],'dt_source':'close',},
+    'idct_bb':{'panel':'price', 'color':['#f23645', '#2D2DFF', '#089981'], 
+        'dt_source':'close',
+        'style':[
+            draw_btw((0,2), '#6565FF12')
+        ]},
+    'idct_rsi':{'panel':None, 'color':['#9B40C8', '#FFF700'], 
+        'dt_source':'close',
+        'style':[
+            drawax_hline(70, '#FFFFFF36', linestyle=(0, (1.5,1))), 
+            drawax_hline(30, '#FFFFFF36', linestyle=(0, (1.5,1))), 
+            drawax_hline(50, '#FFFFFF36', linestyle=(0, (1.5,1))), 
+            drawax_btw((70, 30), '#BB00D824',),
+        ]},
+    'idct_macd':{'panel':None, 'color':['blue', 'orange'], 
+        'dt_source':'close',
+        'styleOnDraw':['drawLn'], 
+        'drawLn':{
+            'func':'hist',
+            'value':2,
+            'colorNeg':'#f23645',
+            'color':'#089981',
+            'colorNegF':'#ffcdd2',
+            'colorF':'#B0D8D5',
+        }},
+    'idct_sqzmom':{'panel':None, 'color':['blue'],
+        'styleOnDraw':['drawLn'], 
+        'drawLn':{
+            'func':'hist',
+            'value':1,
+            'colorNeg':'#AF0909',
+            'color':'#0AAF0A',
+            'colorNegF':'#5C0909',
+            'colorF':'#0A5D0A',
+        }},
+    'idct_ichimoku':{'panel':'price', 'color':['#C4E293', '#E29393', '#2450C0', '#C0110B'], 
+        'style':[
+            draw_btw((0,1), ('#81B13324', '#AA2F2F24'), ('#FF8400', '#FF0000'))
+        ]},
 }
 
 def _store_decorator(func:Callable) -> Callable:

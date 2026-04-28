@@ -20,8 +20,8 @@ Hidden Functions:
 import pandas as pd
 import numpy as np
 
-from typing import Callable, Any
 from abc import ABC, abstractmethod
+from typing import Callable, Any
 from functools import wraps
 from uuid import uuid4
 import logging
@@ -847,7 +847,7 @@ class StrategyClass(ABC):
         """
 
         logger.debug("Executes 'act_taker'")
-        buy = bool(buy)
+        buy = bool(buy) # type: ignore
         ui = self.unique_id()
 
         self.__put_pos(
@@ -878,7 +878,7 @@ class StrategyClass(ABC):
         """
 
         logger.debug("Executes 'act_limit'")
-        buy = bool(buy)
+        buy = bool(buy) # type: ignore
 
         return self.__put_ord(
             'op', 

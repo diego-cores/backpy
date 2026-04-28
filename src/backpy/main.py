@@ -269,8 +269,8 @@ def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d',
 
     except ModuleNotFoundError: 
         raise exception.BinanceError('Binance connector is not installed.')
-    #except: 
-    #    raise exception.BinanceError('Binance parameters error.')
+    except: 
+        raise exception.BinanceError('Binance parameters error.')
 
 def load_yfinance_data(ticker:str, start:str | None = None, 
                        end:str | None = None, interval:str = '1d', 
@@ -302,7 +302,7 @@ def load_yfinance_data(ticker:str, start:str | None = None,
         tuple[DataFrame,float]|None: If 'data_extract' is true, 
             a tuple containing the data will be returned (data, data_width).
     """
-    days_op = int(days_op)
+    days_op = int(days_op) # type: ignore
     if days_op > 365 or days_op < 1:
         raise exception.YfinanceError(f"'days_op' cant be: '{days_op}'.")
 
@@ -384,7 +384,7 @@ def load_data(data:pd.DataFrame, icon:str | None = None,
             ['open', 'high', 'low', 'close']
             """, newline_exclude=True))
 
-    days_op = int(days_op)
+    days_op = int(days_op) # type: ignore
     if days_op > 365 or days_op < 1:
         raise exception.DataError(f"'days_op' cant be: '{days_op}'.")
 
@@ -997,7 +997,7 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
     )
 
 def reg_indicator(panel:str|None=None, color:str|list|None=None, 
-                    name:str|None=None, **config:dict) -> Callable:
+                name:str|None=None, **config:dict) -> Callable:
     """
     Register indicator
 
@@ -1010,8 +1010,9 @@ def reg_indicator(panel:str|None=None, color:str|list|None=None,
     Function wrapped args:
         func (Callable): Indicator function. The output must be aligned with 'data'.
         *args (tuple): Indicator arguments.
-        dt_source (list|str|None, optional): Data to be passed to the indicator.
+        dt_source (str|None, optional): Select data source to the indicator.
             Columns of 'data': 'close', 'open', 'low', 'high', 'volume'.
+            If it is None, applies the saved default or passes the entire dataframe.
         **kwargs (dict): Indicator known arguments.
 
     Args:
@@ -1026,10 +1027,10 @@ def reg_indicator(panel:str|None=None, color:str|list|None=None,
     """
 
     if _cm.__data is None:
-        raise ValueError()
+        raise ValueError('Data not loaded.')
 
     def __add_indicator(func:Callable, *args:tuple, 
-        dt_source:list|str|None = ['close'], **kwargs:dict) -> str:
+        dt_source:str|None = None, **kwargs:dict) -> str:
         """
         Add indicator
 
@@ -1038,8 +1039,9 @@ def reg_indicator(panel:str|None=None, color:str|list|None=None,
         Args:
             func (Callable): Indicator function. The output must be aligned with 'data'.
             *args (tuple): Indicator arguments.
-            dt_source (list|str|None, optional): Data to be passed to the indicator.
+            dt_source (str|None, optional): Select data source to the indicator.
                 Columns of 'data': 'close', 'open', 'low', 'high', 'volume'.
+                If it is None, applies the saved default or passes the entire dataframe.
             **kwargs (dict): Indicator known arguments.
 
         Return:
@@ -1047,13 +1049,17 @@ def reg_indicator(panel:str|None=None, color:str|list|None=None,
         """
         nonlocal name, panel, color, config
 
-        if isinstance(dt_source, str):
-            dt_source = [dt_source]
-        
-        if dt_source and any([not src in _cm.__data.columns for src in dt_source]):
-            raise ValueError()
+        if func.__name__ in _cm.__plot_indicators_def.keys():
+            def_config = _cm.__plot_indicators_def[func.__name__]
+        else:
+            def_config = _cm.__plot_indicators_def['def']
 
-        data = _cm.__data[dt_source if len(dt_source) > 1 else dt_source[0]] if dt_source else _cm.__data
+        if dt_source is None:
+            dt_source = def_config.get('dt_source', None)
+        elif not dt_source in _cm.__data.columns:
+            raise ValueError("'dt_source' must be a column of 'data'.")
+
+        data = _cm.__data[dt_source] if dt_source else _cm.__data
         idc_data = func(data, *args, **kwargs)
         args_wdef = utils.get_darguments(func)
         args_wdef.update({k: kwargs[k] for k in args_wdef.keys() if k in kwargs})
@@ -1062,11 +1068,6 @@ def reg_indicator(panel:str|None=None, color:str|list|None=None,
 
         name = _cm.__gen_fname(
             name or func.__name__, list(_cm.__plot_indicators.keys()))
-
-        if func.__name__ in _cm.__plot_indicators_def.keys():
-            def_config = _cm.__plot_indicators_def[func.__name__]
-        else:
-            def_config = _cm.__plot_indicators_def['def']
 
         color = color or def_config['color']
         panel = panel or  def_config['panel']
@@ -1129,53 +1130,10 @@ def draw_indicators(indicators, named_axes, x_index, width):
         # Draw style lines
 
         # Ax lines
-        style_ax = _cm.__plot_indicators[idc].get('styleAxNew', [])
-        for stl in style_ax: # Global definitions
-            draw_st = _cm.__plot_indicators[idc].get(stl, {})
-            if not draw_st:
-                continue
-
-            cords = _cm.__plot_indicators[idc][stl].get('cords', None)
-            if not cords:
-                cords = _cm.__plot_indicators[idc][stl].get('btw', None)
-
-            axst_color = _cm.__plot_indicators[idc][stl].get('color', None)
-            line_style = _cm.__plot_indicators[idc][stl].get('style', 'solid')
-
-            if isinstance(cords, float|int):
-                named_axes[panel].axhline(cords, color=axst_color, linestyle=line_style, zorder=0.4)
-            elif isinstance(cords, tuple|list):
-                named_axes[panel].axhspan(*cords[:2], color=axst_color, zorder=0.4)
-
-        # Ar var
-        style_arvar = _cm.__plot_indicators[idc].get('styleArVar', [])
-        for stl in style_arvar:
-            draw_st = _cm.__plot_indicators[idc].get(stl, {})
-            if not draw_st:
-                continue
-
-            cords = _cm.__plot_indicators[idc][stl].get('btw', None)
-            if not cords:
-                continue
-
-            value_indexes = [plot_data[i] for i in cords][:2]
-            for i in cords:
-                plot_data[i]
-
-            arvarcl = _cm.__plot_indicators[idc][stl].get('color', None)
-            arvarclng = _cm.__plot_indicators[idc][stl].get('colorNeg', None)
-
-            named_axes[panel].fill_between(x_index, *value_indexes,
-                where=list(value_indexes[1][i]>=v for i,v in enumerate(value_indexes[0])),
-                interpolate=True,
-                color=arvarclng,
-                zorder=0.4)
-
-            named_axes[panel].fill_between(x_index, *value_indexes,
-                where=list(value_indexes[1][i]<v for i,v in enumerate(value_indexes[0])),
-                interpolate=True,
-                color=arvarcl,
-                zorder=0.4)
+        style_ax = _cm.__plot_indicators[idc].get('style', [])
+        for stl in style_ax:
+            if callable(stl):
+                stl(named_axes[panel], index=x_index, values=plot_data)
 
         # Draw func
         def default_draw(x, y, color, zorder):

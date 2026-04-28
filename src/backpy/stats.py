@@ -129,7 +129,7 @@ def math_hope_relative(trades:pd.DataFrame, profits:pd.Series) -> float:
         float: Math hope relative.
     """
 
-    return winnings(profits)*float(average_ratio(trades))-(1-winnings(profits))
+    return winnings(profits)*average_ratio(trades)-(1-winnings(profits))
 
 def winnings(profits:pd.Series) -> float:
     """
@@ -1034,7 +1034,7 @@ def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = N
         'Return ann':[str(_return_ann:=utils.round_r((ann_return.prod()**(1/op_years)-1)*100,2))+'%',
                   _cm.__COLORS['GREEN'] if float(_return_ann) > 0 else _cm.__COLORS['RED'],],
 
-        'Profit ann':[str(_profit_ann:=utils.round_r(float(ann_profit.mean()),2)),
+        'Profit ann':[str(_profit_ann:=utils.round_r(ann_profit.mean(),2)),
                   _cm.__COLORS['GREEN'] if float(_profit_ann) > 0 else _cm.__COLORS['RED'],],
 
         'Return ann vol':[utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1)
@@ -1072,11 +1072,11 @@ def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = N
                       _cm.__COLORS['YELLOW'] if float(_profit_std) > 1 else _cm.__COLORS['GREEN'],],
 
         'Math hope':[_math_hope:=round(math_hope(trades.loc[:, 'profit']), 3),
-            _cm.__COLORS['GREEN'] if float(_math_hope) > 0 else _cm.__COLORS['RED'],],
+            _cm.__COLORS['GREEN'] if _math_hope > 0 else _cm.__COLORS['RED'],],
 
         'Math hope r':[_math_hope_r:=round(
                 math_hope_relative(trades, trades.loc[:, 'profitPer']), 3),
-            _cm.__COLORS['GREEN'] if float(_math_hope_r) > 0 else _cm.__COLORS['RED'],],
+            _cm.__COLORS['GREEN'] if _math_hope_r > 0 else _cm.__COLORS['RED'],],
 
         'Historical var':[0 if trades['profit'].dropna().empty else utils.round_r(
                             var_historical(trades.loc[:, 'profit'].dropna()), 2)],
