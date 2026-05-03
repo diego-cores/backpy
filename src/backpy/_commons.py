@@ -66,8 +66,10 @@ Hidden Functions:
     __gen_fname: Generates a name that is not duplicated in '__backtests'.
 """
 
+from matplotlib.collections import PathCollection
 from typing import Any, Callable, Sequence, cast
 from importlib.metadata import version
+from matplotlib.path import Path
 import pandas as pd
 import numpy as np
 import logging
@@ -245,51 +247,21 @@ def drawax_btw(btw, color, **kwargs):
         return ax.axhspan(*btw, color=color, **kwargs, zorder=zorder)
     return wrapper
 
-def draw_btw(btw_index, color:str|tuple, color_d:str|tuple|None = None, **kwargs):
+def draw_btw(btw_index, color:str|tuple, **kwargs):
     def wrapper(ax, index, values, zorder=0.4):
         collections = []
 
         get_values =[np.array(values[i]) for i in btw_index][:2]
-        hist = (get_values[0]-get_values[1])
-        hist_d = np.insert(np.diff(hist), 0, 0)
+        hist = get_values[0]-get_values[1]
 
         cpos, cneg = (
             (color, color) if isinstance(color, str) or len(color) < 2 
             else (color[0], color[1]))
 
-        where_pos, where_neg = (hist>=0), (hist<0)
-        if color_d:
-            where_pos = (hist>=0) & (hist>=hist_d)
-            where_neg = (hist<0) & (hist<hist_d)
-
-            cposd, cnegd = (
-                (color_d, color_d) if isinstance(color_d, str) or len(color_d) < 2 
-                else (color_d[0], color_d[1]))
-
-            collections.append(ax.fill_between( # Dont work
-                index,
-                *get_values,
-                where=((hist<0) & (hist>=hist_d)),
-                interpolate=True,
-                color=cposd,
-                zorder=zorder,
-                **kwargs
-                ))
-
-            collections.append(ax.fill_between(
-                index,
-                *get_values,
-                where=((hist>=0) & (hist<hist_d)),
-                interpolate=True,
-                color=cnegd,
-                zorder=zorder,
-                **kwargs
-                ))
-
         collections.insert(0, ax.fill_between(
             index,
             *get_values,
-            where=where_pos,
+            where=(hist>=0),
             interpolate=True,
             color=cpos,
             zorder=zorder,
@@ -299,12 +271,58 @@ def draw_btw(btw_index, color:str|tuple, color_d:str|tuple|None = None, **kwargs
         collections.insert(1, ax.fill_between(
             index,
             *get_values,
-            where=where_neg,
+            where=(hist<0),
             interpolate=True,
             color=cneg,
             zorder=zorder,
             **kwargs
             ))
+
+    return wrapper
+
+def draw_btw_pathcll(btw_index, color:str|tuple, color_d:str|tuple, **kwargs):
+    def wrapper(ax, index, values, zorder=0.4):
+        if color_d is None:
+            return
+
+        get_values =[np.array(values[i]) for i in btw_index][:2]
+        cpos, cneg = (
+            (color, color) if isinstance(color, str) or len(color) < 2 
+            else (color[0], color[1]))
+        cposd, cnegd = (
+            (color_d, color_d) if isinstance(color_d, str) or len(color_d) < 2 
+            else (color_d[0], color_d[1]))
+
+        paths, face_colors = [], []
+
+        for i in range(len(get_values[0])-1):
+            prev = get_values[0][i]-get_values[1][i]
+            hist = get_values[0][i+1]-get_values[1][i+1]
+
+            if np.isnan(hist):
+                continue
+
+            if hist >= 0 and hist > prev:
+                fc = cpos
+            elif hist < 0 and hist < prev:
+                fc = cneg
+            elif hist >= 0: 
+                fc = cposd
+            else:  
+                fc = cnegd
+
+            x0, x1 = index[i], index[i+1]
+            verts = [
+                (x0, get_values[1][i]), (x0, get_values[0][i]),
+                (x1, get_values[0][i+1]), (x1, get_values[1][i+1]),
+            ]
+            codes = [Path.MOVETO, Path.LINETO, Path.LINETO, Path.LINETO]
+
+            paths.append(Path(verts, codes))
+            face_colors.append(fc)
+
+        return ax.add_collection(PathCollection(
+            paths, facecolors=face_colors, linewidths=1.2, zorder=zorder))
     return wrapper
 
 __plot_indicators_def:dict = {
@@ -346,7 +364,7 @@ __plot_indicators_def:dict = {
         }},
     'idct_ichimoku':{'panel':'price', 'color':['#C4E293', '#E29393', '#2450C0', '#C0110B'], 
         'style':[
-            draw_btw((0,1), ('#81B13324', '#AA2F2F24'), ('#FF8400', '#FF0000'))
+            draw_btw((0,1), ('#81B13324', '#AA2F2F24'))
         ]},
 }
 
