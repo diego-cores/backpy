@@ -1110,112 +1110,57 @@ def draw_indicators(indicators, named_axes, x_index, width):
     legends = {ax_nm:{'handles':[], 'labels':[]} for ax_nm in named_axes.keys()}
 
     for idc in indicators:
-        color = _cm.__plot_indicators[idc]['color']
+        color = color if isinstance(color:=_cm.__plot_indicators[idc]['color'], list) else [color]
         data = _cm.__plot_indicators[idc]['data']
         panel = _cm.__plot_indicators[idc]['panel'] or idc
         rname = _cm.__plot_indicators[idc]['rname'] if legend_rname else idc
         adef = _cm.__plot_indicators[idc]['adef'] if legend_args else {}
-        names = None
 
+        names = None
         if isinstance(data, pd.DataFrame):
             names = data.columns
         elif isinstance(data, np.ndarray) and data.dtype.names:
             names = data.dtype.names
-
         plot_data = [data[col].tolist() for col in names] if names is not None else [data]
 
-        if len(plot_data) > len(color):
-            color.extend([color[0]]*(len(plot_data)-len(color)))
-
-        # Draw style lines
-
-        # Ax lines
+        # Draw dec
         style_ax = _cm.__plot_indicators[idc].get('style', [])
         for stl in style_ax:
-            if callable(stl):
+            if callable(stl): 
                 stl(named_axes[panel], index=x_index, values=plot_data)
 
-        # Draw func
-        def default_draw(x, y, color, zorder):
-            return named_axes[panel].plot(x, y, color=color, zorder=zorder)
-
-        draw_functions = [default_draw]*len(plot_data)
-
-        style_ondraw = _cm.__plot_indicators[idc].get('styleOnDraw', [])
-        for stl in style_ondraw:
-            draw_st = _cm.__plot_indicators[idc].get(stl, {})
-            if not draw_st:
-                continue
-
-            index = _cm.__plot_indicators[idc][stl].get('value', None)
-            if not index or index>=len(plot_data):
-                continue
-
-            match _cm.__plot_indicators[idc][stl].get('func', None):
-                case 'hist':
-                    def draw_hist(x, y, color, zorder): # global func
-                        y = np.array(y)
-                        x = np.array(x)
-                        diff = np.diff(y)
-                        diff = np.insert(diff, 0, 0)
-
-                        pos_color = _cm.__plot_indicators[idc][stl].get('color', None)
-                        neg_color = _cm.__plot_indicators[idc][stl].get('colorNeg', pos_color)
-
-                        p_mask = (y>0) & (diff>=0)
-                        d_mask = (y<=0) & (diff<=0)
-
-                        artist_p = named_axes[panel].bar(x[p_mask], y[p_mask], 
-                            width=width, color=pos_color, zorder=zorder)
-                        artist_d = named_axes[panel].bar(x[d_mask], y[d_mask], 
-                            width=width, color=neg_color, zorder=zorder)
-
-                        pos_color = _cm.__plot_indicators[idc][stl].get('colorF', None)
-                        neg_color = _cm.__plot_indicators[idc][stl].get('colorNegF', pos_color)
-
-                        pd_mask = (y>0) & (diff<0)
-                        dp_mask = (y<=0) & (diff>0)
-
-                        named_axes[panel].bar(x[pd_mask], y[pd_mask], 
-                            width=width, color=pos_color, zorder=zorder)
-                        named_axes[panel].bar(x[dp_mask], y[dp_mask], 
-                            width=width, color=neg_color, zorder=zorder)
-
-                        return [artist_p[0], artist_d[0]]
-
-                    draw_functions[index] = draw_hist
-                case _:
-                    continue
-
         artists = []
-        _cm.__plot_indicators[idc].get('styleArVar', [])
+        style_ondraw = _cm.__plot_indicators[idc].get('styleOnDraw', [])
+
         for i,v in enumerate(plot_data):
-            plot_color = color[i]
-
-            if plot_color in colorin_axes[panel]:
-                plot_color = None
-
-            if plot_color:
-                colorin_axes[panel].append(plot_color)
+            plot_color = None
+            if i < len(color) and color[i] and not color[i] in colorin_axes[panel]:
+                colorin_axes[panel].append(color[i])
+                plot_color = color[i]
 
             # Draw
-            artist = draw_functions[i](
-                x_index, v, 
-                color=plot_color,
-                zorder=0.5,
-            )
+            if i < len(style_ondraw) and callable(style_ondraw[i]):
+                artist = style_ondraw[i](
+                    named_axes[panel], 
+                    index=x_index, 
+                    values=plot_data,
+                    zorder=0.5,
+                ) 
+            else: 
+                artist = _cm.draw_plot(i, color=plot_color)(
+                    named_axes[panel], 
+                    index=x_index, 
+                    values=plot_data,
+                    zorder=0.5,
+                )
 
-            if not isinstance(artist, list):
-                artist = [artist]
-
-            artists.extend(artist)
-
+            if artist: artists.extend(artist if isinstance(artist, list) else [artist])
         legends[panel]['handles'].append(tuple(i for i in artists))
         legends[panel]['labels'].append(mathform(rname.upper(), 
             f'{(', '.join(names) if not names is None else 'line')}{'; '+'; '.join(map(str,adef.values()))if adef else ''}'.lower()))
 
     for panel in legends:
-        if not legends[panel]['handles'] or not legends[panel]['labels']:
+        if not any(legends[panel]['handles']) or not legends[panel]['labels']:
             continue
 
         ndivide = max([len(handle) for handle in legends[panel]['handles']])

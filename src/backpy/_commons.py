@@ -235,7 +235,6 @@ __plt_styles:dict = {
     }
 }
 
-# Wip
 def drawax_hline(cord, color, **kwargs):
     def wrapper(ax, *a_, zorder=0.4, **kn_):
         return ax.axhline(cord, color=color, **kwargs, zorder=zorder)
@@ -245,6 +244,12 @@ def drawax_btw(btw, color, **kwargs):
     def wrapper(ax, *a_, zorder=0.4, **kn_):
 
         return ax.axhspan(*btw, color=color, **kwargs, zorder=zorder)
+    return wrapper
+
+def draw_plot(value_index, **kwargs):
+    def wrapper(ax, index, values, zorder=0.4):
+
+        return ax.plot(index, values[value_index], **kwargs, zorder=zorder)
     return wrapper
 
 def draw_btw(btw_index, color:str|tuple, **kwargs):
@@ -321,8 +326,11 @@ def draw_btw_pathcll(btw_index, color:str|tuple, color_d:str|tuple, **kwargs):
             paths.append(Path(verts, codes))
             face_colors.append(fc)
 
-        return ax.add_collection(PathCollection(
+        coll = ax.add_collection(PathCollection(
             paths, facecolors=face_colors, linewidths=1.2, zorder=zorder))
+        ax.autoscale_view()
+
+        return coll
     return wrapper
 
 __plot_indicators_def:dict = {
@@ -343,25 +351,27 @@ __plot_indicators_def:dict = {
         ]},
     'idct_macd':{'panel':None, 'color':['blue', 'orange'], 
         'dt_source':'close',
-        'styleOnDraw':['drawLn'], 
-        'drawLn':{
-            'func':'hist',
-            'value':2,
-            'colorNeg':'#f23645',
-            'color':'#089981',
-            'colorNegF':'#ffcdd2',
-            'colorF':'#B0D8D5',
-        }},
-    'idct_sqzmom':{'panel':None, 'color':['blue'],
-        'styleOnDraw':['drawLn'], 
-        'drawLn':{
-            'func':'hist',
-            'value':1,
-            'colorNeg':'#AF0909',
-            'color':'#0AAF0A',
-            'colorNegF':'#5C0909',
-            'colorF':'#0A5D0A',
-        }},
+        'styleOnDraw':[draw_btw_pathcll((0, 1), color=('#089981', '#f23645'), color_d=('#B0D8D5', '#ffcdd2')), lambda *args, **kwargs: None, lambda *args, **kwargs: None], 
+        #'drawLn':{
+        #    'func':'hist',
+        #    'value':2,
+        #    'colorNeg':'#f23645',
+        #    'color':'#089981',
+        #    'colorNegF':'#ffcdd2',
+        #    'colorF':'#B0D8D5',
+        #}
+    },  
+    'idct_sqzmom':{'panel':None, 'color':[None],
+        'styleOnDraw':[None, None], 
+        #'drawLn':{
+        #    'func':'hist',
+        #    'value':1,
+        #    'colorNeg':'#AF0909',
+        #    'color':'#0AAF0A',
+        #    'colorNegF':'#5C0909',
+        #    'colorF':'#0A5D0A',
+        #}
+    },
     'idct_ichimoku':{'panel':'price', 'color':['#C4E293', '#E29393', '#2450C0', '#C0110B'], 
         'style':[
             draw_btw((0,1), ('#81B13324', '#AA2F2F24'))
