@@ -11,14 +11,25 @@ Variables:
         and put one that does not exist it will give an error.
     mpl_warning_supp (bool): Suppresses ignorable warnings from matplotlib.
     max_bar_updates (int): Number of times the 'run' loading bar is updated, 
-        a very high number will greatly increase the execution time. 
+        a very high number will greatly increase the execution time.
+    graph_legend_fontsize (str|int): Font size in price graph legends.
+        int or 'xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'.
+    graph_legend_pname (bool): Displays a legend for 'price' and 'volume' in price graph.
+    graph_legend_rname (bool): If True, the registered name will be used; otherwise, 
+        the function name will be used.
+    graph_legend_args (bool): Show the indicator arguments in the legend.
+    graph_panel_order (dict[str, float]): Graph order of the panels by name, 
+        default: 99. Lower value renders higher.
+    graph_first_size (int): Size of the first panel relative to the others 
+        when graph the price. It cannot be less than 1.
     lift (bool): Set to False if you don't want tkinter windows 
         to jump over everything else when running.
 
 Hidden Variables:
     _random_titles: Random titles for windows (hidden variable).
     __panel_list: List of windows that will be joined into panels (hidden variable).
-    __panel_wmax: Maximum number of panels; if a value greater than 4 is given, an error will occur (hidden variable).
+    __panel_wmax: Maximum number of panels; if a value greater than 4 is given, 
+        an error will occur (hidden variable).
     __linked_toolbars: List of connected toolbars (hidden variable).
     __min_gap: If left as True, gaps will not be calculated on the entry 
         of 'taker' orders (hidden variable).
@@ -34,26 +45,33 @@ Hidden Variables:
         on the closest one (hidden variable).
     __chunk_size: Size of each chunk of the engine (hidden variable).
     __nper_commission: Non-percentage commission cost (hidden variable).
+    __data_backtests: List of data of each backtest, 
+        containing trades and data needed for statistics (hidden variable).
     __data_year_days: Number of operable days in 1 year (hidden variable).
     __data_width_day: Width of the day (hidden variable).
     __data_interval: Interval of the loaded data (hidden variable).
     __data_width: Width of the dataset (hidden variable).
     __data_icon: Data icon (hidden variable).
     __data: Loaded dataset (hidden variable).
-    __backtests: List of data of each backtest, 
-        containing trades and data needed for statistics (hidden variable).
     __custom_plot: Dict of custom graphical statistics (hidden variable).
     __plot_indicators: Indicators saved for plotting (hidden variable).
-    __plot_indicators_def: Indicators default config for plotting (hidden variable).
     __binance_timeout: Time out between each request to the binance api 
         (hidden variable).
     __COLORS: Dictionary with printable colors (hidden variable).
     __plt_styles: Styles for coloring trading charts (hidden variable).
+    __plot_indicators_def: Indicators default config for plotting 
+        More info in the definition. func.__name__:dict (hidden variable).
 
 Functions:
+    c_tf: It's the same as doing: cast(float, ...).
     get_backtest_names: Takes the names of the saved backtests.
     del_backtest: Remove a backtest.
-    c_tf: It's the same as doing: cast(float, ...).
+    draw_plot: Draw a line.
+    drawax_hline: Draw a axis line.
+    drawax_btw: Draw a axis area.
+    draw_btw: Draw a area.
+    draw_btw_pathcll: Draw an area using a path.
+    draw_hist: Draw histogram.
 
 Hidden Functions:
     _store_decorator: Give '_store' attribute to a function.
@@ -63,12 +81,15 @@ Hidden Functions:
     __get_dtrades: Does the same thing as '__get_trades' 
         but saves each backtest in a different key in a dict.
     __get_strategy: Take data from a backtest.
-    __gen_fname: Generates a name that is not duplicated in '__backtests'.
+    __gen_fname: Generates a name that is not duplicated in '__data_backtests'.
 """
 
-from matplotlib.collections import PathCollection
-from typing import Any, Callable, Sequence, cast
+from matplotlib.collections import PathCollection, PatchCollection, PolyCollection
+from typing import Any, Callable, Sequence, Collection, cast
+from matplotlib.patches import Rectangle, Polygon, Patch
 from importlib.metadata import version
+from matplotlib.lines import Line2D
+from matplotlib.pyplot import Axes
 from matplotlib.path import Path
 import pandas as pd
 import numpy as np
@@ -78,13 +99,20 @@ from backpy.flex_data import CostsValue
 from . import exception
 
 logger:logging.Logger = logging.getLogger(__name__)
+c_tf:Callable = lambda x: cast(float, x)
 
 dots:bool = True
 run_timer:bool = True
 plt_style:str|None = None
+max_bar_updates:int = 1_000
 mpl_warning_supp:bool = True
 
-max_bar_updates:int = 1_000
+graph_legend_fontsize:str|int = 'xx-small'
+graph_legend_pname:bool = True
+graph_legend_rname:bool = True
+graph_legend_args:bool = True
+graph_panel_order:dict[str, float] = {'price':0, 'volume':1}
+graph_first_size:int = 2
 
 lift:bool = True
 _random_titles:list = [
@@ -103,13 +131,13 @@ _random_titles:list = [
     '🚀',
 ]
 
+__data_backtests:list = []
 __data_year_days:int = 365
 __data_width_day:None|float = None
 __data_interval:None|str = None
 __data_width:None|float = None
 __data_icon:None|str = None
 __data:None|pd.DataFrame = None
-__backtests:list = []
 
 __anim_run:bool = True
 __panel_list:list = []
@@ -118,13 +146,13 @@ __linked_toolbars:list = []
 
 __min_gap:None|bool = None
 __limit_ig:None|bool = None
+__chunk_size:None|int = None
 __init_funds:None|float = 100
 __commission:None|CostsValue = None
 __spread_pct:None|CostsValue = None
 __slippage_pct:None|CostsValue = None
 __orders_order:None|dict = None
 __orders_nclose:None|bool = None
-__chunk_size:None|int = None
 __nper_commission:None|bool = None
 
 __custom_plot:dict = {}
@@ -235,28 +263,100 @@ __plt_styles:dict = {
     }
 }
 
-def drawax_hline(cord, color, **kwargs):
-    def wrapper(ax, *a_, zorder=0.4, **kn_):
-        return ax.axhline(cord, color=color, **kwargs, zorder=zorder)
-    return wrapper
+def draw_plot(value_index:int, **kwargs) -> Callable:
+    """
+    Draw plot
 
-def drawax_btw(btw, color, **kwargs):
-    def wrapper(ax, *a_, zorder=0.4, **kn_):
+    Draw a line as decoration.
 
-        return ax.axhspan(*btw, color=color, **kwargs, zorder=zorder)
-    return wrapper
+    Info:
+        Draws the decoration of an indicator; it is passed the wrapper arguments. 
+        It must return None, a list of collections, or a matplotlib collection to draw the legend.
 
-def draw_plot(value_index, **kwargs):
-    def wrapper(ax, index, values, zorder=0.4):
+    Wrapper args:
+        ax (Axes): Axis where draw.
+        index (Sequence): x index.
+        values (Sequence): All indicator values.
+        width (float): Width of each point.
+        zorder (float): Position z of the element.
+
+    Args:
+        value_index (int): Index of the value to draw.
+        **kwargs: Extra arguments passed to the 'plot' function.
+
+    Return:
+        Callable: Wrapper.
+    """
+    
+    def wrapper(ax:Axes, index:Sequence, values:Sequence, zorder:float=0.4, **kn_) -> list:
 
         return ax.plot(index, values[value_index], **kwargs, zorder=zorder)
     return wrapper
 
-def draw_btw(btw_index, color:str|tuple, **kwargs):
-    def wrapper(ax, index, values, zorder=0.4):
+def drawax_hline(cord:float, color:str, **kwargs) -> Callable:
+    """
+    Draw horizontal axis line
+
+    Draw a line as decoration.
+    For more info read 'draw_plot' docstring.
+
+    Args:
+        cord (float): Line coordinate.
+        color (str): Color of the line.
+        **kwargs: Extra arguments passed to the 'axhline' function.
+
+    Return:
+        Callable: Wrapper.
+    """
+
+    def wrapper(ax:Axes, *a_, zorder:float=0.4, **kn_) -> Line2D:
+        return ax.axhline(cord, color=color, **kwargs, zorder=zorder)
+    return wrapper
+
+def drawax_btw(btw:tuple[float, float], color:str, **kwargs) -> Callable:
+    """
+    Draw axis area
+
+    Draw a area as decoration.
+    For more info read 'draw_plot' docstring.
+
+    Args:
+        btw (tuple[float, float]): Tuple with the coordinates between which it will be drawn.
+        color (str): Color of the area.
+        **kwargs: Extra arguments passed to the 'axhspan' function.
+
+    Return:
+        Callable: Wrapper.
+    """
+
+    def wrapper(ax:Axes, *a_, zorder:float=0.4, **kn_) -> Polygon:
+
+        return ax.axhspan(*btw, color=color, **kwargs, zorder=zorder)
+    return wrapper
+
+def draw_btw(btw_index:tuple[int, int], color:str|Sequence, **kwargs) -> Callable:
+    """
+    Draw area
+
+    Draw a area as decoration.
+    For more info read 'draw_plot' docstring.
+
+    Args:
+        btw (tuple[int, int]): Tuple with the index of value between which it will be drawn.
+        color (str|Squence): Color of the area. If a list is passed, the first one will be 
+            used when they move away and the second one when they approach.
+        **kwargs: Extra arguments passed to the 'fill_between' functions.
+
+    Return:
+        Callable: Wrapper.
+    """
+
+    def wrapper(ax:Axes, index:Sequence, values:Sequence, 
+        zorder:float=0.4, **kn_) -> list[PolyCollection]:
+
         collections = []
 
-        get_values =[np.array(values[i]) for i in btw_index][:2]
+        get_values = [np.array(values[i]) for i in btw_index][:2]
         hist = get_values[0]-get_values[1]
 
         cpos, cneg = (
@@ -265,7 +365,7 @@ def draw_btw(btw_index, color:str|tuple, **kwargs):
 
         collections.insert(0, ax.fill_between(
             index,
-            *get_values,
+            *get_values, # type: ignore
             where=(hist>=0),
             interpolate=True,
             color=cpos,
@@ -275,7 +375,7 @@ def draw_btw(btw_index, color:str|tuple, **kwargs):
 
         collections.insert(1, ax.fill_between(
             index,
-            *get_values,
+            *get_values, # type: ignore
             where=(hist<0),
             interpolate=True,
             color=cneg,
@@ -283,20 +383,36 @@ def draw_btw(btw_index, color:str|tuple, **kwargs):
             **kwargs
             ))
 
+        return collections
     return wrapper
 
-def draw_btw_pathcll(btw_index, color:str|tuple, color_d:str|tuple, **kwargs):
-    def wrapper(ax, index, values, zorder=0.4):
-        if color_d is None:
-            return
+def draw_btw_pathcll(btw_index:tuple[int, int], color:str|Sequence, color_d:str|Sequence) -> Callable:
+    """
+    Draw area 
+
+    Draw an area using a path.
+    For more info read 'draw_plot' docstring.
+
+    Args:
+        btw (tuple[int, int]): Tuple with the index of value between which it will be drawn.
+        color (str|Squence): Color of the area. If a list is passed, the first one will be 
+            used when they move away and the second one when they approach.
+        color_d (str|Sequence): It works the same as the 'color' argument but when the difference is negative.
+
+    Return:
+        Callable: Wrapper.
+    """
+
+    def wrapper(ax:Axes, index:Sequence, values:Sequence, 
+        zorder:float=0.4, **kn_) -> Collection:
 
         get_values =[np.array(values[i]) for i in btw_index][:2]
         cpos, cneg = (
-            (color, color) if isinstance(color, str) or len(color) < 2 
-            else (color[0], color[1]))
+            (color, color) if isinstance(color, str)
+            else (color[0], color[1 if len(color) > 1 else 0]))
         cposd, cnegd = (
-            (color_d, color_d) if isinstance(color_d, str) or len(color_d) < 2 
-            else (color_d[0], color_d[1]))
+            (color_d, color_d) if isinstance(color_d, str)
+            else (color_d[0], color_d[1 if len(color_d) > 1 else 0]))
 
         paths, face_colors = [], []
 
@@ -307,14 +423,8 @@ def draw_btw_pathcll(btw_index, color:str|tuple, color_d:str|tuple, **kwargs):
             if np.isnan(hist):
                 continue
 
-            if hist >= 0 and hist > prev:
-                fc = cpos
-            elif hist < 0 and hist < prev:
-                fc = cneg
-            elif hist >= 0: 
-                fc = cposd
-            else:  
-                fc = cnegd
+            fc = ((cpos if hist > prev else cposd) if hist >= 0 
+                else (cneg if hist < prev else cnegd))
 
             x0, x1 = index[i], index[i+1]
             verts = [
@@ -326,23 +436,83 @@ def draw_btw_pathcll(btw_index, color:str|tuple, color_d:str|tuple, **kwargs):
             paths.append(Path(verts, codes))
             face_colors.append(fc)
 
-        coll = ax.add_collection(PathCollection(
+        coll = ax.add_collection(PathCollection( # type: ignore
             paths, facecolors=face_colors, linewidths=1.2, zorder=zorder))
         ax.autoscale_view()
 
         return coll
     return wrapper
 
+def draw_hist(value_index:int, color:str|Sequence, color_d:str|Sequence, **kwargs) -> Callable:
+    """
+    Draw histogram 
+
+    For more info read 'draw_plot' docstring.
+
+    Args:
+        value_index (int): Index of the value to draw the hist.
+        color (str|Squence): Color of the hist. If a list is passed, the first one will be 
+            used when the histogram grows and the second one when it decreases.
+        color_d (str|Sequence): It works the same as the 'color' argument but when the hist is negative.
+        **kwargs: Extra arguments passed to the 'fill_between' functions.
+    
+    Return:
+        Callable: Wrapper.
+    """
+    
+    def wrapper(ax:Axes, index:Sequence, values:Sequence, 
+        width:float, zorder:float=0.4, **kn_) -> list[Patch]:
+
+        y = np.array(values[value_index])
+        x = np.array(index) - width / 2
+        diff = np.insert(y, 0, 0)
+
+        color_up = color 
+        color_up, color_down = (
+            (color, color) if isinstance(color, str) 
+            else (color[0], color[1 if len(color) > 1 else 0]))
+        color_upd, color_downd = (
+            (color_d, color_d) if isinstance(color_d, str)
+            else (color_d[0], color_d[1 if len(color_d) > 1 else 0]))
+
+        color_list = [(color_up if y[i] >= diff[i] else color_upd) if y[i] > 0 
+            else (color_downd if y[i] > diff[i] else color_down) for i in range(len(y))]
+
+        patches = [Rectangle((xi, 0), width, yi) for xi, yi in zip(x, y)]
+        ax.add_collection(PatchCollection(patches, color=color_list, # type: ignore
+            linewidth=0, zorder=zorder))
+        ax.autoscale_view()
+
+        # PatchCollection not have a handler
+        return [
+            Patch(facecolor=color_up, linewidth=0),
+            Patch(facecolor=color_down, linewidth=0)
+        ]
+    return wrapper
+
 __plot_indicators_def:dict = {
-    'def':{'panel':None, 'color':[None], 'dt_source':'close'},
-    'idct_ema':{'panel':'price', 'color':['blue'],'dt_source':'close',},
+    'def':{'panel':None, 'color':[None], 'dtSource':'close'},
+    # All properties are: 'panel', 'color', 'dtSource', 'styleOnDraw', 'style'.
+
+    #func.__name:{
+    # 'panel': Panel where the indicator goes: 'price', 'volume' or other indicator.
+    # 'color': List of colors for each column returned by the indicator.
+    # 'dtSouce': If the indicator only uses one column of data, 
+    #    this can be used to specify which column to use.
+    # 'styleOnDraw': List of functions to draw decoration apart from drawing the data.
+    # 'style': List of functions to indicate which function is used to draw each column. 
+    #    Leave as None to use 'draw_plot' or 'lambda *args, **kwargs: None' to not draw.
+    #}
+
+    # For more info read the 'draw_plot' docstring.
+    'idct_ema':{'panel':'price', 'color':['blue'],'dtSource':'close',},
     'idct_bb':{'panel':'price', 'color':['#f23645', '#2D2DFF', '#089981'], 
-        'dt_source':'close',
+        'dtSource':'close',
         'style':[
             draw_btw((0,2), '#6565FF12')
         ]},
     'idct_rsi':{'panel':None, 'color':['#9B40C8', '#FFF700'], 
-        'dt_source':'close',
+        'dtSource':'close',
         'style':[
             drawax_hline(70, '#FFFFFF36', linestyle=(0, (1.5,1))), 
             drawax_hline(30, '#FFFFFF36', linestyle=(0, (1.5,1))), 
@@ -350,27 +520,17 @@ __plot_indicators_def:dict = {
             drawax_btw((70, 30), '#BB00D824',),
         ]},
     'idct_macd':{'panel':None, 'color':['blue', 'orange'], 
-        'dt_source':'close',
-        'styleOnDraw':[draw_btw_pathcll((0, 1), color=('#089981', '#f23645'), color_d=('#B0D8D5', '#ffcdd2')), lambda *args, **kwargs: None, lambda *args, **kwargs: None], 
-        #'drawLn':{
-        #    'func':'hist',
-        #    'value':2,
-        #    'colorNeg':'#f23645',
-        #    'color':'#089981',
-        #    'colorNegF':'#ffcdd2',
-        #    'colorF':'#B0D8D5',
-        #}
+        'dtSource':'close',
+        'styleOnDraw':[
+            None, None, 
+            draw_hist(2, color=('#089981', '#f23645'), color_d=('#B0D8D5', '#ffcdd2'))
+        ], 
     },  
     'idct_sqzmom':{'panel':None, 'color':[None],
-        'styleOnDraw':[None, None], 
-        #'drawLn':{
-        #    'func':'hist',
-        #    'value':1,
-        #    'colorNeg':'#AF0909',
-        #    'color':'#0AAF0A',
-        #    'colorNegF':'#5C0909',
-        #    'colorF':'#0A5D0A',
-        #}
+        'styleOnDraw':[
+            None, 
+            draw_hist(1, color=('#0AAF0A', '#AF0909'), color_d=('#0A5D0A', '#5C0909')),
+        ], 
     },
     'idct_ichimoku':{'panel':'price', 'color':['#C4E293', '#E29393', '#2450C0', '#C0110B'], 
         'style':[
@@ -414,7 +574,7 @@ def del_backtest(names:Sequence[str|int|None]|str|int|None = None) -> None:
             Name or index of the backtests to be deleted.
     """
 
-    if len(__backtests) == 0:
+    if len(__data_backtests) == 0:
         raise exception.DataError('There is no backtest to delete.')
     elif isinstance(names, tuple):
         raise exception.DataError("'names' cannot be a tuple.")
@@ -439,7 +599,7 @@ def get_backtest_names() -> list[str]:
         list[str]: names
     """
 
-    return __get_names(__backtests)
+    return __get_names(__data_backtests)
 
 def __del_backtest_uniq(name:str|int|None = None) -> None:
     """
@@ -454,13 +614,13 @@ def __del_backtest_uniq(name:str|int|None = None) -> None:
     """
 
     if isinstance(name, int) or name is None:
-        del __backtests[-1 if name is None else name]
+        del __data_backtests[-1 if name is None else name]
     elif not isinstance(name, str):
-        return __backtests[-1]
+        return __data_backtests[-1]
 
-    for i, backtest in enumerate(__backtests):
+    for i, backtest in enumerate(__data_backtests):
         if backtest['name'] == name:
-            del __backtests[i]
+            del __data_backtests[i]
 
 def __get_names(from_:list[dict]) -> list[str]:
     """
@@ -549,7 +709,7 @@ def __get_strategy(name:str|int|Any|None = None) -> dict:
             'balance_rec', 'init_funds', 'd_year_days', 'd_width_day', 'd_width'.
     """
 
-    if len(__backtests) == 0:
+    if len(__data_backtests) == 0:
         return {'name':None, 
                 'trades':pd.DataFrame(), 
                 'balance_rec':pd.Series(),
@@ -558,13 +718,13 @@ def __get_strategy(name:str|int|Any|None = None) -> dict:
                 'd_width_day':0, 
                 'd_width':0}
     elif isinstance(name, int) or name is None:
-        return __backtests[-1 if name is None else name]
+        return __data_backtests[-1 if name is None else name]
     elif not isinstance(name, str):
-        return __backtests[-1]
+        return __data_backtests[-1]
 
-    for i,v in enumerate(__backtests):
+    for i,v in enumerate(__data_backtests):
         if v['name'] == name:
-            return __backtests[i]
+            return __data_backtests[i]
 
     raise exception.DataError('Name not found.')
 
@@ -593,5 +753,3 @@ def __gen_fname(name:str, from_:list[str]) -> str:
         nm += 1
 
     return mname
-
-c_tf:Callable = lambda x: cast(float, x)

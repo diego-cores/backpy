@@ -374,7 +374,6 @@ def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
 
     # Exceptions.
     panel = panel.lower()
-    valid_style = {'random', 'last'} | set(_cm.__plt_styles.keys())
 
     if col and col not in ('profit', 'profitPer'):
         raise exception.StatsError(
@@ -382,8 +381,8 @@ def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
     elif panel not in ('new', 'add'):
         raise exception.StatsError(
             f"'{panel}' Not a valid option for: 'panel'.")
-    elif (not style is None and not (style:=style.lower()) in valid_style):
-        raise exception.StatsError(f"'{style}' Not a style.")
+
+    plt_colors = cpl.style_def(name=style, update=style_c)
     col = col or 'profitPer'
 
     trades = _cm.__get_trades(names=names)
@@ -398,19 +397,6 @@ def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
                           / trades_data['d_width_day'] * 24).astype(int)
     minute = lambda index: ((index % (trades_data['d_width_day']/60)) 
                           / (trades_data['d_width_day']/60) * 60).astype(int)
-
-    if style == 'last':
-        style = _cm.plt_style
-    if style is None:
-        style = list(_cm.__plt_styles.keys())[0]
-    elif style == 'random':
-        style = rd.choice(list(_cm.__plt_styles.keys()))
-
-    plt_colors = _cm.__plt_styles[style]
-    _cm.plt_style = style
-
-    if isinstance(style_c, dict):
-        plt_colors.update(style_c)
 
     gdir = plt_colors.get('gdir', False)
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
@@ -507,7 +493,6 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
     """
     # Exceptions.
     panel = panel.lower()
-    valid_style = {'random', 'last'} | set(_cm.__plt_styles.keys())
 
     if not data:
         raise exception.StatsError("'data' empty.")
@@ -522,22 +507,8 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
                         'n_trades' can only be greater than 1 and 
                         less than or equal to the length of 'data'.
                         """, newline_exclude=True))
-    elif (not style is None and not (style:=style.lower()) in valid_style):
-        raise exception.StatsError(f"'{style}' Not a style.")
 
-    if style == 'last':
-        style = _cm.plt_style
-    if style is None:
-        style = list(_cm.__plt_styles.keys())[0]
-    elif style == 'random':
-        style = rd.choice(list(_cm.__plt_styles.keys()))
-
-    plt_colors = _cm.__plt_styles[style]
-    _cm.plt_style = style
-
-    if isinstance(style_c, dict):
-        plt_colors.update(style_c)
-
+    plt_colors = cpl.style_def(name=style, update=style_c)
     gdir = plt_colors.get('gdir', False)
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
 
@@ -580,7 +551,7 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
                     for val in means if val != 0
                 ])
 
-                ax.bar(list(range(len(means))), means, # type: ignore[arg-type]
+                ax.bar(list(range(len(means))), means, # type: ignore
                        width=0.8, color=colors)
                 ax.legend(['Distribution.'], loc='upper left')
             case _: pass

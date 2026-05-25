@@ -424,7 +424,7 @@ def correct_index(index:pd.Index) -> np.ndarray|pd.Index:
 
     r_index:np.ndarray|pd.Index = index
     if not all(isinstance(ix, float) for ix in index):
-        r_index = date2num(index) # type: ignore[arg-type]
+        r_index = date2num(index) # type: ignore
         logger.warning(text_fix("""
               The 'index' has been automatically corrected. 
               To resolve this, use a valid index.
@@ -609,7 +609,7 @@ def diff_ccolor(color:str, dcolor:str, factor:float = 1,
 
 def plot_volume(ax:Axes, data:pd.Series, 
                 width:float = 1, color:str = 'tab:orange', 
-                alpha:float = 1) -> None:
+                alpha:float = 1, zorder:float = 1) -> None:
     """
     Volume draw.
 
@@ -618,9 +618,10 @@ def plot_volume(ax:Axes, data:pd.Series,
     Args:
         ax (Axes): The `Axes` object where the volume will be drawn.
         data (Series): Data to draw the volume.
-        width (float, optional): Width of each bar. Defaults to 1.
-        color (str, optional): Color of the volume. Defaults to 'tab:orange'.
-        alpha (float, optional): Opacity of the volume. Defaults to 1.
+        width (float, optional): Width of each bar.
+        color (str, optional): Color of the volume.
+        alpha (float, optional): Opacity of the volume.
+        zorder (float, optional): Z-order of the volume.
     """
 
     x = data.index.to_numpy() - width / 2
@@ -628,7 +629,8 @@ def plot_volume(ax:Axes, data:pd.Series,
 
     patches = [Rectangle((xi, 0), width, vol) for xi, vol in zip(x, volume)]
 
-    ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0)) # type: ignore[arg-type]
+    ax.add_collection(
+        PatchCollection(patches, color=color, alpha=alpha, linewidth=0, zorder=zorder)) # type: ignore
     ax.set_ylim(top=data.max()*1.1 or 1)
     ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
                 data.index.values[-1]+(width*len(data.index)/10))
@@ -636,7 +638,7 @@ def plot_volume(ax:Axes, data:pd.Series,
 def plot_candles(ax:Axes, data:pd.DataFrame, 
                  width:float = 1, color_up:str = 'g', 
                  color_down:str = 'r', color_n:str = 'k',
-                 alpha:float = 1) -> None:
+                 alpha:float = 1, zorder:float = 1) -> None:
     """
     Candles draw.
 
@@ -646,14 +648,15 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
         ax (Axes): The `Axes` object where the candles will be drawn.
         data (DataFrame): Data to draw the candles. 
             Need 'close', 'open', 'high', 'low' columns.
-        width (float, optional): Width of each candle. Defaults to 1.
+        width (float, optional): Width of each candle.
         color_up (str, optional): Color of the candle when the price rises. 
             Defaults to 'g'.
         color_down (str, optional): Color of the candle when the price falls. 
             Defaults to 'r'.
         color_n (str, optional): Color of the candle when the price does not move. 
             Defaults to 'k'.
-        alpha (float, optional): Opacity of the candles. Defaults to 1.
+        alpha (float, optional): Opacity of the candles.
+        zorder (float, optional): Z-order of the candles.
     """
 
     color = data.apply(
@@ -664,8 +667,8 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     # Drawing vertical lines.
     segments = [[(x, low), (x, high)] 
                 for x, low, high in zip(data.index, data['low'], data['high'])]
-    ax.add_collection(LineCollection(segments, colors=color, alpha=alpha, # type: ignore[arg-type]
-                                     linewidths=1, zorder=1))
+    ax.add_collection(LineCollection(segments, colors=color, alpha=alpha, # type: ignore
+                                     linewidths=1, zorder=zorder)) # type: ignore
 
     x = data.index.to_numpy() - width / 2
     y = np.minimum(data.loc[:, 'open'].to_numpy(), data.loc[:, 'close'].to_numpy())
@@ -673,7 +676,7 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
 
     # Bar drawing.
     patches = [Rectangle((xi, yi), width, hi) for xi, yi, hi in zip(x, y, height)]
-    ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0, zorder=1)) # type: ignore[arg-type]
+    ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0, zorder=zorder)) # type: ignore
 
     ylim_range = data['high'].max() - data['low'].min()
     ax.set_ylim(data['low'].min() - ylim_range*0.1, data['high'].max() + ylim_range*0.1)
@@ -683,7 +686,7 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
 def plot_line(ax:Axes, data:pd.Series, 
             width:float = 1, color_up:str = 'g', 
             color_down:str = 'r', color_n:str = 'k',
-            alpha:float = 1) -> None:
+            alpha:float = 1, zorder:float = 1) -> None:
     """
     Line draw.
 
@@ -693,14 +696,16 @@ def plot_line(ax:Axes, data:pd.Series,
         ax (Axes): The `Axes` object where the line will be drawn.
         data (Series): Data to draw the line.
         width (float, optional): Used to calculate the margin on the sides.
-            Width of each point. Defaults to 1.
+            Width of each point.
         color_up (str, optional): Color of the line when the price rises. 
             Defaults to 'g'.
         color_down (str, optional): Color of the line when the price falls. 
             Defaults to 'r'.
         color_n (str, optional): Color of the line when the price does not move. 
             Defaults to 'k'.
-        alpha (float, optional): Opacity of the line. Defaults to 1.
+        alpha (float, optional): Opacity of the line.
+        zorder (float, optional): Z-order of the line, the zorder varies between the 
+            value and +0.02 for the different line colors.
     """
 
     x = data.index.to_numpy()
@@ -712,24 +717,19 @@ def plot_line(ax:Axes, data:pd.Series,
         'd': {'xy':([],[]), 'color':color_down},
     }
 
-    for a, b, c, d in zip(x[:-1], y[:-1], x[1:], y[1:]):    
-        if b == d:
-            key = 'n'
-        elif b < d:
-            key = 'u'
-        else:
-            key = 'd'
+    for a, b, c, d in zip(x[:-1], y[:-1], x[1:], y[1:]):   
+        key = 'n' if b == d else 'u' if b < d else 'd'
 
         groups[key]['xy'][0].extend([a, c, np.nan])
         groups[key]['xy'][1].extend([b, d, np.nan])
 
-    ax.plot(groups['n']['xy'][0], groups['n']['xy'][1], color=groups['n']['color'], zorder=1, alpha=alpha)
+    ax.plot(groups['n']['xy'][0], groups['n']['xy'][1], color=groups['n']['color'], zorder=zorder, alpha=alpha)
 
-    u_z = p_z = 1.01
+    u_z = p_z = zorder+0.01
     if y.sum() > 0:
-        u_z = 1.02
+        u_z = u_z + 0.01
     else:
-        p_z = 1.02
+        p_z = p_z + 0.01
 
     ax.plot(groups['u']['xy'][0], groups['u']['xy'][1], color=groups['u']['color'], zorder=u_z, alpha=alpha)
     ax.plot(groups['d']['xy'][0], groups['d']['xy'][1], color=groups['d']['color'], zorder=p_z, alpha=alpha)
@@ -741,7 +741,8 @@ def plot_line(ax:Axes, data:pd.Series,
 def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green', 
                   color_stop:str = 'red', alpha:float = 1, 
                   alpha_arrow:float = 1, arrow_fact:float = 0.2, 
-                  operation_route:bool | None = True, closing_markets:bool | None = True
+                  operation_route:bool | None = True, closing_markets:bool | None = True,
+                  route_zorder:float = 0.9, markers_zorder:float = 1.1
                   ) -> list[PatchCollection|Collection]:
     """
     Position Draw.
@@ -751,17 +752,17 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
     Args:
         trades (DataFrame): Trades data to draw.
         ax (Axes): Axes where it is drawn.
-        color_take (str, optional): Color for positive positions. Default is 'green'.
-        color_stop (str, optional): Color for negative positions. Default is 'red'.
-        alpha (float, optional): Opacity of the elements. Default is 1.
-        alpha_arrow (float, optional): Opacity of arrow, type marker, and close marker. Default is 1.
-        operation_route (bool | None, optional): If True, traces the route of the operation. Default is True.
-            None, it doesn't draw the color but it does draw the arrow.
-        closing_markets (bool | None, optional): If True, draws markers for closing positions. Default is True.
+        color_take (str, optional): Color for positive positions.
+        color_stop (str, optional): Color for negative positions.
+        alpha (float, optional): Opacity of the elements.
+        alpha_arrow (float, optional): Opacity of arrow, type marker, and close marker.
         arrow_fact (float, optional): Indicates how much the colors of the arrows darken or lighten.
             If you don't want this to happen, leave it at 0.
-        width_exit (callable, optional): Function that specifies how many time points the position 
-            extends forward if not closed. Default is a lambda function with a width of 9.
+        operation_route (bool | None, optional): If True, traces the route of the operation.
+            None, it doesn't draw the color but it does draw the arrow.
+        closing_markets (bool | None, optional): If True, draws markers for closing positions.
+        route_zorder (float, optional): Z-order of the operation route. It varies between the value and -0.1.
+        markers_zorder (float, optional): Z-order of the markers.
 
     Info:
         The arrow and 'x' markers indicate where the position was closed.
@@ -792,20 +793,20 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
             trades['positionDate'],
             trades['positionClose'],)]
 
-        collections.append(ax.add_collection(LineCollection( # type: ignore[arg-type]
+        collections.append(ax.add_collection(LineCollection( # type: ignore
             segments,
             colors="grey",
             linestyles=(0, (5, 5)),
             linewidths=0.8,
             alpha=alpha_arrow,
-            zorder=cast(int, 0.9)
+            zorder=route_zorder # type: ignore
         )))
 
     color_close:list = trades.apply(
         lambda x: (
-            diff_ccolor('#089991', color_take, factor=0.2) 
-            if x['positionClose'] >= x['positionOpen'] else
-            diff_ccolor('#f23651', color_stop, factor=0.2)), axis=1).to_list()
+            color_take if ((x['typeSide'] and x['positionClose'] >= x['positionOpen']) or 
+                (not x['typeSide'] and x['positionClose'] <= x['positionOpen'])) else color_stop
+        ), axis=1).to_list()
 
     if operation_route:
         routes = [
@@ -818,8 +819,8 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
                 trades['positionDate']
         )]
 
-        collections.append(ax.add_collection(PatchCollection(routes, color=color_close, # type: ignore[arg-type]
-                                        alpha=alpha, linewidth=0, zorder=0.8)))
+        collections.append(ax.add_collection(PatchCollection(routes, color=color_close, # type: ignore
+                                        alpha=alpha, linewidth=0, zorder=route_zorder-0.1)))
 
     # Drawing of the closing marker of the operations.
     if ('positionDate' in trades.columns and 
@@ -828,7 +829,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
 
         collections.append(
             ax.scatter(trades['positionDate'].to_numpy(), trades['positionClose'].to_numpy(), 
-                  c=color_close, s=30, marker=MarkerStyle('x'), alpha=alpha_arrow, zorder=1.1))
+                  c=color_close, s=30, marker=MarkerStyle('x'), alpha=alpha_arrow, zorder=markers_zorder))
 
     up_type:Callable = lambda x: x['positionOpen'] if x['typeSide'] == 1 else None
     down_type:Callable = lambda x: x['positionOpen'] if x['typeSide'] != 1 else None
@@ -838,13 +839,13 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
         ax.scatter(trades['date'].to_numpy(), 
                 trades.apply(up_type, axis=1), 
                 color=diff_color(color_take, factor=arrow_fact, line=0.2), s=30, 
-                marker=MarkerStyle('^'), alpha=alpha_arrow, zorder=1.1))
+                marker=MarkerStyle('^'), alpha=alpha_arrow, zorder=markers_zorder))
 
     collections.append(
         ax.scatter(trades['date'].to_numpy(), 
                trades.apply(down_type, axis=1),
                color=diff_color(color_stop, factor=arrow_fact, line=0.2), s=30, 
-               marker=MarkerStyle('v'), alpha=alpha_arrow, zorder=1.1))
+               marker=MarkerStyle('v'), alpha=alpha_arrow, zorder=markers_zorder))
 
     return collections
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "backpyf"
-version = "1.0.10"
+version = "1.0.11"
 description = "BackPy is a library made in python for back testing in financial markets."
 authors = [{name = "Diego Cores", email = "89626622+diego-cores@users.noreply.github.com"}]
 readme = {file = "README.md", "content-type" = "text/markdown"}
@@ -32,7 +32,8 @@ optional = [
 dev = [
     "matplotlib-stubs",
     "pandas-stubs",
-    "pyrefly"
+    "pyrefly",
+    "bump-my-version"
 ]
 
 [project.scripts]
@@ -57,4 +58,20 @@ project-includes = [
     "**/*.ipynb",
 ]
 
-[tool]
+[tool.bumpversion]
+current_version = "1.0.11"
+
+[[tool.bumpversion.files]]
+filename = "src/backpy/__init__.py"
+search = "__version__ = '{current_version}'"
+replace = "__version__ = '{new_version}'"
+
+[[tool.bumpversion.files]]
+filename = "src/backpy/__init__.py"
+search = "Version:\n    {current_version}"
+replace = "Version:\n    {new_version}"
+
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = "version-{current_version}-blue"
+replace = "version-{new_version}-blue"

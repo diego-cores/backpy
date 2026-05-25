@@ -277,7 +277,7 @@ class StrategyClass(ABC):
                 if not k in ('stopLimit', 'stopLoss', 'takeLimit', 'takeProfit'):
                     continue
                 elif v > 99:
-                    raise exception.StyClassError('Order ord value out of range.')
+                    raise exception.OrderError('Order ord value out of range.')
 
                 self.__orders_order.update({k:v})
 
@@ -566,7 +566,7 @@ class StrategyClass(ABC):
         """
 
         if len(data) != len(self.__data_adf):
-            raise exception.UidcError('Length different from data.')
+            raise ValueError('Length different from data.')
 
         result = flx.DataWrapper(data[:self.__data_index], getattr(data, '_columns'), alert=True)
         result._index = data._index
@@ -1405,7 +1405,7 @@ class StrategyClass(ABC):
         logger.debug("Executes 'ord_put'")
         if not order_type in (
             'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit'):
-            raise ValueError('Bad op type')
+            raise exception.OrderError('Bad op type')
 
         # Last unionId
         last_data = None

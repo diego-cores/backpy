@@ -37,6 +37,7 @@ from matplotlib.dates import DateFormatter, date2num, num2date
 from matplotlib.legend_handler import HandlerTuple
 from matplotlib.animation import FuncAnimation
 from matplotlib.axes._axes import Axes
+from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
@@ -52,6 +53,7 @@ from . import flex_data as flx
 from . import _commons as _cm
 from . import exception
 from . import strategy
+from . import render
 from . import utils
 from . import stats
 
@@ -162,7 +164,7 @@ def __load_binance_data(klines:Callable, symbol:str = 'BTCUSDT',
     if data.empty or isinstance(data, pd.Series): 
         raise exception.BinanceError('Data empty error.')
 
-    data.index = date2num(pd.to_datetime(data.index, unit='ms', utc=True)) # type: ignore[arg-type]
+    data.index = date2num(pd.to_datetime(data.index, unit='ms', utc=True)) # type: ignore
     data_width = utils.calc_width(data.index)
 
     if statistics: stats.stats_icon(prnt=True, 
@@ -325,7 +327,7 @@ def load_yfinance_data(ticker:str, start:str | None = None,
             raise exception.YfinanceError('The symbol does not exist.')
         
         data.columns = data.columns.droplevel(1).str.lower()
-        data.index = date2num(data.index) # type: ignore[arg-type]
+        data.index = date2num(data.index) # type: ignore
         data_width = utils.calc_width(data.index)
 
         load_prgs.next()
@@ -727,7 +729,7 @@ def run(cls:type|Sequence[type], name:str|None = None, prnt:bool = True,
         trades = pd.concat([trades, act_trades], ignore_index=True)
 
     backtest = {
-        'name':_cm.__gen_fname(name or cls[0].__name__, _cm.__get_names(_cm.__backtests)), 
+        'name':_cm.__gen_fname(name or cls[0].__name__, _cm.__get_names(_cm.__data_backtests)), 
         'trades':trades, 
         'balance_rec':pd.Series(balance_rec, index=_cm.__data.index),
         'init_funds':_cm.__init_funds,
@@ -739,7 +741,7 @@ def run(cls:type|Sequence[type], name:str|None = None, prnt:bool = True,
     if trades_r:
         return backtest
     elif not trades.empty:
-        _cm.__backtests.append(backtest)
+        _cm.__data_backtests.append(backtest)
 
     try: 
         return stats.stats_trades(prnt=prnt)
@@ -785,7 +787,6 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
     """
     # Exceptions.
     panel = panel.lower()
-    valid_styles = {'random', 'last'} | set(_cm.__plt_styles.keys())
 
     if _cm.__data is None: 
         raise exception.RunError('Data not loaded.')
@@ -798,8 +799,6 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
     elif getattr(cls, '__abstractmethods__'):
         raise exception.RunError(
             "The implementation of the 'next' abstract method is missing.")
-    elif (not style is None and (style:=style.lower()) not in valid_styles):
-        raise exception.PlotError(f"'{style}' Not a style.")
     elif interval < 100:
         raise exception.PlotError(f"'interval' it can only be greater or equal than 100.")
     elif not (isinstance(candle_pov, bool) or candle_pov is None) and candle_pov < 0.01:
@@ -809,18 +808,7 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
     _cm.__data.index = utils.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index, True)
 
-    if style == 'last':
-        style = _cm.plt_style
-    if style is None:
-        style = list(_cm.__plt_styles.keys())[0]
-    elif style == 'random':
-        style = rd.choice(list(_cm.__plt_styles.keys()))
-
-    plt_colors = _cm.__plt_styles[style]
-    _cm.plt_style = style
-
-    if isinstance(style_c, dict):
-        plt_colors.update(style_c)
+    plt_colors = cpl.style_def(name=style, update=style_c)
 
     instance = cls(data=_cm.__data)
     fig = plt.figure(figsize=(16,8))
@@ -1027,7 +1015,7 @@ def reg_indicator(panel:str|None=None, color:str|list|None=None,
     """
 
     if _cm.__data is None:
-        raise ValueError('Data not loaded.')
+        raise exception.PlotError('Data not loaded.')
 
     def __add_indicator(func:Callable, *args:tuple, 
         dt_source:str|None = None, **kwargs:dict) -> str:
@@ -1055,9 +1043,9 @@ def reg_indicator(panel:str|None=None, color:str|list|None=None,
             def_config = _cm.__plot_indicators_def['def']
 
         if dt_source is None:
-            dt_source = def_config.get('dt_source', None)
+            dt_source = def_config.get('dtSource', None)
         elif not dt_source in _cm.__data.columns:
-            raise ValueError("'dt_source' must be a column of 'data'.")
+            raise exception.PlotError("'dt_source' must be a column of 'data'.")
 
         data = _cm.__data[dt_source] if dt_source else _cm.__data
         idc_data = func(data, *args, **kwargs)
@@ -1093,85 +1081,6 @@ def reg_indicator(panel:str|None=None, color:str|list|None=None,
         return name
 
     return __add_indicator
-
-# wip
-def draw_indicators(indicators, named_axes, x_index, width):
-    if not indicators:
-        return
-
-    colorin_axes = {i:[] for i in named_axes.keys()}
-
-    legend_rname = True # Global Variable
-    legend_args = True # Global Variable
-    fontsize = 'xx-small' # Global Variable
-
-    mathform = (lambda title, description: 
-        rf'$\bf{{{utils.esc_latex(title)}}}$: $\it{{{utils.esc_latex(description)}}}$.')
-    legends = {ax_nm:{'handles':[], 'labels':[]} for ax_nm in named_axes.keys()}
-
-    for idc in indicators:
-        color = color if isinstance(color:=_cm.__plot_indicators[idc]['color'], list) else [color]
-        data = _cm.__plot_indicators[idc]['data']
-        panel = _cm.__plot_indicators[idc]['panel'] or idc
-        rname = _cm.__plot_indicators[idc]['rname'] if legend_rname else idc
-        adef = _cm.__plot_indicators[idc]['adef'] if legend_args else {}
-
-        names = None
-        if isinstance(data, pd.DataFrame):
-            names = data.columns
-        elif isinstance(data, np.ndarray) and data.dtype.names:
-            names = data.dtype.names
-        plot_data = [data[col].tolist() for col in names] if names is not None else [data]
-
-        # Draw dec
-        style_ax = _cm.__plot_indicators[idc].get('style', [])
-        for stl in style_ax:
-            if callable(stl): 
-                stl(named_axes[panel], index=x_index, values=plot_data)
-
-        artists = []
-        style_ondraw = _cm.__plot_indicators[idc].get('styleOnDraw', [])
-
-        for i,v in enumerate(plot_data):
-            plot_color = None
-            if i < len(color) and color[i] and not color[i] in colorin_axes[panel]:
-                colorin_axes[panel].append(color[i])
-                plot_color = color[i]
-
-            # Draw
-            if i < len(style_ondraw) and callable(style_ondraw[i]):
-                artist = style_ondraw[i](
-                    named_axes[panel], 
-                    index=x_index, 
-                    values=plot_data,
-                    zorder=0.5,
-                ) 
-            else: 
-                artist = _cm.draw_plot(i, color=plot_color)(
-                    named_axes[panel], 
-                    index=x_index, 
-                    values=plot_data,
-                    zorder=0.5,
-                )
-
-            if artist: artists.extend(artist if isinstance(artist, list) else [artist])
-        legends[panel]['handles'].append(tuple(i for i in artists))
-        legends[panel]['labels'].append(mathform(rname.upper(), 
-            f'{(', '.join(names) if not names is None else 'line')}{'; '+'; '.join(map(str,adef.values()))if adef else ''}'.lower()))
-
-    for panel in legends:
-        if not any(legends[panel]['handles']) or not legends[panel]['labels']:
-            continue
-
-        ndivide = max([len(handle) for handle in legends[panel]['handles']])
-        named_axes[panel].legend(
-            handles=legends[panel]['handles'], 
-            labels=legends[panel]['labels'],
-            handler_map={tuple: HandlerTuple(ndivide=ndivide, pad=0.5)},
-            fontsize=fontsize,
-            handlelength=ndivide,
-            loc=2,
-        )
 
 def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str|int|None = None,
          idc_name:str|Sequence[str]|None = None, panel:str = 'new', style:str | None = 'last', 
@@ -1238,7 +1147,6 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
 
     # Exceptions.
     panel = panel.lower()
-    valid_style = {'random', 'last'} | set(_cm.__plt_styles.keys())
     draw_style = (draw_style or 'line').lower()
     draw_style_vol = (draw_style_vol or 'bar').lower()
     draw_style_pos = (draw_style_pos or 'complex').lower()
@@ -1248,8 +1156,6 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
     elif panel not in ('new', 'add'):
         raise exception.PlotError(
             f"'{panel}' Not a valid option for: 'panel'.")
-    elif (not style is None and not (style:=style.lower()) in valid_style):
-        raise exception.PlotError(f"'{style}' Not a style.")
     elif not draw_style in {'none', 'line', 'candle'}:
         raise exception.PlotError(f"'{draw_style}' Not a draw style.")
     elif not draw_style_vol in {'none', 'bar'}:
@@ -1261,24 +1167,14 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
     _cm.__data.index = utils.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index, True)
 
-    if style == 'last':
-        style = _cm.plt_style
-    if style is None:
-        style = list(_cm.__plt_styles.keys())[0]
-    elif style == 'random':
-        style = rd.choice(list(_cm.__plt_styles.keys()))
-
-    plt_colors = _cm.__plt_styles[style]
-    _cm.plt_style = style
+    plt_colors = cpl.style_def(name=style, update=style_c)
 
     idc_name = idc_name or []
     if isinstance(idc_name, str):
         idc_name = [idc_name]
     if idc_name and idc_name[0].strip() == '*':
         idc_name = list(_cm.__plot_indicators.keys())
-    if isinstance(style_c, dict):
-        plt_colors.update(style_c)
-
+ 
     t = time()
     load_prgs = utils.ProgressBar()
     load_prgs.adder_add({'PlotTimer':lambda x=t: utils.num_align(time()-x)})
@@ -1288,47 +1184,11 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
     # Axes
     fig = plt.figure(figsize=(16,8))
 
-    needed_axes = []
-    if not draw_style_vol == 'none':
-        needed_axes = ['volume']
-
-    idc_fname = []
-    for i,v in enumerate(idc_name):
-        if not v in _cm.__plot_indicators.keys():
-            continue
-
-        idc_fname.append(v)
-        panel = _cm.__plot_indicators[v]['panel'] or v
-        if not panel in needed_axes and panel:
-            needed_axes.append(panel)
-
-    axes_num = len(needed_axes)
-    ax1 = None
-    diff = 0
-
-    if not draw_style == 'none' or not draw_style_pos == 'none':
-        if not 'price' in needed_axes: 
-            needed_axes.append('price')
-        else:
-            axes_num -= 1
-
-        diff = axes_num+2 # Global Variable
-        ax1 = plt.subplot2grid((axes_num+diff,1), (0,0), rowspan=diff, colspan=1)
-
-    axes_order = {'price':0, 'volume':1}
-    needed_axes.sort(key=lambda x: axes_order.get(x, 3))
-
-    axes = cpl.gen_axes(axes_num, pad=diff, sharex=ax1, autoget_sharex=True)
-    if ax1: axes.insert(0, ax1)
-
-    if not axes:
-        logger.warning('Nothing to draw')
+    named_axes = render.gen_price_axes(draw_style != 'none' or draw_style_pos != 'none', draw_style_vol != 'none', idc_name)
+    if named_axes is None:
         return
 
-    # Drawn indicators
-    named_axes = dict(zip(needed_axes, axes))
-    draw_indicators(idc_name, named_axes, _cm.__data.index, _cm.__data_width*0.9)
-
+    render.draw_indicators(idc_name, named_axes, _cm.__data.index.values.tolist(), _cm.__data_width*0.9)
     load_prgs.next()
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
 
@@ -1350,15 +1210,16 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
     match draw_style_vol:
         case 'bar':
             utils.plot_volume(named_axes['volume'], _cm.__data.loc[:, 'volume'], _cm.__data_width, 
-                            color=plt_colors.get('vol', 'tab:orange'))
+                            color=plt_colors.get('vol', 'tab:orange'), zorder=0.45)
         case 'none' | _:
             pass
     load_prgs.next()
 
-    if len(_cm.get_backtest_names()) > 0 and not (trades:=_cm.__get_trades(name)).empty:
+    price_ax = named_axes.get('price', None)
+    if price_ax and len(_cm.get_backtest_names()) > 0 and not (trades:=_cm.__get_trades(name)).empty:
         match draw_style_pos:
             case 'complex'|'simple':
-                utils.plot_position(trades, named_axes['price'], 
+                utils.plot_position(trades, price_ax, 
                                 color_take=market_colors.get('u', 'green'),
                                 color_stop=market_colors.get('d', 'red'),
                                 operation_route=draw_style_pos == 'complex',
@@ -1376,7 +1237,7 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
     fig.autofmt_xdate()
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0, hspace=0)
 
-    ix_date:Sequence = num2date(_cm.__data.index) # type: ignore[arg-type]
+    ix_date:Sequence = num2date(_cm.__data.index) # type: ignore
 
     s_date = ".".join(str(val) for val in 
                     [ix_date[0].day, ix_date[0].month, 

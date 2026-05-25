@@ -91,7 +91,7 @@ class DataWrapper():
         self._index = (self.__set_index(data) if index is None else index)
         self._columns = (self.__set_columns(data) 
                         if columns_nd is None else columns_nd)
-        self._alert = bool(alert or False)
+        self._alert = alert or False
 
         super().__init__()
 
@@ -301,7 +301,7 @@ class DataWrapper():
                                         self.__valid_index() or []), 
                                     columns=cast(SequenceNotStr, self.__valid_columns()))
         except ValueError as e:
-            raise exception.ConvWrapperError(f"Dataframe conversion error.")
+            raise RuntimeError(f"Dataframe conversion error.")
 
     def to_series(self) -> pd.Series:
         """
@@ -323,7 +323,7 @@ class DataWrapper():
             return pd.Series(self._data.flatten(), 
                              index=self.__valid_index(True))
         except ValueError as e: 
-            raise exception.ConvWrapperError(f"Series conversion error.")
+            raise RuntimeError(f"Series conversion error.")
 
     def to_dict(self) -> dict:
         """
@@ -349,7 +349,7 @@ class DataWrapper():
             else:
                 return {i: [val] for i, val in enumerate(self._data)}
         except ValueError as e:
-            raise exception.ConvWrapperError(f"Dict conversion error.")
+            raise RuntimeError(f"Dict conversion error.")
 
     def to_list(self) -> list:
         """
@@ -379,8 +379,8 @@ class DataWrapper():
 
                     return DataWrapper(result) if isinstance(result, np.ndarray) else result
                 except Exception as e:
-                    raise exception.ConvWrapperError(
-                        f"Error when calling '{name}': {e}")
+                    raise RuntimeError(
+                        f"Error when calling '{name}': {e}.")
             return wrapper
         elif attr is not None:
             return attr
@@ -589,7 +589,7 @@ class ChunkWrapper(np.ndarray):
 
         # exceptions
         if chunk_size and (not isinstance(chunk_size, int) or chunk_size <= 0):
-            raise exception.ChunkWrapperError(
+            raise ValueError(
                 "'chunk_size' can only be 'int' greater than 0.")
 
         obj = np.asarray(data, dtype=dtype).view(cls)
@@ -699,7 +699,7 @@ class ChunkWrapper(np.ndarray):
         """
         
         if not hasattr(self.dtype, "names") or self.dtype.names is None:
-            raise exception.ChunkWrapperError(
+            raise ValueError(
                 'Only support structured ndarray.')
 
         if name in self.dtype.names:

@@ -13,6 +13,7 @@ Classes:
 
 Functions:
     def_style: Define a new style to plot your graphics.
+    style_def: Takes a style from '__plt_style'.
     gradient_ax: Create a diagonal background gradient on the 'ax' with 'ax.imshow'.
     custom_ax: Aesthetically configures an axis.
     ax_view: Based on a str generates axes.
@@ -22,7 +23,7 @@ Functions:
     config_ax: Backpy default axis configuration.
 """
 
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk # type: ignore[import]
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk # type: ignore
 from matplotlib.animation import FuncAnimation
 from typing import Callable, Never, Any, cast
 from matplotlib.dates import DateFormatter
@@ -79,7 +80,7 @@ class CustomToolbar(NavigationToolbar2Tk):
     _buttons: dict[Any, Any]
     winfo_children:Callable
 
-    toolitems = (
+    toolitems:tuple = (
         ('Home', 'Reset original view', 'home', 'home'),
         ('Pan', 'Pan axes with left mouse, zoom with right', 'move', 'pan'),
         ('Zoom', 'Zoom to rectangle', 'zoom_to_rect', 'zoom'),
@@ -120,7 +121,7 @@ class CustomToolbar(NavigationToolbar2Tk):
         """
 
         if not movement:
-            self.toolitems = ( # type: ignore[assignment]
+            self.toolitems = ( # type: ignore
                 ('Home', 'Reset original view', 'home', 'home'),
                 (None, None, None, None),
                 ('Save', 'Save the figure', 'filesave', 'save_figure'),
@@ -968,7 +969,7 @@ def def_style(name:str,
               down:str | None = None
               ) -> None:
     """
-    Def style.
+    Def style
 
     Define a new style to plot your graphics.
     Only valid colors for tkinter.
@@ -1017,6 +1018,48 @@ def def_style(name:str,
                 'u':up or 'green',
                 'd':down or 'red',
     }}})
+
+def style_def(name:str|None = 'last', update:dict|None = None) -> dict:
+    """
+    Style def
+
+    Takes a style from '__plt_style'.
+
+    All color styles:
+        'lightmode', 'darkmode', 'sunrise', 'mintfresh', 'skyday', 
+        'emberday', 'lavenderblush', 'peachpuff', 'sunrisedusk', 
+        'embernight', 'obsidian', 'neonforge', 'carbonfire', 
+        'datamatrix', 'terminalblood', 'plasmacore'.
+
+    Args:
+        name (str|None, optional): Name of the color style. 
+            If you leave it as 'last' the last one will be returned.
+        update (dict|None, optional): Customize the defined style by 
+            modifying the dictionary. To know what to modify, 
+            read the docstring of 'def_style'.
+
+    Returns:
+        dict: Style dict.
+    """
+
+    if (not name is None and not (name:=name.lower()) in {'random', 'last'} | set(_cm.__plt_styles.keys())):
+        raise exception.StyleError(f"Style not found. '{name}'")
+
+    if name == 'last':
+        name = _cm.plt_style
+
+    if name is None:
+        name = list(_cm.__plt_styles.keys())[0]
+    elif name == 'random':
+        name = rd.choice(list(_cm.__plt_styles.keys()))
+
+    stl_colors = _cm.__plt_styles[name]
+    _cm.plt_style = name
+
+    if isinstance(update, dict):
+        stl_colors.update(update)
+
+    return stl_colors
 
 def gradient_ax(ax:Axes, colors:list|tuple, right:bool=False) -> None:
     """
@@ -1080,7 +1123,7 @@ def custom_ax(ax:Axes, bg:str|tuple|list = '#e5e5e5', edge:bool = False) -> None
     ax.spines['left'].set_color('white')
     ax.spines['top'].set_color('white')
     ax.spines['right'].set_color('white')
-    ax.title.set_color('white') # type: ignore[attr-defined]
+    ax.title.set_color('white') # type: ignore
     ax.xaxis.label.set_color('white')
     ax.yaxis.label.set_color('white')
     ax.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
@@ -1164,7 +1207,6 @@ def new_paneledw(block:bool, style:dict = {}) -> None:
     """
 
     # Exceptions
-
     if len(_cm.__panel_list) > 4:
         raise exception.CustomWinError('Maximum 4 panels')
     elif len(_cm.__panel_list) != _cm.__panel_wmax and not block:

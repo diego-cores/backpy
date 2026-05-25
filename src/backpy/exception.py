@@ -4,32 +4,24 @@ Exception module
 Custom exceptions.
 """
 
-class DataError(Exception):pass
+class BackpyError(Exception): pass
 
-class YfinanceError(Exception):pass
+class DataError(BackpyError):pass
 
-class BinanceError(Exception):pass
+class YfinanceError(BackpyError):pass
 
-class PlotError(Exception):pass
+class BinanceError(BackpyError):pass
 
-class StatsError(Exception):pass
+class PlotError(BackpyError):pass
 
-class RunError(Exception):pass
+class StatsError(BackpyError):pass
 
-class StyClassError(Exception):pass
+class RunError(BackpyError):pass
 
-class PositionError(Exception):pass
+class StyleError(BackpyError):pass
 
-class ConvWrapperError(Exception):pass
+class OrderError(BackpyError):pass
 
-class ChunkWrapperError(Exception):pass
+class CostValueError(BackpyError):pass
 
-class CostValueError(Exception):pass
-
-class UidcError(Exception):pass
-
-class StyleError(Exception):pass
-
-class OrderError(Exception):pass
-
-class CustomWinError(Exception):pass
+class CustomWinError(BackpyError):pass
