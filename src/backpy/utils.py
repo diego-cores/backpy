@@ -18,18 +18,21 @@ Functions:
     num_align: Aligns a number to the left or right with a maximum number of digits.
     round_r: Function to round a number to a specified number of significant 
         digits to the right of the decimal point.
+    float_str: Converts a floating-point number displayed in scientific 
+        notation to its fixed-point character string representation.
     not_na: Function to apply a specified function to two values if neither is 
         `np.nan`, or return the non-`np.nan` value, or `np.nan` if both are 
         `np.nan`.
-    correct_index: Function to correct index by converting it to float.
-    calc_width: Function to calulate the width of 'index' 
-        if it has not been calculated already.
+    calc_width: Calculate the difference between each data point in 'index'.
     calc_day: Function to calculate the width of the index that each day has.
     text_fix: Function to fix or adjust text.
     get_darguments: Get default arguments.
+    get_arguments: Give all arguments given to the function, including defaults.
+    gen_datakey: Generate a unique key that represents 'data'.
     mult_color: Multiply a color.
     diff_color: Makes a color darker or lighter.
     diff_ccolor: Differentiate a color from another color.
+    get_vertices: Get the vertices of a matplotlib artist.
     plot_volume: Function to plot volume on a give `Axes`.
     plot_candles: Function to plot candles on a given `Axes`.
     plot_line: Plots a line with data on the provided `Axes`.
@@ -40,16 +43,17 @@ Hidden Functions:
 """
 
 from matplotlib.collections import PatchCollection, LineCollection, Collection
+from matplotlib.patches import Rectangle, Patch
 from matplotlib.markers import MarkerStyle
-from matplotlib.patches import Rectangle 
 from matplotlib.axes._axes import Axes
 from matplotlib.dates import date2num
-import matplotlib.colors
+from matplotlib.artist import Artist
+from matplotlib.lines import Line2D
 import matplotlib as mpl
 
-from typing import Any, Callable, cast
-from time import sleep, time
-import threading
+from typing import Any, Callable
+from hashlib import blake2b
+from time import sleep
 import logging
 import shutil
 import re
@@ -160,7 +164,7 @@ class ProgressBar():
         Based on the '_adder' dictionary, it creates a text 
         that compiles all the additional text with the correct format.
 
-        Return:
+        Returns:
             str: Formated additional text.
         """
 
@@ -184,7 +188,7 @@ class ProgressBar():
         Args:
             text (str): text.
 
-        Return:
+        Returns:
             str: Adjusted text.
         """
 
@@ -214,7 +218,7 @@ class ProgressBar():
         Call this method to advance the loading bar; 
         if size is None or the loading bar is full, nothing is done.
 
-        Return:
+        Returns:
             str|None: Returns the loading bar as a string if 'noprint'.
         """
 
@@ -361,32 +365,57 @@ def num_align(num:float|np.floating, digits:int = 4, side:bool = True) -> str:
     data_s = side_c(round(num, digits-len(int_part)-1))
     return data_s if _cm.dots else data_s.replace('.', ',')
 
-def round_r(num:float|np.floating, r:int = 1) -> float|np.floating:
+def round_r(num:float|np.floating|int, r:int = 1, alw_dec:bool = False) -> float|int:
     """
     Round right.
 
     Rounds `num` to have at most `r` significant digits to the right of the 
     decimal point. If `num` is `np.nan` or evaluates to `None`, it returns 0.
+    It does not accept scientific notation.
 
     Args:
-        num (float|floating): The number to round.
+        num (float|floating|int): The number to round.
         r (int, optional): Maximum number of significant digits to the right of 
             the decimal point. Defaults to 1.
+        alw_dec (bool, optional): Always decimals, it makes there 'r' minimum decimals, 
+            no matter how many integers there are.
 
     Returns:
-        float|floating: The rounded number, or 0 if `num` is `np.nan` or evaluates to 
+        float|int: The rounded number or 0 if `num` is `np.nan` or evaluates to 
             `None`.
     """
 
-    if np.isnan(num) or np.isinf(num) or num is None:
+    if num is None or np.isnan(num) or np.isinf(num):
         return 0
-    
-    if int(num) != num:
-        num = float(round(num) 
-            if len(str(num).split('.')[0]) > r 
-            else f'{{:.{r}g}}'.format(num))
-            
-    return num
+    elif int(num) == num:
+        return int(num)
+
+    outd = str(num).split('.')[0].replace('-', '')
+    len_outd = len(outd) if alw_dec and outd != '0' else 0
+
+    return (float(round(num, r)) if alw_dec else round(num)
+        if len(outd) >= r 
+        else float(f'{{:.{r+len_outd}g}}'.format(num)))
+
+def float_str(num:float|int) -> str:
+    """
+    Float to str
+
+    Converts a floating-point number displayed in scientific 
+    notation to its fixed-point character string representation, 
+    preserving all significant digits.
+
+    Args:
+        num (float|int): Number to convert.
+
+    Returns:
+        str: Fixed-point character string representation.
+    """
+    if 'e' not in repr(num):
+        return repr(num)
+
+    mantissa, exp = repr(num).split('e')
+    return f"{num:.{-int(exp)+len(mantissa.replace('.', '').replace('-', ''))-1}f}"
 
 def not_na(x:Any, y:Any, f:Callable = max) -> Any:
     """
@@ -409,52 +438,18 @@ def not_na(x:Any, y:Any, f:Callable = max) -> Any:
 
     return y if np.isnan(x) else x if np.isnan(y) else f(x, y)
 
-def correct_index(index:pd.Index) -> np.ndarray|pd.Index:
-    """
-    Correct index.
-
-    Correct `index` by converting it to float
-
-    Args:
-        index (Index): The `index` of the data to be corrected.
-
-    Returns:
-        ndarray|Index: The corrected `index`.
-    """
-
-    r_index:np.ndarray|pd.Index = index
-    if not all(isinstance(ix, float) for ix in index):
-        r_index = date2num(index) # type: ignore
-        logger.warning(text_fix("""
-              The 'index' has been automatically corrected. 
-              To resolve this, use a valid index.
-              """))
-    
-    return r_index
-
-def calc_width(index:pd.Index|np.ndarray, alert:bool = False) -> float:
+def calc_width(index:pd.Index|np.ndarray) -> float:
     """
     Calc width.
     
-    Calculate the width of `index` if it has not been calculated already.
+    Calculate the difference between each data point in 'index'.
 
     Args:
         index (Index|ndarray): The index of the data.
-        alert (bool, optional): If `True`, an warning will be logged. Defaults to 
-            False.
 
     Returns:
         float: The width of `index`.
     """
-
-    if isinstance(_cm.__data_width, float) and _cm.__data_width > 0: 
-        return _cm.__data_width
-
-    if alert:
-        logger.warning(text_fix("""
-            The 'data_width' has been automatically corrected. 
-            To resolve this, use a valid width.
-            """))
 
     return 1. if len(index) <= 1 else np.median(np.diff(index))
 
@@ -527,6 +522,57 @@ def get_darguments(func: Callable) -> dict:
     def_arguments = dict(zip(name_df, df))
     return def_arguments
 
+def get_arguments(func:Callable, *args:list, **kwargs:dict) -> dict:
+    """
+    Get arguments
+
+    Give all arguments given to the function, including defaults.
+
+    Args:
+        func (Callable): Function.
+        *args: Positional arguments.
+        **kwargs: Keyword arguments.
+
+    Returns:
+        dict: Return dict with arg:value.
+    """
+
+    code = func.__code__
+    name_df = code.co_varnames[:code.co_argcount]
+
+    arguments = get_darguments(func)
+    arguments.update(zip(name_df[:len(args)], args))
+    arguments.update(kwargs)
+
+    return arguments
+
+def gen_datakey(data:pd.Series|pd.DataFrame|np.ndarray, size:int = 8) -> str:
+    """
+    Generate  data key
+
+    Generate a unique key that represents 'data'.
+    The key depends solely on the bytes of the value.
+
+    Args:
+        data (pd.Series|pd.DataFrame|np.ndarray): The input data.
+        size (int, optional): Digest size in bytes. Key is 2*'size' chars.
+
+    Returns:
+        str: The generated key.
+    """
+
+    if isinstance(data, (pd.Series, pd.DataFrame)):
+        raw = data.to_numpy()
+    elif isinstance(data, np.ndarray):
+        raw = data
+
+    if raw.dtype == object:
+        logger.warning(
+            "'data' has an 'object' dtype. Keying it is much slower")
+        raw = pd.util.hash_array(raw.ravel())
+
+    return blake2b(raw.tobytes(), digest_size=size).hexdigest()
+
 def mult_color(color:str, multiplier:float = 1) -> tuple[float, ...]:
     """
     Multiply a color
@@ -535,7 +581,7 @@ def mult_color(color:str, multiplier:float = 1) -> tuple[float, ...]:
         color (str): String allowed by Matplotlib as color.
         multiplier (float): multiplier.
 
-    Return:
+    Returns:
         tuple[float, ...]: Rgb color.
     """
 
@@ -606,6 +652,35 @@ def diff_ccolor(color:str, dcolor:str, factor:float = 1,
 
     return tuple(rgb[i] if v >= rgb_d[i]*(1+line) or v <= rgb_d[i]*(1-line) 
                  else min(1., v*(1+factor)) for i,v in enumerate(rgb))
+
+def get_vertices(artist:Artist, sup_nan:bool = True) -> list|None:
+    """
+    Get vertices
+
+    Get the vertices of a matplotlib artist.
+
+    Args:
+        artist (Artist): The matplotlib artist.
+        sup_nan (bool, optional): Whether to suppress NaN values. Defaults to True.
+
+    Returns:
+        list|None: The vertices of the artist, or None if the artist is not supported.
+    """
+
+    mask = lambda x: x if not sup_nan else x[~np.isnan(x).any(axis=1)]
+    if isinstance(artist, Line2D):
+        result =  [p for p in mask(artist.get_xydata())]
+    elif isinstance(artist, Collection):
+        result = []
+        for p in artist.get_paths():
+            result.extend([v for v in mask(p.vertices)])
+    elif isinstance(artist, Patch):
+        result =  [p for p in mask(artist.get_path().transformed(
+            artist.get_patch_transform()).vertices)]
+    else:
+        return
+
+    return result
 
 def plot_volume(ax:Axes, data:pd.Series, 
                 width:float = 1, color:str = 'tab:orange', 

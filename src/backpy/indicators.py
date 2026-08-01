@@ -3,9 +3,6 @@ Indicators module
 
 This module contains the main logic of the indicators.
 
-Note:
-    To call a indicator within another, use self.
-
 Variables:
     logger (Logger): Logger variable.
 
@@ -38,7 +35,7 @@ from . import _commons as _cm
 logger:logging.Logger = logging.getLogger(__name__)
 
 @_cm._store_decorator
-def idct_fibonacci(lv0:int = 10, lv1:int = 1) -> pd.DataFrame:
+def idct_fibonacci(lv0:float = 10, lv1:float = 1) -> pd.DataFrame:
     """
     Calculate Fibonacci retracement levels.
 

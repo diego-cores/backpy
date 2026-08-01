@@ -26,32 +26,34 @@ Functions:
     var_parametric: Calculate the parametric var.
     max_drawdown: Function to return the maximum drawdown from the given data.
     get_drawdowns: Calculate the drawdowns from the given.
+    percentile_rank: Calculate the percentile of 'x' in 'data'.
+    z_score: Calculate the number of standard deviations that separate 'x'.
     perf_tzone_chart: Chart the best and worst hours/minutes of your strategy.
-    monte_carlo_chart: Displays graphs with Monte Carlo statistics.
+    distribution_chart: Displays distribution graphs.
     monte_carlo_bsim: Calculates Monte Carlo simulations.
+    permutation: Generate a permutation test.
     correlation: Measure correlation between strategies.
     earnings_intime: Statistics of earnings each 'x' amount of days.
     stats_icon: Shows statistics related to the financial icon.
     stats_trades: Statistics of the trades.
     trades_op_years: Return the number of years operated.
-    trades_group_duration: Return the duration of trades in days.
+    trades_duration: Return the duration of trades in days.
     trades_group_year: Returns 'Series' by grouping each trade by year.
     trades_group_day: Returns 'Series' by grouping each trade by days.
 """
 
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 import pandas as pd
 import numpy as np
 
-from typing import Literal, Callable, Sequence
-import random as rd
+from typing import Callable, Sequence
+from time import time
 import logging
 
 from . import custom_plt as cpl
 from . import _commons as _cm
+from . import flex_data
 from . import exception
-from . import strategy
 from . import utils
 
 logger:logging.Logger = logging.getLogger(__name__)
@@ -75,21 +77,22 @@ def average_ratio(trades:pd.DataFrame) -> float:
                 / abs(trades.loc[:, 'profitPer'][trades['profitPer'] < 0]).mean()))
     return 0
 
-def profit_fact(profits:pd.Series) -> float:
+def profit_fact(profits:pd.Series|np.ndarray) -> float:
     """
     Profit fact.
 
     Calculate the profit factor of the values.
 
     Args:
-        profits (Series): Returns on each operation.
+        profits (Series|ndarray): Returns on each operation.
 
     Returns:
         float: Profit fact.
     """
 
-    if (not pd.isna(profits).all() 
-        and (profits>0).sum() > 0 
+    profits = profits[~np.isnan(profits)]
+
+    if ((profits>0).sum() > 0 
         and (profits<=0).sum() > 0):
 
         return (profits[profits>0].sum()
@@ -131,23 +134,23 @@ def math_hope_relative(trades:pd.DataFrame, profits:pd.Series) -> float:
 
     return winnings(profits)*average_ratio(trades)-(1-winnings(profits))
 
-def winnings(profits:pd.Series) -> float:
+def winnings(profits:pd.Series|np.ndarray) -> float:
     """
     Winnings percentage.
 
     Calculate the percentage of positive numbers in the series.
 
     Args:
-        profits (Series): Returns on each operation.
+        profits (Series|ndarray): Returns on each operation.
 
     Returns:
         float: Winnings percentage.
     """
 
     if (not ((profits>0).sum() == 0 
-        or profits.count() == 0)):
+        or len(profits) == 0)):
 
-        return (profits>0).sum()/profits.count()
+        return (profits>0).sum()/len(profits)
     return 0
 
 
@@ -196,7 +199,7 @@ def sortino_ratio(ann_av:float|np.floating, year_days:int, diary_per:pd.Series) 
 
     return (ann_av / np.sqrt(year_days) / std_dev)
 
-def payoff_ratio(profits:pd.Series) -> float:
+def payoff_ratio(profits:pd.Series|np.ndarray) -> float:
     """
     Payoff ratio.
 
@@ -204,23 +207,26 @@ def payoff_ratio(profits:pd.Series) -> float:
         mean of positive numbers/mean of negative numbers.
 
     Args:
-        profits (Series): Returns on each operation..
+        profits (Series|ndarray): Returns on each operation..
 
     Returns:
         float: Payoff ratio.
     """
 
-    return (profits.loc[profits > 0].dropna().mean() 
-            / abs(profits.loc[profits < 0].dropna().mean()))
+    profits = np.asarray(profits)
+    profits = profits[~np.isnan(profits)]
 
-def expectation(profits:pd.Series) -> float:
+    return (profits[profits > 0].mean() 
+            / abs(profits[profits < 0].mean()))
+
+def expectation(profits:pd.Series|np.ndarray) -> float:
     """
     Expectation.
 
     Calculate the expectation based on payoff.
 
     Args:
-        profits (Series): Returns on each operation.
+        profits (Series|ndarray): Returns on each operation.
 
     Returns:
         float: Expectation.
@@ -281,61 +287,112 @@ def var_parametric(data:list | pd.Series | np.ndarray,
 
     return np.average(data)-z_alpha*np.std(data, ddof=1)
 
-def max_drawdown(values:pd.Series) -> float:
+def max_drawdown(values:pd.Series|np.ndarray) -> float:
     """
     Maximum drawdown.
 
     Calculate the maximum drawdown of `values`.
 
     Args:
-        values (Series): The ordered data to calculate the maximum drawdown.
+        values (Series|ndarray): The ordered data to calculate the maximum drawdown.
 
     Returns:
         float: The maximum drawdown from the given data.
     """
 
-    if values.empty: return 0
-    max_drdwn, max_val = 0, values.iloc[0]
+    if isinstance(values, pd.Series):
+        values = np.asarray(values)
 
-    def calc(x):
-        nonlocal max_drdwn, max_val
+    if len(values) < 1: return 0
+    max_drdwn, max_val = 0, values[0]
 
+    for x in values:
         if x > max_val: max_val = x
         else: 
             drdwn = (max_val - x) / max_val
             if drdwn > max_drdwn:
                 max_drdwn = drdwn
-    values.apply(calc)
 
     return max_drdwn
 
-def get_drawdowns(
-        values:list | pd.Series | np.ndarray
-    ) -> Literal[0] | list | pd.Series | np.ndarray:
+def get_drawdowns(values:list|pd.Series|np.ndarray) -> np.ndarray:
     """
     Get drawdowns.
 
     Calculate the drawdowns of `values`.
 
     Args:
-        values (list | pd.Series | np.ndarray): 
+        values (list|pd.Series|np.ndarray): 
             The ordered data to calculate the drawdowns.
 
     Returns:
-        Literal[0] | list | pd.Series | np.ndarray: The drawdowns from the given data.
+        np.ndarray: The drawdowns from the given data.
     """
 
+    values = np.asarray(values)
     if len(values) == 0:
-        return 0
+        return np.array([])
 
     max_values = np.maximum.accumulate(values)
     drawdowns = (values - max_values) / max_values
 
     return drawdowns
 
+def percentile_rank(data:np.ndarray, x:float, form:str = 'mean') -> float:
+    """
+    Percentile rank
+
+    Calculate the percentile of 'x' in 'data'.
+
+    Args:
+        data (np.ndarray): Data.
+        x (float): Value to calculate.
+        form (str, optional): Method of calculation, available: '
+            'mean', 'strict', 'weak', 'rank'.
+
+    Returns:
+        float: Percentile fraction.
+    """
+    form = form.strip().lower()
+
+    if form not in ('mean', 'strict', 'weak', 'rank'):
+        raise exception.StatsError(f"'{form}' is not a valid form.")
+    elif len(data) < 1:
+        raise exception.StatsError('"data" must be greater or equal than 1.')
+
+    left  = np.sum(data < x)
+    right = np.sum(data <= x)
+
+    forms = {
+        'mean': lambda: (left + right) / 2,
+        'strict': lambda: left,
+        'weak': lambda: right,
+        'rank': lambda: (left + right + (left != right)) / 2,
+    }
+    return forms[form]() / len(data)
+
+def z_score(data:np.ndarray, x:float) -> float:
+    """
+    Z Score
+
+    Calculate the number of standard deviations that separate 'x'.
+
+    Args:
+        data (np.ndarray): Data.
+        x (float): Value to calc.
+
+    Return:
+        float: Return the metric.
+    """
+
+    std_dev = np.std(data, ddof=1)
+    if std_dev < 1e-9: return np.nan
+
+    return (x-data.mean())/std_dev
+
 def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
                      view:str = 'p/d', col:str|None = 'profitPer', 
-                     panel:str = 'new', style:str|None = 'last', 
+                     panel:str = 'add', style:str|None = 'last', 
                      style_c:dict|None = None, block:bool = True) -> None:
     """
     Performance time zones chart
@@ -357,9 +414,6 @@ def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
             you can add multiple by passing an list.
         view (str, optional): Specifies which graphics to display. 
             Default is 'p/d'. Maximum 8.
-        col (str|None, optional): Column to display statistics, 
-            only 'profit' and 'profitPer' are supported, 
-            None uses 'profitPer'.
         panel (str, optional): To create a new window or add a panel, 
             only 'new' or 'add' are possible.
         style (str | None, optional): Color style. 
@@ -382,7 +436,7 @@ def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
         raise exception.StatsError(
             f"'{panel}' Not a valid option for: 'panel'.")
 
-    plt_colors = cpl.style_def(name=style, update=style_c)
+    plt_colors, style_name = cpl.style_def(name=style, update=style_c)
     col = col or 'profitPer'
 
     trades = _cm.__get_trades(names=names)
@@ -390,8 +444,9 @@ def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
     trades_data = _cm.__get_strategy(name=name)
 
     if trades.empty:
-        logger.warning('Trades not loaded')
-        return
+        logger.warning('Trades not loaded'); return
+    elif not 'profit' in trades.columns or not 'profitPer' in trades.columns:
+        logger.warning('No closed trades.'); return
 
     hour = lambda index: ((index % trades_data['d_width_day']) 
                           / trades_data['d_width_day'] * 24).astype(int)
@@ -401,7 +456,7 @@ def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
     gdir = plt_colors.get('gdir', False)
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
 
-    fig = plt.figure(figsize=(16,8))
+    fig = plt.figure(figsize=(16,8),dpi=_cm.graph_dpi)
     fig.subplots_adjust(left=0, right=1, top=1, 
                         bottom=0, wspace=0, hspace=0)
 
@@ -445,41 +500,45 @@ def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
 
     cpl.add_window(
         fig=fig,
-        title=f'Performance in time - {style}',
+        title=f'Performance in time - {style_name}',
         block=block,
         style=plt_colors,
         new=True if panel == 'new' else False,
         toolbar='total'
     )
 
-def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
-                      n_trades:int|None = None, col:str|None = 'profitPer',
-                      panel:str = 'new', style:str|None = 'last', 
+def distribution_chart(data:tuple[Sequence[np.ndarray], str], view:str = 's/d',
+                      n_trades:int|None = None, diff_ini:bool = True, 
+                      panel:str = 'add', style:str|None = 'last', 
                       style_c:dict|None = None, block:bool = True) -> None:
     """
-    Monte Carlo chart
+    Distribution chart
 
-    Takes data from a Monte Carlo simulation 
-    and generates graphs with statistics.
+    Generates distribution graphs.
 
     Available Graphics:
     - 's' = Simulation chart.
     - 'd' = Distribution of results with this you can see 
         what percentage of simulations win.
+    - 'pf' = Profit factor distribution bell.
 
     All color styles:
         Documentation of this in the 'plot' docstring.
 
+    Note:
+        The profit factor here is calculated from percentage returns, not dollar profit.
+        This makes it valid for relative comparison between the original and the simulations, 
+        but not comparable to a dollar-based profit factor.
+
     Args:
-        data (list[pd.DataFrame]): Data extracted from a Monte Carlo simulation.
-            You can extract data from 'monte_carlo_bsim' function.
+        data (tuple[Sequence[np.ndarray]): Data extracted from a simulation.
+            You can extract data from 'monte_carlo_bsim' or 'permutation' functions.
+            Tuple with (list of simulations, title).
         view (str, optional): Specifies which graphics to display. 
             Default is 'd/p/b'. Maximum 8.
         n_trades (int|None, optional): For graph 'd' how many simulations 
             will be shown.
-        col (str|None, optional): Column to display statistics, 
-            only 'profit' and 'profitPer' are supported, 
-            None uses 'profitPer' and calculates equity curve.
+        diff_ini (bool, optional): The original strategy trades stands out in all the charts.
         panel (str, optional): To create a new window or add a panel, 
             only 'new' or 'add' are possible.
         style (str | None, optional): Color style. 
@@ -494,29 +553,27 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
     # Exceptions.
     panel = panel.lower()
 
-    if not data:
-        raise exception.StatsError("'data' empty.")
-    elif col and col not in ('profit', 'profitPer'):
-        raise exception.StatsError(
-            "'col' only 'profit', 'profitPer' or None is supported.")
+    dvalues = [i[~np.isnan(i)] for i in data[0]]
+    if not dvalues or all([len(i)<1 for i in dvalues]):
+        logger.warning("Given data are empty."); return
     elif panel not in ('new', 'add'):
         raise exception.StatsError(
             f"'{panel}' Not a valid option for: 'panel'.")
-    elif n_trades and n_trades <= 1 and n_trades > len(data):
+    elif n_trades and n_trades <= 1 and n_trades > len(dvalues):
         raise exception.StatsError(utils.text_fix("""
                         'n_trades' can only be greater than 1 and 
-                        less than or equal to the length of 'data'.
+                        less than or equal to the length of given data.
                         """, newline_exclude=True))
 
-    plt_colors = cpl.style_def(name=style, update=style_c)
+    plt_colors, style_name = cpl.style_def(name=style, update=style_c)
     gdir = plt_colors.get('gdir', False)
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
 
-    fig = plt.figure(figsize=(16,8))
+    fig = plt.figure(figsize=(16,8),dpi=_cm.graph_dpi)
     fig.subplots_adjust(left=0, right=1, top=1, 
                         bottom=0, wspace=0, hspace=0)
 
-    graphics = ['s','d']
+    graphics = ['s','d','pf']
     axes, v_view = cpl.ax_view(view=view, graphics=graphics)
 
     for i,v in enumerate(v_view):
@@ -525,21 +582,25 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
 
         match v:
             case 's':
-                for i in range(n_trades if n_trades else len(data)):
-                    curve = (data[i][col].cumsum().dropna() 
-                             if isinstance(col, str) else 
-                             (1 + data[i]['profitPer'] / 100).cumprod().dropna()-1 )
-                    ax.plot(range(0, len(curve)), curve, alpha=0.5)
+                for i in range(n_trades if n_trades else len(dvalues)):
+                    alpha = 0.5
+                    zorder = 2
+                    color = market_colors.get('u', 'g') if diff_ini else None
+                    if i==0 and diff_ini:
+                        zorder = 3
+                        color = market_colors.get('d', 'r')
+                        alpha = 1
+
+                    curve = dvalues[i].cumsum()
+                    ax.plot(range(0, len(curve)), curve, alpha=alpha, zorder=zorder, color=color)
 
                 ax.legend(['Simulations.'], loc='upper left')
-                ax.set_xlim(-1, len(data[0].index))
+                ax.set_xlim(-1, len(dvalues[0]))
             case 'd':
-                data_last = lambda df: (df[col].cumsum().dropna().iloc[-1] 
-                                    if isinstance(col, str) else 
-                                    ((1 + df[i]['profitPer'] / 100).cumprod().dropna()-1).iloc[-1])
-                last_result = np.array([data_last(df) for df in data])
+                last_result = np.array([ar.sum() for ar in dvalues])
 
-                parts = np.array_split(np.sort(last_result), 100)
+                sorted_results = np.sort(last_result)
+                parts = np.array_split(sorted_results, 100)
                 means:list[float] = [np.mean(part) for part in parts if len(part) > 0]
 
                 color_u = lambda x: utils.mult_color(
@@ -551,14 +612,35 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
                     for val in means if val != 0
                 ])
 
-                ax.bar(list(range(len(means))), means, # type: ignore
-                       width=0.8, color=colors)
-                ax.legend(['Distribution.'], loc='upper left')
+                if diff_ini:
+                    pos_in_sorted = np.searchsorted(sorted_results, last_result[0])
+                    bin_index = int(pos_in_sorted / len(sorted_results) * len(means))
+
+                    ax.axvline(x=bin_index, color=market_colors.get('d', 'r'), linewidth=1.2,
+                    linestyle='--', zorder=2, label='Original.')
+
+                ax.bar(list(range(len(means))), means, width=0.8, color=colors, label='Distribution.')
+                ax.legend(loc='upper left')
+            case 'pf':
+                pf_result = np.array([profit_fact(ar) for ar in dvalues])
+
+                count, hist = np.histogram(pf_result, bins=25)
+                color_u = lambda x: utils.mult_color(
+                    color=market_colors['u'], multiplier=x)
+                colors = np.array([color_u((val/np.max(count))+0.2) for val in count if val != 0])
+
+                if diff_ini:
+                    ax.axvline(x=pf_result[0], color=market_colors.get('d', 'r'), linewidth=1.2,
+                    linestyle='--', zorder=2, label='Original.')
+
+                ax.bar(hist[:-1], count, width=np.mean(np.diff(hist))*0.8, color=colors, label='Distribution.')
+                ax.legend(loc='upper left')
             case _: pass
 
+    title = data[1].strip()
     cpl.add_window(
         fig=fig,
-        title=f'Monte Carlo simulation - {style}',
+        title=f'{title if title else "Distribution"} - {style_name}',
         block=block,
         style=plt_colors,
         new=True if panel == 'new' else False,
@@ -566,10 +648,10 @@ def monte_carlo_chart(data:list[pd.DataFrame], view:str = 's/d',
     )
 
 def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None, 
-                    n_trades:int|None = None, n_sim:int|None = 10000, 
-                    percentiles:Sequence[int|float] = [1,5,10,24,50,75], 
-                    col:str|None = 'profitPer', replace:bool = True,
-                    prnt:bool = True) -> tuple[list[pd.DataFrame], str]:
+                    n_trades:int|None = None, n_sims:int|None = 10000, 
+                    percentiles:Sequence[int|float] = [1,5,10,24,50,75],
+                    replace:bool = True, prnt:bool = True, 
+                    progress:bool = True) -> tuple[list[np.ndarray], str]:
     """
     Monte Carlo bootstrap simulation
 
@@ -577,13 +659,18 @@ def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None,
 
     For documentation of statistics, read the 'stats_trades' docstring.
 
+    Note:
+        The profit factor here is calculated from percentage returns, not dollar profit.
+        This makes it valid for relative comparison between the original and the simulations, 
+        but not comparable to a dollar-based profit factor.
+
     Args:
         names (Sequence[str|int|None]|str|int|None, optional): 
             Backtest names to extract data from, None = -1, 
             you can add multiple by passing an list.
         n_trades (int|None, optional): Number of trades per simulation, 
             None = length of loaded trades.
-        n_sim (int|None, optional): Number of simulations.
+        n_sims (int|None, optional): Number of simulations.
         percentiles (Sequence[int|float], optional): Percentiles for statistics.
         col (str|None, optional): Column to do the simulation, 
             only 'profit' and 'profitPer' are supported, 
@@ -593,71 +680,66 @@ def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None,
             cannot exceed the length of the trades.
         prnt (bool, optional): If True, the statistics are 
             printed on the console.
+        progress (bool, optional): If True, shows a progress bar and timer.
 
-    Return:
-        tuple[list[DataFrame],str]: 
-            Tuple with: list with all simulations and statistics test.
+    Returns
+        tuple[list[ndarray],str]: 
+            Tuple with: list with all simulations and title text.
     """
 
     # Exceptions.
-    if col and col not in ('profit', 'profitPer'):
-        raise exception.StatsError(
-            "'col' only 'profit', 'profitPer' or None is supported.")
-    elif n_trades and n_trades <= 1:
+    if n_trades and n_trades <= 1:
         raise exception.StatsError(
             "'n_trades' can only be greater than 1.")
-    elif n_sim and n_sim <= 0:
+    elif n_sims and n_sims <= 0:
         raise exception.StatsError(
-            "'n_sim' can only be greater than 0.")
+            "'n_sims' can only be greater than 0.")
 
-    trades = _cm.__get_trades(names=names)
-    name = list(names)[0] if isinstance(names, (tuple,set,list)) else names
-    trades_data = _cm.__get_strategy(name=name)
-    sim = []
+    trades = _cm.__get_trades(names=names)['profitPer'].dropna()
+    sim = [trades[:n_trades].to_numpy()]
+    n_sims = n_sims or 10000
 
     if n_trades and not replace and (n_trades <= 1 or n_trades > len(trades)):
         raise exception.StatsError(
             f"'n_trades' has to be greater than 1 and less than the total number of trades ({len(trades)}).")
     elif trades.empty:
-        raise exception.StatsError('Trades not loaded.')
+        logger.warning('Trades not loaded.'); return ([], '')
+
+    t = time()
+    load_prgs = utils.ProgressBar()
+    load_prgs.adder_add({'DataTimer':lambda x=t: utils.num_align(time()-x)})
+    if progress:
+        load_prgs.reset_size(n_sims)
+    skip = max(1, n_sims // _cm.max_bar_updates)
 
     stats = {
         'profit_fact':[],
         'max_drawdown':[],
         'avg_drawdown':[],
-        'max_drawdown$':[],
-        'avg_drawdown$':[],
         'expectation':[],
         'winrate':[],
     }
 
-    for i in range(n_sim or 10000):
+    for i in range(n_sims):
         trades_s = trades.sample(
-            n=n_trades or len(trades), replace=replace)
+            n=n_trades or len(trades), replace=replace).to_numpy()
+        multiplier = 1 + trades_s / 100
 
-        trades_calc = trades_s
-        trades_calc['multiplier'] = 1 + trades_calc['profitPer'] / 100
-
-        stats['profit_fact'].append(profit_fact(trades.loc[:, 'profit']))
-        stats['expectation'].append(expectation(trades_s.loc[:, 'profitPer']))
-        stats['max_drawdown'].append(
-            max_drawdown(pd.Series(np.cumprod(trades_s['multiplier'].dropna()))))
-        stats['avg_drawdown'].append(
-            np.mean(get_drawdowns(np.cumprod(trades_s['multiplier'].dropna()))))
-        stats['max_drawdown$'].append(
-            max_drawdown(trades['profit'].cumsum().dropna()
-                         +trades_data['init_funds']))
-        stats['avg_drawdown$'].append(
-            np.mean(get_drawdowns(trades['profit'].cumsum().dropna()
-                                  +trades_data['init_funds'])))
-        stats['winrate'].append(winnings(trades.loc[:, 'profitPer'])*100)
+        stats['profit_fact'].append(profit_fact(trades_s))
+        stats['expectation'].append(expectation(trades_s))
+        stats['max_drawdown'].append(max_drawdown(multiplier.cumprod()))
+        stats['avg_drawdown'].append(get_drawdowns(multiplier.cumprod()).mean())
+        stats['winrate'].append(winnings(trades_s)*100)
 
         sim.append(trades_s)
+        if i % skip == 0 or i+1 >= n_sims:
+            load_prgs._step = i-(0 if i == n_sims-1 else 1)
+            load_prgs.next()
 
-    data_last = lambda df: (df[col].cumsum().dropna().iloc[-1] 
-                        if isinstance(col, str) else 
-                        ((1 + df['profitPer'] / 100).dropna()-1).cumprod().iloc[-1])
-    last_result = np.array([data_last(df) for df in sim])
+    returned = (sim, 'Monte Carlo simulation')
+    if not prnt: return returned
+
+    last_result = np.array([df.sum() for df in sim])
     percentiles_r = np.percentile(last_result, percentiles)
 
     percentiles_t = {
@@ -672,24 +754,214 @@ def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None,
                               _cm.__COLORS['GREEN'] if prft_fact > 1 else _cm.__COLORS['RED']],
         'Max drawdown avg':[str(round(np.average(stats['max_drawdown'])*100, 1)) + '%'],
         'Average drawdown avg':[str(-round(np.average(stats['avg_drawdown'])*100, 1)) + '%'],
-        'Max drawdown$ avg':[str(round(np.average(stats['max_drawdown$'])*100,1)) + '%'],
-        'Average drawdown$ avg':[str(-round(np.average(stats['avg_drawdown$'])*100, 1)) + '%'],
         'Expectation avg':[utils.round_r(np.average(stats['expectation']))],
         'Winnings avg':[str(round(np.average(stats['winrate']), 1)) + '%',
                            _cm.__COLORS['GREEN']],
-        f'\n{_cm.__COLORS['CYAN']}Percentiles{_cm.__COLORS['RESET']}':['']
+        f"\n{_cm.__COLORS['CYAN']}Percentiles{_cm.__COLORS['RESET']}":['']
     }
     text.update(percentiles_t)
 
     text = utils.statistics_format(text, f"---Statistics of Monte Carlo---")
+    text = text if _cm.dots else text.replace('.', ',')
+
+    print(text)
+    return returned
+
+def permutation(names:Sequence[str|int|None]|str|int|None = None,
+                n_sims:int = 1000, max_concrr:int|None = None, cost:bool = True, 
+                frag_attps:int = 3, prnt:bool = True, progress:bool = True) -> tuple[list[np.ndarray], str]:
+    """
+    Permutation
+
+    Generate a permutation test.
+    Check if your strategy is better than randomness.
+
+    Note:
+        Random simulations are based solely on the duration of each trade, 
+        so if your backtest uses closing or opening prices other than the 
+        candle's close, it may cause inaccuracies in the test.
+        The profit factor here is calculated from percentage returns, not dollar profit.
+        This makes it valid for relative comparison between the original and the simulations, 
+        but not comparable to a dollar-based profit factor.
+
+    Args:
+        names (Sequence[str|int|None]|str|int|None, optional): 
+            Backtest names to extract data from, None = -1, 
+            you can add multiple by passing an list.
+        n_sims (int, optional): Number of random simulations.
+        max_concrr (int|None, optional): Maximum number of open positions at the same time.
+        cost (bool, optional): Simulate cost (spread and slippage).
+        frag_attps (int, optional): How many attempts before losing the simulation, due to fragmented data.
+        prnt (bool, optional): If True, the statistics are 
+            printed on the console.
+        progress (bool, optional): If True, shows a progress bar and timer.
+
+    Returns:
+        tuple[list[ndarray],str]: 
+            Tuple with: list with all simulations and title text.
+            The total number of simulations may be less than required; 
+            to avoid this, use a higher 'max_concrr' value or add more data.
+    """
+
+    # Exceptions.
+    if _cm.__data is None or not type(_cm.__data) is pd.DataFrame or _cm.__data.empty:
+        raise exception.StatsError('Data not loaded.')
+    elif not max_concrr is None and max_concrr < 1:
+        raise exception.StatsError("'max_concrr' must be >= 1.")
+    elif frag_attps < 1:
+        raise exception.StatsError("'frag_attps' cannot be less than 1.")
+
+    trades = _cm.__get_trades(names=names)
+    if trades.empty:
+        logger.warning('Trades not loaded.'); return ([], '')
+    if not 'positionClose' in trades.columns or trades['positionClose'].isna().all():
+        logger.warning('No closed trades.'); return ([], '')
+
+    t = time()
+    load_prgs = utils.ProgressBar()
+    load_prgs.adder_add({'DataTimer':lambda x=t: utils.num_align(time()-x)})
+    if progress:
+        load_prgs.reset_size(n_sims)
+    skip = max(1, n_sims // _cm.max_bar_updates)
+
+    signals = []
+    for t in trades.values.tolist():
+        if np.isnan(t[7]): continue
+
+        signals.append([t[7]-t[0], t[4]]) # [duration, typeSide]
+
+    if max_concrr is None:
+        total_duration = np.asarray(signals)[:, 0].sum()
+        max_concrr = 1+int(total_duration/(_cm.__data.index[-1]-_cm.__data.index[0]))
+
+    spread_pct = _cm.__spread_pct or flex_data.CostsValue(0)
+    slippage_pct = _cm.__slippage_pct or flex_data.CostsValue(0)
+
+    data_idx = _cm.__data.index.values
+    data_idx_len = len(data_idx)
+    data_closes = _cm.__data['close'].to_numpy()
+
+    test = [trades['profitPer'].dropna().to_numpy()]
+    all_indices = np.arange(data_idx_len)
+
+    signals.sort(key=lambda rep: rep[0], reverse=True)
+    signals_range = range(len(signals))
+
+    def placement() -> list[tuple[int, float]]:
+        """
+        Placement
+
+        Run the random placement simulation.
+        Raise 'DataFragError' when the data becomes fragmented and 
+            there is no data left for the rest of the trades.
+
+        Returns:
+            list[tuple[int,float]]: Returns list with (trade index, return).
+        """
+        nonlocal signals, signals_range, all_indices, data_closes, data_idx_len, \
+            data_idx, slippage_pct, spread_pct, max_concrr
+
+        coverage = np.zeros(data_idx_len+1)
+        test_ls = []
+
+        sff_sig_sum = np.cumsum([rep[0] for rep in signals[::-1]])[::-1]/max_concrr
+        for i in signals_range:
+            max_idx = int(np.searchsorted(data_idx,
+                data_idx[-1]-sff_sig_sum[i]))
+
+            if max_idx-1 < 0:
+                raise exception.StatsError(
+                    "Insufficient data set: a trade duration exceeds the dataset length. "
+                    "Increase 'max_concrr' or use the original data set."
+                )
+
+            candidate_indices = all_indices[:max_idx]
+            exit_indices = np.searchsorted(
+                data_idx, data_idx[candidate_indices]+signals[i][0])
+
+            in_range = exit_indices < data_idx_len
+            blocked_prefix = (coverage>=max_concrr).cumsum()
+            blocked_in_range = (
+                blocked_prefix[exit_indices]-blocked_prefix[candidate_indices]
+            ) <= 0
+
+            valid_indices = candidate_indices[in_range & blocked_in_range]
+            if len(valid_indices) == 0:
+                raise exception.DataFragError
+
+            idx = int(np.random.choice(valid_indices))
+            exit_idx = int(exit_indices[idx])
+            coverage[idx:exit_idx] += 1
+
+            entry = data_closes[idx]
+            entry_cost = data_closes[idx] * ((
+                (spread_pct.get_taker()/100/2) + (slippage_pct.get_taker()/100)) if cost else 0)
+    
+            exit = data_closes[exit_idx] 
+            exit_cost = data_closes[exit_idx] * ((
+                (spread_pct.get_taker()/100/2) + (slippage_pct.get_taker()/100)) if cost else 0)
+
+            test_ls.append((idx,((exit-exit_cost)-(entry+entry_cost) 
+                if signals[i][1] else (entry-entry_cost)-(exit+exit_cost))/entry))
+
+        test_ls.sort(key=lambda x: x[0])
+        return test_ls
+
+    for n_s in range(n_sims):
+        test_ls = []
+        for _at in range(frag_attps):
+            try:
+                test_ls = placement(); break
+            except exception.DataFragError:
+                logger.debug(
+                    'Permutation test data fragmentation, '+
+                    ('simulation deleted' if _at >= frag_attps-1 else 'trying again'))
+
+        if test_ls: test.append(np.asarray([v[1]*100 for v in test_ls]))
+        if n_s % skip == 0 or n_s+1 >= n_sims:
+            load_prgs._step = n_s-(0 if n_s == n_sims-1 else 1)
+            load_prgs.next()
+
+    returned = (test, 'Permutation test')
+    if not prnt: return returned
+
+    # Sharpe ratio without the annual average.
+    sharpe = lambda returns: returns.mean() / s if (s:=returns.std(ddof=1)) > 1e-9 else 0.0
+
+    last_result = np.asarray([t.sum() for t in test])
+    sharp_result = np.asarray([sharpe(t) for t in test])
+    profitf_result =  np.asarray([profit_fact(t) for t in test])
+
+    text = {
+        f"{_cm.__COLORS['CYAN']}Z-score{_cm.__COLORS['RESET']}":[''],
+        'Z return':[round(z_s:=z_score(last_result, last_result[0]), 3), 
+            _cm.__COLORS['GREEN'] if z_s > 0 else _cm.__COLORS['RED'] if z_s < 0 else ''],
+        'Z profit fact':[round(z_spf:=z_score(profitf_result, profitf_result[0]), 3), 
+            _cm.__COLORS['GREEN'] if z_spf > 0 else _cm.__COLORS['RED'] if z_spf < 0 else ''],
+        'Z sharpe ratio':[round(z_ssp:=z_score(sharp_result, sharp_result[0]), 3), 
+            _cm.__COLORS['GREEN'] if z_ssp > 0 else _cm.__COLORS['RED'] if z_ssp < 0 else ''],
+
+        f"\n{_cm.__COLORS['CYAN']}P-value{_cm.__COLORS['RESET']}":[''],
+        'P return':[round(p_v:=np.mean(last_result >= last_result[0]), 3), 
+            _cm.__COLORS['RED'] if p_v > 0.05 else _cm.__COLORS['GREEN']],
+        'P profit fact':[round(p_vpf:=np.mean(profitf_result >= profitf_result[0]), 3), 
+            _cm.__COLORS['RED'] if p_vpf > 0.05 else _cm.__COLORS['GREEN']],
+        'P sharpe ratio':[round(p_vsp:=np.mean(sharp_result >= sharp_result[0]), 3), 
+            _cm.__COLORS['RED'] if p_vsp > 0.05 else _cm.__COLORS['GREEN']],
+
+        f"\n{_cm.__COLORS['CYAN']}Others{_cm.__COLORS['RESET']}":[''],
+        'percentile rank':[str(round(percentile_rank(last_result[1:], last_result[0], form='mean')*100, 2))+'%', 
+            _cm.__COLORS['GREEN']],
+    }
+    text = utils.statistics_format(text, f"---Statistics of permutation test---")
 
     text = text if _cm.dots else text.replace('.', ',')
-    if prnt:print(text) 
 
-    return (sim, text)
+    print(text)
+    return returned
 
 def correlation(names:Sequence[str|int|None], col:str|None = None, 
-                method:str|None = None) -> pd.DataFrame:
+                method:str|None = None, prnt:bool = True) -> pd.DataFrame:
     """
     Correlation
 
@@ -701,6 +973,7 @@ def correlation(names:Sequence[str|int|None], col:str|None = None,
             only 'profit' and 'profitPer' are supported, None = 'profitPer'.
         method (str|None, optional): Correlation method: 'pearson', 
             'kendall', 'spearman'. None = 'pearson'.
+        prnt (bool, optional): Print the result to the console.
 
     Returns:
         DataFrame: Correlation.
@@ -720,6 +993,12 @@ def correlation(names:Sequence[str|int|None], col:str|None = None,
 
     trades = _cm.__get_dtrades(names=names)
 
+    for v in trades.values():
+        if v.empty:
+            logger.warning('Trades not loaded.'); return pd.DataFrame()
+        elif not 'positionDate' in v.columns:
+            logger.warning('No closed trades.'); return pd.DataFrame()
+
     daily_profit = {
         k: v.groupby('positionDate')[col or 'profitPer'].sum().cumsum()
         for k, v in trades.items()
@@ -729,8 +1008,10 @@ def correlation(names:Sequence[str|int|None], col:str|None = None,
         daily_profit, 
         axis=1, 
         join='outer').sort_index().ffill().pct_change().dropna()
+    result = returns.corr(method=method.lower() if method else 'pearson') # pyrefly: ignore
 
-    return returns.corr(method=method.lower() if method else 'pearson') # pyrefly: ignore
+    if prnt: print(result)
+    return result
 
 def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None, 
                data_icon:str | None = None, 
@@ -807,7 +1088,7 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None,
     else: return text
 
 def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = None, 
-                 prnt:bool = True) -> str | None:
+                 prnt:bool = True) -> str|None:
     """
     Trades Statistics.
 
@@ -913,11 +1194,9 @@ def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = N
 
     # Exceptions.
     if trades.empty: 
-        raise exception.StatsError('Trades not loaded.')
-    elif not 'profitPer' in trades.columns:  
-        raise exception.StatsError('There is no data to see.')
-    elif np.isnan(trades['profitPer'].mean()):
-        raise exception.StatsError('There is no data to see.') 
+        logger.warning('Trades not loaded.'); return
+    elif (not 'profitPer' in trades.columns) or np.isnan(trades['profitPer'].mean()):  
+        logger.warning('No closed trades.'); return
 
     # Number of years operated.
     op_years = trades_op_years(
@@ -974,10 +1253,10 @@ def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = N
         'Op years':[utils.round_r(op_years, 2), _cm.__COLORS['CYAN']],
 
         'Return':[str(_return:=utils.round_r((_cm.c_tf(trades.loc[:, 'multiplier'].prod())-1)*100,2))+'%',
-                  _cm.__COLORS['GREEN'] if float(_return) > 0 else _cm.__COLORS['RED'],],
+                  _cm.__COLORS['GREEN'] if _return > 0 else _cm.__COLORS['RED'],],
 
         'Profit':[str(_profit:=utils.round_r(np.nansum(trades['profit'].to_numpy()),2)),
-                _cm.__COLORS['GREEN'] if float(_profit) > 0 else _cm.__COLORS['RED'],],
+                _cm.__COLORS['GREEN'] if _profit > 0 else _cm.__COLORS['RED'],],
 
         'Gross earnings':[utils.round_r((trades['profit'][trades['profit']>0].sum()
                            if not pd.isna(trades['profit']).all() else 0), 4),
@@ -1003,10 +1282,10 @@ def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = N
             _cm.__COLORS['CYAN']],
 
         'Return ann':[str(_return_ann:=utils.round_r((ann_return.prod()**(1/op_years)-1)*100,2))+'%',
-                  _cm.__COLORS['GREEN'] if float(_return_ann) > 0 else _cm.__COLORS['RED'],],
+                  _cm.__COLORS['GREEN'] if _return_ann > 0 else _cm.__COLORS['RED'],],
 
         'Profit ann':[str(_profit_ann:=utils.round_r(ann_profit.mean(),2)),
-                  _cm.__COLORS['GREEN'] if float(_profit_ann) > 0 else _cm.__COLORS['RED'],],
+                  _cm.__COLORS['GREEN'] if _profit_ann > 0 else _cm.__COLORS['RED'],],
 
         'Return ann vol':[utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1)
                                         *np.sqrt(trades_data['d_year_days']), 2),
@@ -1034,13 +1313,13 @@ def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = N
                     _cm.__COLORS['YELLOW'],],
 
         'Profit fact':[_profit_fact:=utils.round_r(profit_fact(trades.loc[:, 'profit']), 3),
-                _cm.__COLORS['GREEN'] if float(_profit_fact) > 1 else _cm.__COLORS['RED'],],
+                _cm.__COLORS['GREEN'] if _profit_fact > 1 else _cm.__COLORS['RED'],],
 
         'Return diary std':[(_return_std:=utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1), 2)),
-                    _cm.__COLORS['YELLOW'] if float(_return_std) > 1 else _cm.__COLORS['GREEN'],],
+                    _cm.__COLORS['YELLOW'] if _return_std > 1 else _cm.__COLORS['GREEN'],],
 
         'Profit diary std':[(_profit_std:=utils.round_r(np.std(diary_profit.dropna(),ddof=1), 2)),
-                      _cm.__COLORS['YELLOW'] if float(_profit_std) > 1 else _cm.__COLORS['GREEN'],],
+                      _cm.__COLORS['YELLOW'] if _profit_std > 1 else _cm.__COLORS['GREEN'],],
 
         'Math hope':[_math_hope:=round(math_hope(trades.loc[:, 'profit']), 3),
             _cm.__COLORS['GREEN'] if _math_hope > 0 else _cm.__COLORS['RED'],],
@@ -1148,14 +1427,14 @@ def trades_op_years(trades_date:pd.Series, day_width:float, year_days:int) -> fl
     """
     Trades operated years
 
-    Return the number of years operated.
+    Returns the number of years operated.
 
     Args:
         trades_date (Series): 'Series' with the dates.
         day_width (float): Width of each day.
         year_days (int): Operated days per year.
 
-    Return:
+    Returns:
         float: Years operated on float.
     """
 
@@ -1168,14 +1447,14 @@ def trades_duration(position_date:pd.Series, date:pd.Series,
     """
     Trades duration in days
 
-    Return the duration of trades in days.
+    Returns the duration of trades in days.
 
     Args:
         position_date (Series): 'Series' with closing date for each trade.
         date (Series): 'Series' with the dates.
         day_width (float): Width of each day.
 
-    Return:
+    Returns:
         Series: Years operated on float.
     """
 
@@ -1195,7 +1474,7 @@ def trades_group_year(trades_date:pd.Series, op_years:float) -> pd.Series:
         trades_date (Series): 'Series' with the dates.
         op_years (float): Years operated.
 
-    Return:
+    Returns:
         Series: Year groups.
     """
 
@@ -1218,7 +1497,7 @@ def trades_group_day(trades_date:pd.Series, op_years:float, year_days:int) -> pd
         op_years (float): Years operated.
         year_days (int): Operated days per year.
 
-    Return:
+    Returns:
         Series: Day groups.
     """
 
@@ -1252,7 +1531,7 @@ def earnings_intime(names:Sequence[str|int|None]|str|int|None = None,
             otherwise with 'profitPer'.
         prnt (bool, optional): Print the statistics or return them.
 
-    Return:
+    Returns:
         tuple[Series, str]|None: 
             If 'prnt' is False, a tuple is returned with the text 
             that would be printed and the statistics.

@@ -9,6 +9,8 @@ Variables:
 Functions:
     gen_price_axes: Generate the axes to draw the price, volume and indicators.
     draw_indicators: Draw the indicators using 'plot_indicators'.
+    correct_index: Function to correct index by converting it to float.
+    get_width: Calculate the width of `index` if it has not been calculated already.
 """
 
 from typing import Sequence
@@ -16,6 +18,7 @@ import logging
 
 from matplotlib.legend_handler import HandlerTuple
 from matplotlib.axes._axes import Axes
+from matplotlib.dates import date2num
 from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
 
@@ -29,8 +32,8 @@ from . import utils
 
 logger:logging.Logger = logging.getLogger(__name__)
 
-def gen_price_axes(draw_price:bool = True, draw_vol:bool = True, 
-                idc_names:Sequence[str] = []) -> dict[str, Axes]|None:
+def gen_price_axes(fig:plt.Figure|None = None, draw_price:bool = True, 
+                draw_vol:bool = True, idc_names:Sequence[str] = []) -> dict[str, Axes]|None:
     """
     Gen price axes
 
@@ -38,6 +41,7 @@ def gen_price_axes(draw_price:bool = True, draw_vol:bool = True,
     Create name and axes pairs for each axes.
 
     Args:
+        fig (Figure|None, optional): Matplotlib figure.
         draw_price (bool, optional): Add axes for price.
         draw_vol (bool, optional): Add axes for volume.
         idc_names (Sequence[str], optional): List of indicators keys to include.
@@ -75,11 +79,15 @@ def gen_price_axes(draw_price:bool = True, draw_vol:bool = True,
             axes_num -= 1
 
         diff = axes_num+diff_cf
-        ax1 = plt.subplot2grid((axes_num+diff,1), (0,0), rowspan=diff, colspan=1)
+
+        fig_kw = {'fig': fig} if fig is not None else {}
+        ax1 = plt.subplot2grid((axes_num+diff,1), (0,0), rowspan=diff, 
+                            colspan=1, **fig_kw)
 
     needed_axes.sort(key=lambda x: axes_order.get(x, 99))
 
-    axes = cpl.gen_axes(axes_num, pad=diff, sharex=ax1, autoget_sharex=True)
+    axes = cpl.gen_axes(axes_num, pad=diff, sharex=ax1, 
+        autoget_sharex=True, fig=fig)
     if ax1: axes.insert(0, ax1)
 
     if not axes:
@@ -190,3 +198,49 @@ def draw_indicators(indicators:Sequence[str], named_axes:dict[str, Axes], x_inde
             handlelength=ndivide,
             loc=2,
         )
+
+def correct_index(index:pd.Index) -> np.ndarray|pd.Index:
+    """
+    Correct index.
+
+    Correct `index` by converting it to float
+
+    Args:
+        index (Index): The `index` of the data to be corrected.
+
+    Returns:
+        ndarray|Index: The corrected `index`.
+    """
+
+    r_index:np.ndarray|pd.Index = index
+    if not all(isinstance(ix, float) for ix in index):
+        r_index = date2num(index) # pyrefly: ignore
+        logger.warning(utils.text_fix("""
+              The 'index' has been automatically corrected. 
+              To resolve this, use a valid index.
+              """))
+    
+    return r_index
+
+def get_width(index:pd.Index|np.ndarray) -> float:
+    """
+    Get width
+
+    Calculate the width of `index` if it has not been calculated already.
+    It will generate a warning log.
+
+    Args:
+        index (Index|ndarray): The index of the data.
+
+    Returns:
+        float: The width of `index`.
+    """
+    if isinstance(_cm.__data_width, float) and _cm.__data_width > 0: 
+        return _cm.__data_width
+
+    logger.warning(utils.text_fix("""
+        The 'data_width' has been automatically corrected. 
+        To resolve this, use a valid width.
+        """))
+
+    return utils.calc_width(index=index)

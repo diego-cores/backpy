@@ -34,12 +34,9 @@ import logging
 
 from matplotlib.collections import LineCollection, PatchCollection, PathCollection
 from matplotlib.dates import DateFormatter, date2num, num2date
-from matplotlib.legend_handler import HandlerTuple
 from matplotlib.animation import FuncAnimation
 from matplotlib.axes._axes import Axes
-from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 
 import random as rd
 import pickle as pk
@@ -226,8 +223,8 @@ def load_binance_data_futures(symbol:str = 'BTCUSDT', interval:str = '1d',
 
     except ModuleNotFoundError: 
         raise exception.BinanceError('Binance futures connector is not installed.')
-    except: 
-        raise exception.BinanceError('Binance parameters error.')
+    except Exception as error: 
+        raise exception.BinanceError(error) from error
 
 def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d', 
                             start_time:str | None = None, end_time:str | None = None,
@@ -271,8 +268,8 @@ def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d',
 
     except ModuleNotFoundError: 
         raise exception.BinanceError('Binance connector is not installed.')
-    except: 
-        raise exception.BinanceError('Binance parameters error.')
+    except Exception as error: 
+        raise exception.BinanceError(error) from error
 
 def load_yfinance_data(ticker:str, start:str | None = None, 
                        end:str | None = None, interval:str = '1d', 
@@ -326,7 +323,7 @@ def load_yfinance_data(ticker:str, start:str | None = None,
         if data.empty: 
             raise exception.YfinanceError('The symbol does not exist.')
         
-        data.columns = data.columns.droplevel(1).str.lower()
+        data.columns = data.columns.droplevel(1).str.lower() # type: ignore
         data.index = date2num(data.index) # type: ignore
         data_width = utils.calc_width(data.index)
 
@@ -351,8 +348,8 @@ def load_yfinance_data(ticker:str, start:str | None = None,
 
     except ModuleNotFoundError: 
         raise exception.YfinanceError('Yfinance is not installed.')
-    except: 
-        raise exception.YfinanceError('Yfinance parameters error.')
+    except Exception as error: 
+        raise exception.YfinanceError(error) from error
 
 def load_data(data:pd.DataFrame, icon:str | None = None, 
               interval:str | None = None, days_op:int = 365, 
@@ -407,7 +404,7 @@ def load_data(data:pd.DataFrame, icon:str | None = None,
 
     _cm.__data = data_df
     _cm.__data.index.name = 'date'
-    _cm.__data.index = utils.correct_index(_cm.__data.index)
+    _cm.__data.index = render.correct_index(_cm.__data.index)
     _cm.__data_width = utils.calc_width(_cm.__data.index)
 
     icon = icon or 'None'
@@ -645,8 +642,8 @@ def run(cls:type|Sequence[type], name:str|None = None, prnt:bool = True,
         instances.append(st(data=_cm.__data))
 
     # Corrections.
-    _cm.__data.index = utils.correct_index(_cm.__data.index)
-    _cm.__data_width = utils.calc_width(_cm.__data.index, True)
+    _cm.__data.index = render.correct_index(_cm.__data.index)
+    _cm.__data_width = render.get_width(_cm.__data.index)
 
     # Progress bar variables
     t = time()
@@ -663,7 +660,7 @@ def run(cls:type|Sequence[type], name:str|None = None, prnt:bool = True,
 
         Calculate the prediction so you can add it to the progress bar.
 
-        Return:
+        Returns:
             float|np.floating: Prediction.
         """
         nonlocal steph_index
@@ -743,9 +740,7 @@ def run(cls:type|Sequence[type], name:str|None = None, prnt:bool = True,
     elif not trades.empty:
         _cm.__data_backtests.append(backtest)
 
-    try: 
-        return stats.stats_trades(prnt=prnt)
-    except: pass
+    return stats.stats_trades(prnt=prnt)
 
 def run_animation(cls:type, candles:int = 100, interval:int = 100, 
                   operation_route:bool | None = True, pad:bool = False,
@@ -805,16 +800,15 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
         raise exception.PlotError(f"'candle_pov' it can only be greater or equal than 0.01.")
 
     # Corrections.
-    _cm.__data.index = utils.correct_index(_cm.__data.index)
-    _cm.__data_width = utils.calc_width(_cm.__data.index, True)
+    _cm.__data.index = render.correct_index(_cm.__data.index)
+    _cm.__data_width = render.get_width(_cm.__data.index)
 
-    plt_colors = cpl.style_def(name=style, update=style_c)
+    plt_colors, style_name = cpl.style_def(name=style, update=style_c)
 
     instance = cls(data=_cm.__data)
-    fig = plt.figure(figsize=(16,8))
-    ax1 = plt.subplot2grid((6,1), (0,0), rowspan=5, colspan=1)
-    ax2 = plt.subplot2grid((6,1), (5,0), rowspan=1, 
-                                  colspan=1, sharex=ax1)
+    fig = plt.figure(figsize=(16,8),dpi=_cm.graph_dpi)
+    ax1 = plt.subplot2grid((6,1), (0,0), rowspan=5, colspan=1, fig=fig)
+    ax2 = plt.subplot2grid((6,1), (5,0), rowspan=1, colspan=1, sharex=ax1, fig=fig)
 
     gdir = plt_colors.get('gdir', False)
     cpl.custom_ax(ax1, plt_colors['bg'], edge=gdir)
@@ -876,7 +870,7 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
             trades = pd.concat([trades, act_trades], ignore_index=True)
 
             if draw_active:
-                act_trades['positionClose'] = _cm.__data['close'].values[f]
+                act_trades['positionClose'] = _cm.__data['close'].iloc[f]
                 act_trades['positionDate'] = _cm.__data.index.values[f]
                 update_elements.extend(utils.plot_position(act_trades, ax1, 
                     color_take=market_colors.get('u', 'g'),
@@ -975,7 +969,7 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
 
     cpl.add_window(
         fig=fig,
-        title=f'Run animation - {style}',
+        title=f'Run animation - {style_name}',
         block=block,
         anim=anim,
         interval=interval,
@@ -1010,7 +1004,7 @@ def reg_indicator(panel:str|None=None, color:str|list|None=None,
         name (str|None, optional): If it already exists, a number will be added at the end.
         **config (dict): Extra config update to the saved data.
 
-    Return:
+    Returns:
         Callable: Function wrapped up to take function and arguments from the indicator.
     """
 
@@ -1032,7 +1026,7 @@ def reg_indicator(panel:str|None=None, color:str|list|None=None,
                 If it is None, applies the saved default or passes the entire dataframe.
             **kwargs (dict): Indicator known arguments.
 
-        Return:
+        Returns:
             str: Indicator registered name.
         """
         nonlocal name, panel, color, config
@@ -1098,10 +1092,9 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
         - 'v': Sell position.
 
     All color styles:
-        'lightmode', 'darkmode', 'sunrise', 'mintfresh', 'skyday', 
-        'emberday', 'lavenderblush', 'peachpuff', 'sunrisedusk', 
-        'embernight', 'obsidian', 'neonforge', 'carbonfire', 
-        'datamatrix', 'terminalblood', 'plasmacore'.
+        'lightmode', 'darkmode', 'emberday',
+        'ivory', 'parchment', 'arctic', 'rosegold',
+        'nocturne', 'midnight', 'charcoal', 'amber', 'mocha'.
 
     Draw styles:
         'candle': Typical Japanese candle. 
@@ -1164,10 +1157,10 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
         raise exception.PlotError(f"'{draw_style_pos}' Not a position style.")
 
     # Corrections.
-    _cm.__data.index = utils.correct_index(_cm.__data.index)
-    _cm.__data_width = utils.calc_width(_cm.__data.index, True)
+    _cm.__data.index = render.correct_index(_cm.__data.index)
+    _cm.__data_width = render.get_width(_cm.__data.index)
 
-    plt_colors = cpl.style_def(name=style, update=style_c)
+    plt_colors, style_name = cpl.style_def(name=style, update=style_c)
 
     idc_name = idc_name or []
     if isinstance(idc_name, str):
@@ -1182,15 +1175,18 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
         load_prgs.reset_size(5)
 
     # Axes
-    fig = plt.figure(figsize=(16,8))
+    fig = plt.figure(figsize=(16,8),dpi=_cm.graph_dpi)
 
-    named_axes = render.gen_price_axes(draw_style != 'none' or draw_style_pos != 'none', draw_style_vol != 'none', idc_name)
+    named_axes = render.gen_price_axes(
+        fig, draw_style != 'none' or draw_style_pos != 'none', 
+        draw_style_vol != 'none', idc_name)
     if named_axes is None:
         return
 
     render.draw_indicators(idc_name, named_axes, _cm.__data.index.values.tolist(), _cm.__data_width*0.9)
     load_prgs.next()
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
+    position_colors = plt_colors.get('psmk', {'u':'g', 'd':'r'})
 
     # Draw style
     match draw_style:
@@ -1220,8 +1216,8 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
         match draw_style_pos:
             case 'complex'|'simple':
                 utils.plot_position(trades, price_ax, 
-                                color_take=market_colors.get('u', 'green'),
-                                color_stop=market_colors.get('d', 'red'),
+                                color_take=position_colors.get('u', 'green'),
+                                color_stop=position_colors.get('d', 'red'),
                                 operation_route=draw_style_pos == 'complex',
                                 alpha=0.3, alpha_arrow=0.8)
             case 'none' | _:
@@ -1250,7 +1246,7 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
     load_prgs.next()
     cpl.add_window(
         fig=fig,
-        title=f"Back testing: '{_cm.__data_icon}' {s_date}~{e_date} - {style}",
+        title=f"Back testing: '{_cm.__data_icon}' {s_date}~{e_date} - {style_name}",
         block=block,
         style=plt_colors,
         new=True if panel == 'new' else False,
@@ -1259,7 +1255,7 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
 
 def plot_strategy(name:Sequence[str|int|None]|str|int|None = None, 
                   log:bool = False, view:str = 'b/w/r/e',  
-                  custom_graph:dict = {}, panel:str = 'new',
+                  custom_graph:dict = {}, panel:str = 'add',
                   style:str | None = 'last', style_c:dict | None = None, 
                   block:bool = True) -> None:
     """
@@ -1281,10 +1277,9 @@ def plot_strategy(name:Sequence[str|int|None]|str|int|None = None,
         name (Sequence[str|int|None]|str|int|None, optional): 
             Backtest names to extract data from, None = -1, 
             you can add multiple by passing an list.
-        log (bool, optional): If True, plots data using a logarithmic scale. 
-            Default is False.
+        log (bool, optional): If True, plots data using a logarithmic scale.
         view (str, optional): Specifies which graphics to display. 
-            Default is 'b/w/r/e'. Maximum 8.
+            Example: 'b/w/r/e'. Maximum 8.
         custom_graph (dict, optional): Custom graph, a dictionary with 
             'name':'function' where the function will 
             be passed: 'ax', '_cm.__trades', '_cm.__data', 'log'.
@@ -1312,11 +1307,9 @@ def plot_strategy(name:Sequence[str|int|None]|str|int|None = None,
     valid_style = {'random', 'last'} | set(_cm.__plt_styles.keys())
 
     if trades.empty: 
-        logger.warning('Trades not loaded')
-        return
-    elif not 'profit' in trades.columns:  
-        logger.warning('No data to see')
-        return
+        logger.warning('Trades not loaded.'); return
+    elif not 'profit' in trades.columns:
+        logger.warning('No closed trades.'); return
     elif (not style is None and not (style:=style.lower()) in valid_style):
         raise exception.StatsError(f"'{style}' Not a style.")
     elif panel not in ('new', 'add'):
@@ -1336,7 +1329,7 @@ def plot_strategy(name:Sequence[str|int|None]|str|int|None = None,
     if isinstance(style_c, dict):
         plt_colors.update(style_c)
 
-    fig = plt.figure(figsize=(16,8))
+    fig = plt.figure(figsize=(16,8),dpi=_cm.graph_dpi)
 
     init_data:dict = {col: 0 for col in trades.columns}
     init_data['positionDate'] = trades['positionDate'].iloc[0]
@@ -1351,10 +1344,12 @@ def plot_strategy(name:Sequence[str|int|None]|str|int|None = None,
     graphics = ['p','w','r','e','b']
     graphics.extend(list(_cm.__custom_plot.keys()))
 
-    axes, r_view = cpl.ax_view(view=view, graphics=graphics)
+    axes, r_view = cpl.ax_view(view=view, graphics=graphics, fig=fig)
 
     for i,v in enumerate(r_view):
         ax = axes[i]
+        ax.set_xticks([])
+
         cpl.config_ax(ax, bg_color=plt_colors['bg'], gdir=gdir, 
                     log=log if v in ['b', 'e', 'p', 'r'] else False)
 
@@ -1428,16 +1423,13 @@ def plot_strategy(name:Sequence[str|int|None]|str|int|None = None,
     fig.subplots_adjust(left=0, right=1, top=1, 
                         bottom=0, wspace=0, hspace=0)
 
-    plt.xticks([])
-
-    import random
     cpl.add_window(
         fig=fig,
         title=f'Strategy statistics - {style}',
         block=block,
         style=plt_colors,
         new=True if panel == 'new' else False,
-        toolbar='total'
+        toolbar='total',
     )
 
 def plot_strategy_decorator(name:str) -> Callable:

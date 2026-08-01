@@ -20,8 +20,8 @@ Hidden Functions:
 import pandas as pd
 import numpy as np
 
+from typing import Callable, Any, cast
 from abc import ABC, abstractmethod
-from typing import Callable, Any
 from functools import wraps
 from uuid import uuid4
 import logging
@@ -34,7 +34,7 @@ from . import utils
 
 logger:logging.Logger = logging.getLogger(__name__)
 
-def idc_decorator(func:Callable) -> Callable[..., flx.DataWrapper]:
+def idc_decorator(func:Callable) -> staticmethod:
     """
     Indicator decorator
 
@@ -64,11 +64,11 @@ def idc_decorator(func:Callable) -> Callable[..., flx.DataWrapper]:
         func (Callable): Function.
 
     Returns:
-        Callable[...,flx.DataWrapper]: Function.
+        staticmethod: Function wrapped.
     """
 
     setattr(func, '_uidc', True)
-    return func
+    return cast(staticmethod, func)
 
 def _data_info() -> tuple[str|None, str|None, float|None]:
     """
@@ -113,10 +113,13 @@ class StrategyClass(ABC):
         __data: DataWrapper containing cuted data.
         __data_adf: DataFrame containing all data.
         __data_awr: DataWrapper containing all data.
+        __data_ind: Array with the data index.
+        __data_cind: Array with index of __data.
+        __data_col: Dictionary with '__data_adf' columns to optimize the call name:col.
+        __data_key: Dictionary with '__data_adf' columns unique keys id:key.
         __day_width: 1-day width of the index, calculated on an 
             interval basis, global variable '__data_width_day'.
         __data_index: Index to cut data.
-        __data_dates: DataWrapper with index of __data.
         __init_funds: Initial funds for the strategy.
         __spread_pct: Closing and opening spread.
         __slippage_pct: Closing and opening slippage.
@@ -200,7 +203,7 @@ class StrategyClass(ABC):
     low:np.ndarray
     high:np.ndarray
     volume:np.ndarray
-    date:flx.DataWrapper
+    date:np.ndarray
     hour:float
 
     width:float
@@ -211,9 +214,12 @@ class StrategyClass(ABC):
     __data:flx.DataWrapper
     __data_adf:pd.DataFrame
     __data_awr:flx.DataWrapper
+    __data_ind:np.ndarray
+    __data_cind:np.ndarray
+    __data_col:dict
+    __data_key:dict
 
     __data_index:int
-    __data_dates:flx.DataWrapper
 
     __buffer:dict
     __idc_data:dict
@@ -251,6 +257,26 @@ class StrategyClass(ABC):
 
         self.__data_adf = data
         self.__data_awr = flx.DataWrapper(data)
+        self.__data_ind = data.index.values
+
+        self.__data_awr.unwrap().flags.writeable = False
+        self.__data_ind.flags.writeable = False
+
+        self.__data_col = {}
+        self.__data_key = {}
+
+        # Columns and data hex key buffer
+        self.__data_key[id(data)] = utils.gen_datakey(data)
+
+        for column in data.columns:
+            values = np.array(data[column].to_numpy())
+            values.flags.writeable = False
+
+            series = pd.Series(values, index=data.index, 
+                               name=column, copy=False)
+
+            self.__data_col[column] = series
+            self.__data_key[id(series)] = utils.gen_datakey(series)
 
         self.__buffer = {}
         self.__idc_data = {}
@@ -327,7 +353,7 @@ class StrategyClass(ABC):
 
         This return True if its London time zone.
 
-        Return:
+        Returns:
             bool: True if False otherwise.
         """
 
@@ -339,7 +365,7 @@ class StrategyClass(ABC):
 
         This return True if its Tokyo time zone.
 
-        Return:
+        Returns:
             bool: True if False otherwise.
         """
 
@@ -351,7 +377,7 @@ class StrategyClass(ABC):
 
         This return True if its Sydney time zone.
 
-        Return:
+        Returns:
             bool: True if False otherwise.
         """
 
@@ -363,7 +389,7 @@ class StrategyClass(ABC):
 
         This return True if its New York time zone.
 
-        Return:
+        Returns:
             bool: True if False otherwise.
         """
 
@@ -458,13 +484,13 @@ class StrategyClass(ABC):
             Wrapper function
 
             Save the function return and, if already saved, 
-                return it from storage. Return in DataWrapper.
+                return it from storage. Returns in DataWrapper.
 
             Returns:
                 DataWrapper: Function result.
             """
 
-            id, arguments = StrategyClass.__func_idg(func, *args, **kwargs)
+            id = self.__func_idg(func, *args, **kwargs)[0]
 
             if id in self.__idc_data:
                 if cut: return self.__data_cut(self.__idc_data[id], last)
@@ -509,29 +535,24 @@ class StrategyClass(ABC):
                 DataWrapper: Function result.
             """
 
-            id = StrategyClass.__func_idg(func, *args, **kwargs)[0]
+            id = self.__func_idg(func, None, *args, **kwargs)[0]
 
-            if id in self.__idc_data.keys():
+            if id in self.__idc_data:
                 return self.__uidc_cut(self.__idc_data[id])
 
             logger.debug('Generating user indicator')
-            result = flx.DataWrapper(func(self.__data_adf, *args, **kwargs))
+            result = flx.DataWrapper(func(self.__data_adf.copy(), *args, **kwargs))
             self.__idc_data[id] = result
 
             return self.__uidc_cut(result)
         return __wr_func
 
-    @staticmethod
-    def __func_idg(func:Callable, *args, **kwargs) -> tuple[str, dict]:
+    def __func_idg(self, func:Callable, *args, **kwargs) -> tuple[str, dict]:
         """
         Function id generator
 
         Generates an id for a function call 
             and returns all arguments with defaults.
-
-        Note:
-            If the first unknown argument is an instance of 
-            'StrategyClass', it is removed from the list.
 
         Args:
             func (Callable): Function.
@@ -540,12 +561,15 @@ class StrategyClass(ABC):
             tuple[str,dict]: Generated id and arguments.
         """
 
-        arguments = utils.get_darguments(func)
-        arguments.update({k: kwargs[k] for k in arguments.keys() if k in kwargs})
+        arguments = utils.get_arguments(func, *args, **kwargs)
 
-        if len(args) >= 1 and isinstance(args[0], StrategyClass):
-            args = args[1:]
-        arguments.update(zip(arguments.keys(), args))
+        for k,v in arguments.items():
+            if not isinstance(v, (pd.Series, pd.DataFrame, np.ndarray)):
+                continue
+
+            key = self.__data_key.get(id(v), None)
+            arguments[k] = (key if key is not None 
+                               else utils.gen_datakey(v, size=8))
 
         args_wo = arguments.copy()
         args_wo.pop('cut', None); args_wo.pop('last', None)
@@ -609,21 +633,21 @@ class StrategyClass(ABC):
 
         logger.debug('Updating data')
         data = flx.DataWrapper(self.__data_awr.unwrap()[:index])
-        dates = flx.DataWrapper(self.__data_adf.index.values[:index])
+        dates = self.__data_ind[:index]
 
         self.open = data['open']
         self.high = data['high']
         self.low = data['low']
         self.close = data['close']
         self.volume = data['volume']
-        self.date = flx.DataWrapper(dates, alert=True)
+        self.date = dates
 
-        last_date = dates[-1] if dates[-1].size > 0 else 0
+        last_date = dates[-1] if len(dates) > 0 else 0
         self.hour = float(last_date % self.__day_width / self.__day_width * 24)
 
         self.__data = data
         self.__data_index = index
-        self.__data_dates = dates
+        self.__data_cind = dates
 
         self.__balance = balance[-1] if balance else self.__balance
         self.__balance_rec = balance if balance else self.__balance_rec
@@ -635,7 +659,7 @@ class StrategyClass(ABC):
         Returns the unionId of current orders 
             which have a pending order as their position.
 
-        Return:
+        Returns:
             dict[str,float]: 
                 The keys are the unionId and the 
                 value is the 'orderPrice' of the position.
@@ -852,7 +876,7 @@ class StrategyClass(ABC):
 
         self.__put_pos(
             price=self.__data["close"][-1],
-            date=float(self.__data_dates[-1]),
+            date=float(self.__data_cind[-1]),
             amount=amount,
             type_side=buy,
             union_id=ui
@@ -952,7 +976,7 @@ class StrategyClass(ABC):
 
         # Fill data.
         position['positionClose'] = position_close_spread
-        position['positionDate'] = self.__data_dates[-1]
+        position['positionDate'] = self.__data_cind[-1]
         open = position.get('positionOpen')
 
         if position.get('typeSide'):
@@ -1026,7 +1050,7 @@ class StrategyClass(ABC):
 
         logger.debug('Placing position')
         position_price = price
-        where_date = np.where(self.__data_dates.unwrap() == date)[0][0]
+        where_date = np.where(self.__data_cind == date)[0][0]
 
         if (
             position_price > self.__data['close'][where_date]*(
@@ -1053,7 +1077,7 @@ class StrategyClass(ABC):
             entry_fee = commission
 
         position = {
-            'date':self.__data_dates[-1],
+            'date':self.__data_cind[-1],
             'positionOpen':position_open,
             'commission':entry_fee,
             'amount':amount,
@@ -1129,7 +1153,6 @@ class StrategyClass(ABC):
             order (dict): Dict with the order.
         """
 
-        # Hello world
         match order['order']:
             case 'op':
                 self.__put_pos(
@@ -1360,7 +1383,7 @@ class StrategyClass(ABC):
 
         order = {
             'order':order_type,
-            'date':self.__data_dates[-1],
+            'date':self.__data_cind[-1],
             'orderPrice':price,
             'limitPrice':limit_price if limit_price else price,
             'amount':amount,
@@ -1503,15 +1526,8 @@ class StrategyClass(ABC):
 
         This function returns the values of `pos_record`.
 
-        Args:
-            label (str | None, optional): Data column to return. If None, all columns 
-                are returned. If 'index' or 'rIndex', only return the real index.
-            last (int | None, optional): Number of steps to return starting from the 
-                present. If None, data for all times is returned.
-
-        Info:
-            `pos_record` columns.
-
+        Note:
+            `pos_record` columns:
             - date: Creation date.
             - positionOpen: Opening price.
             - commission: Position commissions.
@@ -1522,6 +1538,12 @@ class StrategyClass(ABC):
             - positionDate: Closing date.
             - profitPer: Profit in percentage with out commissions.
             - profit: Profit on 'amount' with commissions.
+
+        Args:
+            label (str | None, optional): Data column to return. If None, all columns 
+                are returned. If 'index' or 'rIndex', only return the real index.
+            last (int | None, optional): Number of steps to return starting from the 
+                present. If None, data for all times is returned.
 
         Returns:
             DataWrapper: DataWrapper containing the data from closed trades.
@@ -1559,16 +1581,8 @@ class StrategyClass(ABC):
 
         This function returns the values of `positions`.
 
-        Args:
-            label (str | None, optional): Data column to return. If None, all columns 
-                are returned. If 'index', only return the 'rIndex'.
-            uid (int | None, optional): Filter by unionId.
-            last (int | None, optional): Number of steps to return starting from the 
-                present. If None, data for all times is returned.
-
-        Info:
-            `positions` columns.
-
+        Note:
+            `positions` columns:
             - rIndex: Column added in 'prev_positions' 
                 marks the real index of each row.
             - date: Creation date.
@@ -1577,6 +1591,13 @@ class StrategyClass(ABC):
             - amount: Position amount
             - typeSide: Position type True for buy.
             - unionId: Id linked to orders.
+
+        Args:
+            label (str | None, optional): Data column to return. If None, all columns 
+                are returned. If 'index', only return the 'rIndex'.
+            uid (int | None, optional): Filter by unionId.
+            last (int | None, optional): Number of steps to return starting from the 
+                present. If None, data for all times is returned.
 
         Returns:
             DataWrapper: DataWrapper containing the data from active trades.
@@ -1627,19 +1648,8 @@ class StrategyClass(ABC):
 
         This function returns the values of `orders`.
 
-        Args:
-            label (str | None, optional): Data column to return. If None, all columns 
-                are returned. If 'index', only return the 'rIndex'.
-            or_type (str | None, optional): If you want to filter only one type 
-                of operation you can do so with this argument.
-                Current types of orders: 'op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit'.
-            ids (dict | None, optional): Filter by id by making a dictionary with id_name:id.
-            last (int | None, optional): Number of steps to return starting from the 
-                present. If None, data for all times is returned.
-
-        Info:
-            `orders` columns.
-
+        Note:
+            `orders` columns:
             - rIndex: Column added in 'prev_orders' 
                 marks the real index of each row.
             - order: Order type ('op', 'takeProfit', 
@@ -1653,6 +1663,16 @@ class StrategyClass(ABC):
             - unionId: Linked id to position. If there is no id, 'none' is returned.
             - closeId: Close link. If there is no id, 'none' is returned.
             - limit: Indicates execution type to be performed.
+
+        Args:
+            label (str | None, optional): Data column to return. If None, all columns 
+                are returned. If 'index', only return the 'rIndex'.
+            or_type (str | None, optional): If you want to filter only one type 
+                of operation you can do so with this argument.
+                Current types of orders: 'op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit'.
+            ids (dict | None, optional): Filter by id by making a dictionary with id_name:id.
+            last (int | None, optional): Number of steps to return starting from the 
+                present. If None, data for all times is returned.
 
         Returns:
             DataWrapper: DataWrapper containing the data from active trades.
@@ -1762,7 +1782,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Ema calc.
-        return self.idct_ema(data=self.__data_adf[source], length=length, # type: ignore
+        return self.idct_ema(data=self.__data_col[source], length=length, # type: ignore
                             last=last, cut=True) 
 
     def idc_sma(self, length:int, source:str = 'close', 
@@ -1801,7 +1821,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Sma calc.
-        return self.idct_sma(data=self.__data_adf[source], length=length, # type: ignore
+        return self.idct_sma(data=self.__data_col[source], length=length, # type: ignore
                             last=last, cut=True)
 
     def idc_wma(self, length:int, source:str = 'close', 
@@ -1841,7 +1861,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Wma calc.
-        return self.idct_wma(data=self.__data_adf[source], length=length, # type: ignore
+        return self.idct_wma(data=self.__data_col[source], length=length, # type: ignore
                             invt_weight=invt_weight, last=last, cut=True)
     
     def idc_smma(self, length:int, source:str = 'close', 
@@ -1880,7 +1900,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Smma calc.
-        return self.idct_smma(data=self.__data_adf[source], length=length, # type: ignore
+        return self.idct_smma(data=self.__data_col[source], length=length, # type: ignore
                             last=last, cut=True)
 
     def idc_sema(self, length:int = 9, method:str = 'sma', 
@@ -1939,7 +1959,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Sema calc.
-        return self.idct_sema(data=self.__data_adf[source], length=length, method=method, # type: ignore
+        return self.idct_sema(data=self.__data_col[source], length=length, method=method, # type: ignore
                             smooth=smooth, only=only, last=last, cut=True)
 
     def idc_bb(self, length:int = 20, std_dev:float = 2, ma_type:str = 'sma', 
@@ -1997,7 +2017,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Bb calc.
-        return self.idct_bb(data=self.__data_adf[source], length=length, # type: ignore
+        return self.idct_bb(data=self.__data_col[source], length=length, # type: ignore
                             std_dev=std_dev, ma_type=ma_type, last=last, cut=True)
 
     def idc_rsi(self, length_rsi:int = 14, length:int = 14, 
@@ -2069,7 +2089,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Rsi calc.
-        return self.idct_rsi(data=self.__data_adf[source], length_rsi=length_rsi, # type: ignore
+        return self.idct_rsi(data=self.__data_col[source], length_rsi=length_rsi, # type: ignore
                             length=length, rsi_ma_type=rsi_ma_type, base_type=base_type, 
                             bb_std_dev=bb_std_dev, last=last, cut=True)
 
@@ -2246,7 +2266,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc macd.
-        return self.idct_macd(data=self.__data_adf[source], short_len=short_len, # type: ignore
+        return self.idct_macd(data=self.__data_col[source], short_len=short_len, # type: ignore
                             long_len=long_len, signal_len=signal_len, 
                             macd_ma_type=macd_ma_type, signal_ma_type=signal_ma_type, 
                             histogram=histogram, last=last, cut=True)
@@ -2360,7 +2380,7 @@ class StrategyClass(ABC):
                                 """, newline_exclude=True))
 
         # Calc momentum.
-        return self.idct_mom(data=self.__data_adf[source], length=length, # type: ignore
+        return self.idct_mom(data=self.__data_col[source], length=length, # type: ignore
                             last=last, cut=True)
 
     def idc_ichimoku(self, tenkan_period:int = 9, kijun_period:int = 26, 

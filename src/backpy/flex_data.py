@@ -150,7 +150,8 @@ class DataWrapper():
             return np.array(list(data.values()), 
                             dtype=object).T
         elif isinstance(data, pd.DataFrame):
-            return data.to_records(index=False)
+            return np.ascontiguousarray(
+                data.to_records(index=False).view(np.ndarray))
         elif isinstance(data, (pd.Series, pd.Index)):
             return np.asarray(data.values)
         elif isinstance(data, np.ndarray):
@@ -254,7 +255,7 @@ class DataWrapper():
         Inserts a value into the data list.
 
         Args:
-            index (bool): Index where it will be inserted.
+            index (int): Index where it will be inserted.
             value (Any): Value to insert.
         """
 

@@ -25,3 +25,5 @@ class OrderError(BackpyError):pass
 class CostValueError(BackpyError):pass
 
 class CustomWinError(BackpyError):pass
+
+class DataFragError(BackpyError):pass

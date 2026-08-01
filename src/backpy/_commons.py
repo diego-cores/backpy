@@ -3,7 +3,15 @@ Commons hidden module
 
 This module contains all global variables for better manipulation.
 
+Note:
+    These variables only exist if tkinter package is installed:
+    'lift', '_tkinter_root', '__panel_list', '__panel_wmax', '__anim_puntil', '__linked_toolbars'.
+    The tkinter package comes by default in a normal Python installation, but in some
+    installations, as well as on systems without a graphical interface, it may not.
+    To verify, you can use the boolean variable 'TKINTER'.
+ 
 Variables:
+    TKINTER (bool): Constant to check if tkinter package is installed.
     logger (Logger): Logger variable.
     dots (bool): If false, the '.' will be replaced by commas "," in prints.
     run_timer (bool): If false the execution timer will never appear in the console.
@@ -18,19 +26,25 @@ Variables:
     graph_legend_rname (bool): If True, the registered name will be used; otherwise, 
         the function name will be used.
     graph_legend_args (bool): Show the indicator arguments in the legend.
+    graph_integration (bool): If true, the plot will be integrated with the internal embed; 
+        otherwise, it will be drawn with matplotlib.
     graph_panel_order (dict[str, float]): Graph order of the panels by name, 
         default: 99. Lower value renders higher.
     graph_first_size (int): Size of the first panel relative to the others 
         when graph the price. It cannot be less than 1.
+    graph_dpi (int): DPI of the Matplotlib graph.
     lift (bool): Set to False if you don't want tkinter windows 
         to jump over everything else when running.
 
 Hidden Variables:
     _random_titles: Random titles for windows (hidden variable).
+    _tkinter_root: Root Tk instance (hidden variable).
+    __anim_puntil: Timestamp indicating when the animation drawing should pause. 
+        If None, the pause is indefinite. (hidden variable).
     __panel_list: List of windows that will be joined into panels (hidden variable).
     __panel_wmax: Maximum number of panels; if a value greater than 4 is given, 
         an error will occur (hidden variable).
-    __linked_toolbars: List of connected toolbars (hidden variable).
+    __linked_toolbars: Dict of connected toolbars (hidden variable).
     __min_gap: If left as True, gaps will not be calculated on the entry 
         of 'taker' orders (hidden variable).
     __limit_ig: If in a 'stopLimit' or 'takeLimit' the order is within the 
@@ -98,6 +112,21 @@ import logging
 from backpy.flex_data import CostsValue
 from . import exception
 
+TKINTER = False
+try:
+    import tkinter as tk
+    TKINTER = True
+
+    lift:bool = True
+
+    _tkinter_root:tk.Tk|None = None
+    __panel_list:list = []
+    __panel_wmax:int = 4
+    __anim_puntil:float|None = None
+    __linked_toolbars:dict = {}
+except ImportError:
+    pass
+
 logger:logging.Logger = logging.getLogger(__name__)
 c_tf:Callable = lambda x: cast(float, x)
 
@@ -107,16 +136,19 @@ plt_style:str|None = None
 max_bar_updates:int = 1_000
 mpl_warning_supp:bool = True
 
-graph_legend_fontsize:str|int = 'xx-small'
+graph_legend_fontsize:str|int = 'x-small' 
+# 'xx-small' > 'x-small' > 'small' > 'medium' > 'large' > 'x-large' > 'xx-large'
 graph_legend_pname:bool = True
 graph_legend_rname:bool = True
 graph_legend_args:bool = True
+graph_integration:bool = True
 graph_panel_order:dict[str, float] = {'price':0, 'volume':1}
 graph_first_size:int = 2
+graph_dpi:int = 100
 
-lift:bool = True
 _random_titles:list = [
     f'BackPy v{version("backpyf")}',
+    'Window from BackPy',
     'Python > Others',
     'Nice strategy',
     'Python window',
@@ -138,11 +170,6 @@ __data_interval:None|str = None
 __data_width:None|float = None
 __data_icon:None|str = None
 __data:None|pd.DataFrame = None
-
-__anim_run:bool = True
-__panel_list:list = []
-__panel_wmax:int = 4
-__linked_toolbars:list = []
 
 __min_gap:None|bool = None
 __limit_ig:None|bool = None
@@ -193,74 +220,63 @@ __plt_styles:dict = {
         'vol': 'gray'
     },
 
-    # All properties are: 'bg', 'gdir', 'fr', 'btn', 'btna', 'vol', 'mk'.
+    # All properties are: 'bg', 'gdir', 'fr', 'btn', 'btna', 'vol', 'mk', 'psmk'.
     # light
-    'sunrise': {
-        'bg': ('#FFF7E6', '#FFDAB9'), 'gdir': True,
-        'fr': '#FFF1D6', 'btn': '#FF8C42', 'btna': '#CC6E34',
-        'vol': "#FFC898", 'mk': {'u': '#FFA94D', 'd': '#CC5C2B'},
-    },
-    'mintfresh': {
-        'bg': '#E6FFF7', 'fr': '#D6FFF1', 'btn': '#3AB795', 'btna': '#2E9C7A',
-        'vol': '#A8E6CF', 'mk': {'u': '#3AB795', 'd': '#2A7766'},
-    },
-    'skyday': {
-        'bg': ('#D6F0FF', '#AEE4FF'), 'gdir': False,
-        'fr': '#BEE7FF', 'btn': '#1E90FF', 'btna': '#166ECC',
-        'vol': '#87CEFA', 'mk': {'u': '#1E90FF', 'd': '#104E8B'},
-    },
-    'lavenderblush': {
-        'bg': '#F5E6FF', 'fr': '#EAD6FF', 'btn': '#A555FF', 'btna': '#863ACC',
-        'vol': '#D8BFD8', 'mk': {'u': '#A555FF', 'd': '#6B2D99'},
-    },
-    'peachpuff': {
-        'bg': ("#FFF1E6", "#FFD3B6", "#FFB085"), 'gdir': True,
-        'fr': '#FFE6D6', 'btn': '#FF7043', 'btna': '#E35B33',
-        'vol': '#FFA07A', 'mk': {'u': '#FF7043', 'd': '#CC4F2D'},
-    },
     'emberday': {
         'bg': ("#f0f0f0", "#e5e5e5", "#dfdfdf"), 'gdir': True,
         'fr': '#0A0A0A', 'btn': "#FF6347", 'btna': "#DF2828",
         'vol': "#FF806A", 'mk': {'u': '#FF6347', 'd': "#CF0000"},
+        'psmk':{'u':"#089991", 'd':"#f23651"},
+    },
+    'ivory': {
+        'bg': '#FAFAF0',
+        'fr': '#F0EDD8', 'btn': '#7A6020', 'btna': '#5C4810',
+        'vol': '#C4A85C', 'mk': {'u': '#3A7848', 'd': '#A83030'},
+    },
+    'parchment': {
+        'bg': ('#FAF7F0', '#F2E8D5', '#E8D9B8'), 'gdir': True,
+        'fr': '#EDE0C8', 'btn': '#5C4A1E', 'btna': '#3D3010',
+        'vol': '#C8A87A', 'mk': {'u': '#4A7C59', 'd': '#8B3A3A'},
+    },
+    'arctic': {
+        'bg': '#EEF4FA',
+        'fr': '#DDEAF5', 'btn': '#1A365D', 'btna': '#0D2137',
+        'vol': '#8AAFC8', 'mk': {'u': '#2F855A', 'd': '#C53030'},
+    },
+    'rosegold': {
+        'bg': ('#FFF2F5', '#FFE0EC', '#FFD0E4', '#FFC0D8'), 'gdir': True,
+        'fr': '#FFBAD4', 'btn': '#B52050', 'btna': '#8C1438',
+        'vol': '#F0A0BC', 'mk': {'u': '#3A7848', 'd': '#A83030'},
     },
 
     # dark
-    'sunrisedusk': {
-        'bg': '#2B1B12', 'fr': '#3A2618', 'btn': '#FF8C42', 'btna': '#CC6E34',
-        'vol': "#B65426", 'mk': {'u': '#FFA94D', 'd': '#8B3E1D'},
+    'nocturne': {
+        'bg': '#131722',
+        'fr': '#1E222D', 'btn': '#2962FF', 'btna': '#1E4FD8',
+        'vol': '#363A45', 'mk': {'u': '#26a69a', 'd': '#ef5350'},
+        'psmk': {'u': '#089981', 'd': '#f23645'},
     },
-    'embernight': {
-        'bg': ('#000000', '#1A0000', '#330000'), 'gdir': False,
-        'fr': '#0A0A0A', 'btn': '#E20000', 'btna': '#990000',
-        'vol': '#8B0000', 'mk': {'u': '#FF6347', 'd': '#8B0000'},
+    'midnight': {
+        'bg': ('#040810', '#0A1428', '#0F1E3D'), 'gdir': False,
+        'fr': '#0F1830', 'btn': '#4A9EFF', 'btna': '#2E7FD9',
+        'vol': '#1B3554', 'mk': {'u': '#00C7A8', 'd': '#FF4F5E'},
     },
-    'obsidian': {
-        'bg': '#03000F', 'fr': '#010008', 'btn': '#b748fc', 'btna': '#9B38D6',
-        'vol': '#7B68EE', 'mk': {'u': '#b748fc', 'd': '#5A1E7C'},
+    'charcoal': {
+        'bg': '#1A1A1A',
+        'fr': '#111111', 'btn': '#D4D4D4', 'btna': '#8A8A8A',
+        'vol': '#383838', 'mk': {'u': '#4CAF50', 'd': '#F44336'},
     },
-    'neonforge': {
-        'bg': ('#000912', '#001B2D', '#003347'), 'gdir': True,
-        'fr': '#001B2D', 'btn': '#00FFF7', 'btna': '#00BBAF',
-        'vol': '#00CED1', 'mk': {'u': '#00FFF7', 'd': '#009E9A'},
+    'amber': {
+        'bg': ('#050400', '#0C0A00', '#1A1400'), 'gdir': False,
+        'fr': '#060500', 'btn': '#FF8C00', 'btna': '#BF6900',
+        'vol': '#5C3E00', 'mk': {'u': '#FFB347', 'd': '#FF4040'},
+        'psmk': {'u': '#4CAF50', 'd': '#E53935'},
     },
-    'carbonfire': {
-        'bg': '#1A0000', 'fr': '#0D0000', 'btn': '#FF4500', 'btna': '#CC3700',
-        'vol': '#CD5C5C', 'mk': {'u': '#FF6347', 'd': '#8B0000'},
+    'mocha': {
+        'bg': ('#1C1610', '#26201A', '#332A22'), 'gdir': True,
+        'fr': '#141008', 'btn': '#C89050', 'btna': '#9E6E30',
+        'vol': '#3E2E1A', 'mk': {'u': '#7CB880', 'd': '#C86060'},
     },
-    'datamatrix': {
-        'bg': ('#000A00', '#002200'), 'gdir': False,
-        'fr': '#001500', 'btn': '#00FF00', 'btna': '#00CC00',
-        'vol': '#32CD32', 'mk': {'u': '#00FF00', 'd': '#006400'},
-    },
-    'terminalblood': {
-        'bg': '#0F0000', 'fr': '#080000', 'btn': '#ff3b3f', 'btna': '#CC2E32',
-        'vol': '#B22222', 'mk': {'u': '#ff3b3f', 'd': '#800000'},
-    },
-    'plasmacore': {
-        'bg': ('#170028', '#2B0040', '#3C0066'), 'gdir': True,
-        'fr': '#250040', 'btn': '#E84FFF', 'btna': '#C23AD9',
-        'vol': '#DA70D6', 'mk': {'u': '#E84FFF', 'd': '#9400D3'},
-    }
 }
 
 def draw_plot(value_index:int, **kwargs) -> Callable:
@@ -284,7 +300,7 @@ def draw_plot(value_index:int, **kwargs) -> Callable:
         value_index (int): Index of the value to draw.
         **kwargs: Extra arguments passed to the 'plot' function.
 
-    Return:
+    Returns:
         Callable: Wrapper.
     """
     
@@ -305,7 +321,7 @@ def drawax_hline(cord:float, color:str, **kwargs) -> Callable:
         color (str): Color of the line.
         **kwargs: Extra arguments passed to the 'axhline' function.
 
-    Return:
+    Returns:
         Callable: Wrapper.
     """
 
@@ -325,7 +341,7 @@ def drawax_btw(btw:tuple[float, float], color:str, **kwargs) -> Callable:
         color (str): Color of the area.
         **kwargs: Extra arguments passed to the 'axhspan' function.
 
-    Return:
+    Returns:
         Callable: Wrapper.
     """
 
@@ -347,7 +363,7 @@ def draw_btw(btw_index:tuple[int, int], color:str|Sequence, **kwargs) -> Callabl
             used when they move away and the second one when they approach.
         **kwargs: Extra arguments passed to the 'fill_between' functions.
 
-    Return:
+    Returns:
         Callable: Wrapper.
     """
 
@@ -399,7 +415,7 @@ def draw_btw_pathcll(btw_index:tuple[int, int], color:str|Sequence, color_d:str|
             used when they move away and the second one when they approach.
         color_d (str|Sequence): It works the same as the 'color' argument but when the difference is negative.
 
-    Return:
+    Returns:
         Callable: Wrapper.
     """
 
@@ -456,7 +472,7 @@ def draw_hist(value_index:int, color:str|Sequence, color_d:str|Sequence, **kwarg
         color_d (str|Sequence): It works the same as the 'color' argument but when the hist is negative.
         **kwargs: Extra arguments passed to the 'fill_between' functions.
     
-    Return:
+    Returns:
         Callable: Wrapper.
     """
     
@@ -546,11 +562,9 @@ def _store_decorator(func:Callable) -> Callable:
         the attribute: '_store' and have it decorated with '__data_store'.
 
     Note:
-        Add the 'cut' and 'last' arguments; they are used for '__data_store'.
-        cut (bool): Cut off the data, yes or no, depending on whether the 
-            user requests it or another indicator. Default False.
-        last (int): Cut the data as the user wishes. Default = None.
-        The implementation is made in the '__data_store' decorator.
+        The decorated function must not have parameters named 'cut' or 'last'. 
+        'StrategyClass.__data_store' intercepts those two names for its own 
+        caching/slicing logic, so the values you pass never reach your function.
 
     Args:
         func (Callable): Function.
@@ -630,7 +644,7 @@ def __get_names(from_:list[dict]) -> list[str]:
     'from' needs 'name' key.
 
     Args:
-        from (list[dict], optional): List of dictionaries 
+        from_ (list[dict]): List of dictionaries 
             from which the names will be obtained.
 
     Returns:
@@ -659,8 +673,10 @@ def __get_dtrades(names:Sequence[str|int|None]|str|int|None = None) -> dict:
     """
 
     trades = {
-        (g_st:=__get_strategy(i))['name']: g_st['trades'].sort_values(
-            by="positionDate", ascending=True).reset_index(drop=True)
+        (g_st:=__get_strategy(i))['name']: (g_st['trades'].sort_values(
+            by='positionDate', ascending=True).reset_index(drop=True) 
+            if 'positionDate' in g_st['trades'] else g_st['trades']) 
+            if 'trades' in g_st else pd.DataFrame()
         for i in (set(names or {None}) if not isinstance(names, (str, int))  else [names])
     }
 
@@ -671,8 +687,20 @@ def __get_trades(names:Sequence[str|int|None]|str|int|None = None) -> pd.DataFra
     Get trades
 
     Take trades from 1 or more saved backtests.
-
     Trades will be sorted ascending based on 'positionDate'.
+
+    Note:
+        Dataframe columns:
+        - date: Creation date.
+        - positionOpen: Opening price.
+        - commission: Position commissions.
+        - amount: Position amount
+        - typeSide: Position type.
+        - unionId: Id linked to orders.
+        - positionClose: Closing price.
+        - positionDate: Closing date.
+        - profitPer: Profit in percentage with out commissions.
+        - profit: Profit on 'amount' with commissions.
 
     Args:
         names (Sequence[str|int|None]|str|int|None, optional): You can pass an 
@@ -735,7 +763,7 @@ def __gen_fname(name:str, from_:list[str]) -> str:
     Generates a name based on 'name' that is not duplicated in 'from'.
 
     Args:
-        names (str): Name.
+        name (str): Name.
         from_ (list[str]): List of names to not repeat
 
     Returns:

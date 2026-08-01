@@ -4,7 +4,7 @@ Back Test Py
 BackPy is a library used to test strategies in the market.
 
 Version:
-    1.0.11
+    1.0.14
 
 Repository:
     https://github.com/diego-cores/backpy
@@ -33,7 +33,7 @@ License:
     SOFTWARE.
 """
 
-from . import _commons
+from . import _commons as cfg
 
 from .strategy import (
     StrategyClass,
@@ -70,13 +70,14 @@ from .main import (
 )
 
 from .stats import (
-    monte_carlo_chart,
+    distribution_chart,
     monte_carlo_bsim,
     perf_tzone_chart,
     earnings_intime,
     get_drawdowns,
     max_drawdown,
     stats_trades,
+    permutation,
     correlation,
     stats_icon,
 )
@@ -145,7 +146,7 @@ __all__ = [
     'plot_strategy_decorator',
     'load_binance_data_spot',
     'load_yfinance_data',
-    'monte_carlo_chart',
+    'distribution_chart',
     'plot_strategy_add',
     'monte_carlo_bsim',
     'perf_tzone_chart',
@@ -167,6 +168,7 @@ __all__ = [
     'idct_sqzmom',
     'idct_trange',
     'DataWrapper',
+    'permutation',
     'correlation',
     'stats_icon',
     'CostsValue',
@@ -177,7 +179,6 @@ __all__ = [
     'load_data',
     'def_style',
     'style_def',
-    '_commons',
     'idct_mom',
     'idct_atr',
     'idct_adx',
@@ -189,9 +190,10 @@ __all__ = [
     'utils',
     'plot',
     'run',
+    'cfg',
 ]
 
-__version__ = '1.0.11'
+__version__ = '1.0.14'
 __author__ = 'Diego Cores'
 __url__ = 'https://github.com/diego-cores'
 __email__ = '89626622+diego-cores@users.noreply.github.com'
