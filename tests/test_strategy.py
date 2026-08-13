@@ -94,18 +94,6 @@ class TestStrategyClass(unittest.TestCase):
         self.assertIsInstance(self.instance.get_commission(), CostsValue)
         self.assertIsInstance(self.instance.get_init_funds(), (int, float))
 
-    def test__store_decorator(self) -> None:
-        """
-        Test '_store_decorator'
-
-        Verify that it works correctly.
-        """
-
-        def empty_func() -> None: ...
-
-        func = getattr(st.StrategyClass, '_StrategyClass__store_decorator')(empty_func)
-        self.assertEqual(getattr(func, '_store'), True)
-
     @patch("backpy.StrategyClass._StrategyClass__func_idg")
     @patch("backpy.StrategyClass._StrategyClass__data_cut")
     def test__data_store(self, mock_data_cut:MagicMock, mock_idg:MagicMock) -> None:

@@ -47,7 +47,19 @@ class TestCommons(unittest.TestCase):
         test2['name'] = 'test2'
 
         self.backtest = [test, test1, test2]
-        setattr(_cm, '__backtests', self.backtest)
+        setattr(_cm, '__data_backtests', self.backtest)
+
+    def test_store_decorator(self) -> None:
+        """
+        Test '_store_decorator'
+
+        Verify that it works correctly.
+        """
+
+        def empty_func() -> None: ...
+
+        func = _cm._store_decorator(empty_func)
+        self.assertEqual(getattr(func, '_store'), True)
 
     def test_get_backtest_names(self) -> None:
         """
@@ -56,7 +68,7 @@ class TestCommons(unittest.TestCase):
         Verify that when requesting backtest names, the same result as '__get_names' was returned.
         """
 
-        self.assertEqual(_cm.get_backtest_names(), getattr(_cm, '__get_names')(getattr(_cm, '__backtests')))
+        self.assertEqual(_cm.get_backtest_names(), getattr(_cm, '__get_names')(getattr(_cm, '__data_backtests')))
 
     def test__get_names(self) -> None:
         """
@@ -65,7 +77,7 @@ class TestCommons(unittest.TestCase):
         Verify that the backtest names are returned correctly.
         """
 
-        self.assertEqual(getattr(_cm, '__get_names')(getattr(_cm, '__backtests')), 
+        self.assertEqual(getattr(_cm, '__get_names')(getattr(_cm, '__data_backtests')), 
                          [i['name'] for i in self.backtest])
 
     def test__get_dtrades_all(self) -> None:
@@ -75,7 +87,7 @@ class TestCommons(unittest.TestCase):
         Verify that all trades are returned correctly.
         """
 
-        backtest_names = getattr(_cm, '__get_names')(getattr(_cm, '__backtests'))
+        backtest_names = getattr(_cm, '__get_names')(getattr(_cm, '__data_backtests'))
         result = getattr(_cm, '__get_dtrades')(backtest_names)
 
         for i,v in enumerate(backtest_names):
@@ -105,7 +117,7 @@ class TestCommons(unittest.TestCase):
                                             ascending=True).reset_index(drop=True)
 
         pd.testing.assert_frame_equal(
-            getattr(_cm, '__get_trades')(getattr(_cm, '__get_names')(getattr(_cm, '__backtests'))), 
+            getattr(_cm, '__get_trades')(getattr(_cm, '__get_names')(getattr(_cm, '__data_backtests'))), 
             all_trades)
 
     def test__get_trades_unq(self) -> None:
@@ -142,7 +154,7 @@ class TestCommons(unittest.TestCase):
         Verify that '__get_strategy' works with string.
         """
 
-        backtest_names = getattr(_cm, '__get_names')(getattr(_cm, '__backtests'))
+        backtest_names = getattr(_cm, '__get_names')(getattr(_cm, '__data_backtests'))
         self.assertEqual(getattr(_cm, '__get_strategy')(backtest_names[0]), self.backtest[0])
 
     def test__gen_fname(self) -> None:
@@ -151,11 +163,10 @@ class TestCommons(unittest.TestCase):
 
         Verify that the new names are generated correctly.
         """
+        names_list = ['test', 'test1', 'test2']
 
-        mod_backtest = [{'name':'test'},{'name':'test1'},{'name':'test2'}]
-
-        self.assertEqual(getattr(_cm, '__gen_fname')('test', from_=mod_backtest), 'test3')
-        self.assertEqual(getattr(_cm, '__gen_fname')('test_', from_=mod_backtest), 'test_')
+        self.assertEqual(getattr(_cm, '__gen_fname')('test', from_=names_list), 'test3')
+        self.assertEqual(getattr(_cm, '__gen_fname')('test_', from_=names_list), 'test_')
 
 if __name__ == '__main__':
     unittest.main()

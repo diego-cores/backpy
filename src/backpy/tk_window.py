@@ -1375,7 +1375,7 @@ def new_paneledw(block:bool, force:bool = False, style:dict = {}) -> None:
     Generate a window with panels using 'CustomWin'.
 
     To add a canvas, add a dictionary to the '__panel_list' list with these values:
-        fig: Matplotlib Figure.
+        fig: Matplotlib Figure. Mandatory key.
         title: Panel title.
         untitle: Custom unfocus titles.
         anim: Matplotlib FuncAnimation.
@@ -1400,8 +1400,9 @@ def new_paneledw(block:bool, force:bool = False, style:dict = {}) -> None:
 
     custom_unfocus = []
     for i in _cm.__panel_list:
-        if not i['untitle']: continue
-        custom_unfocus.extend(i['untitle'])
+        untitle_list = i.get('untitle', [])
+        if not untitle_list: continue
+        custom_unfocus.extend(untitle_list)
 
     btn_color = style.get('btn', '#000000')
     window = CustomWin(

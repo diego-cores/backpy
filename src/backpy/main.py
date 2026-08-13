@@ -1098,8 +1098,7 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
     Args:
         log (bool, optional): If True, plots data using a logarithmic scale. 
             Default is False.
-        progress (bool, optional): If True, shows a progress bar and timer. 
-            Default is True.
+        progress (bool, optional): If True, shows a progress bar and timer.
         name (Sequence[str | int | None] | str | int | None, optional): 
             Backtest names to extract trades from, None = -1, 
             you can add multiple by passing an list.

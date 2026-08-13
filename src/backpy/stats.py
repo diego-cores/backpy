@@ -547,9 +547,9 @@ def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
     )
 
 def distribution_chart(data:tuple[dict[str, np.ndarray|list], str], view:str = 's/d',
-                      n_trades:int|None = None, diff_ini:bool = True, 
-                      panel:str = 'add', style:str|None = 'last', 
-                      style_c:dict|None = None, block:bool = True) -> None:
+                      n_trades:int|None = None, diff_ini:bool = True, progress:bool = True,
+                      panel:str = 'add', style:str|None = 'last', style_c:dict|None = None, 
+                      block:bool = True) -> None:
     """
     Distribution chart
 
@@ -584,6 +584,7 @@ def distribution_chart(data:tuple[dict[str, np.ndarray|list], str], view:str = '
         n_trades (int|None, optional): For graph 'd' how many simulations 
             will be shown.
         diff_ini (bool, optional): The original strategy trades stands out in all the charts.
+        progress (bool, optional): If True, shows a progress bar and timer.
         panel (str, optional): To create a new window or add a panel, 
             only 'new' or 'add' are possible.
         style (str | None, optional): Color style. 
@@ -625,6 +626,12 @@ def distribution_chart(data:tuple[dict[str, np.ndarray|list], str], view:str = '
 
     graphics = ['s','d','pf','sr','tr']
     axes, v_view = cpl.ax_view(view=view, graphics=graphics)
+
+    t = time()
+    load_prgs = utils.ProgressBar()
+    load_prgs.adder_add({'DataTimer':lambda x=t: utils.num_align(time()-x)})
+    if progress:
+        load_prgs.reset_size(len(v_view))
 
     for i,v in enumerate(v_view):
         ax = axes[i]
@@ -726,6 +733,7 @@ def distribution_chart(data:tuple[dict[str, np.ndarray|list], str], view:str = '
                     label='Total return distribution.')
                 ax.legend(loc='upper left')
             case _: pass
+        load_prgs.next()
 
     title = data[1].strip()
     cpl.add_window(
@@ -819,21 +827,32 @@ def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None,
         logger.warning(f'Returned data limited to {total_data//rn_trades} sims')
 
     stats = []
+    def calc_stats(returns:np.ndarray) -> None:
+        """
+        Calculate statistics
+
+        Args:
+            returns (ndarray): List of returns.
+        """
+        nonlocal stats
+        stats_mult = 1 + returns / 100
+        stats_mult_cumprod = stats_mult.cumprod()
+
+        stats.append({
+            'last_result':returns.sum(),
+            'profit_fact':profit_fact(returns),
+            'sharpe_ratio':sharpe_ratio_woa(returns),
+            'expectation':expectation(returns),
+            'max_drawdown':max_drawdown(stats_mult_cumprod),
+            'avg_drawdown':get_drawdowns(stats_mult_cumprod).mean(),
+            'winrate':winnings(returns)*100,
+        })
+    calc_stats(sim[0])
+
     # Monte carlo sim
     for i in range(n_sims):
         trades_s = np.random.choice(trades, size=rn_trades, replace=replace)
-        multiplier = 1 + trades_s / 100
-        cumprod = multiplier.cumprod()
-
-        stats.append({
-            'last_result':trades_s.sum(),
-            'profit_fact':profit_fact(trades_s),
-            'sharpe_ratio':sharpe_ratio_woa(trades_s),
-            'expectation':expectation(trades_s),
-            'max_drawdown':max_drawdown(cumprod),
-            'avg_drawdown':get_drawdowns(cumprod).mean(),
-            'winrate':winnings(trades_s)*100,
-        })
+        calc_stats(trades_s)
 
         if (len(sim)-1)*rn_trades < total_data:
             sim.append(trades_s)
@@ -860,7 +879,7 @@ def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None,
                               _cm.__COLORS['GREEN'] if prft_fact > 1 else _cm.__COLORS['RED']],
         'Max drawdown avg':[str(round(np.average(stats_carr['max_drawdown'])*100, 1)) + '%'],
         'Average drawdown avg':[str(-round(np.average(stats_carr['avg_drawdown'])*100, 1)) + '%'],
-        'Expectation avg':[utils.round_r(np.average(stats_carr['expectation']))],
+        'Expectation avg':[utils.round_r(np.average(stats_carr['expectation']), 2)],
         'Winnings avg':[str(round(np.average(stats_carr['winrate']), 1)) + '%',
                            _cm.__COLORS['GREEN']],
         f"\n{_cm.__COLORS['CYAN']}Percentiles{_cm.__COLORS['RESET']}":['']
@@ -972,10 +991,25 @@ def permutation(names:Sequence[str|int|None]|str|int|None = None,
     data_idx_len = len(data_idx)
     data_closes = _cm.__data['close'].to_numpy()
 
+    test:list[np.ndarray] = [trades['profitPer'].dropna().to_numpy()]
     stats = []
-    test = [trades['profitPer'].dropna().to_numpy()]
-    all_indices = np.arange(data_idx_len)
+    def calc_stats(returns:np.ndarray) -> None:
+        """
+        Calculate statistics
 
+        Args:
+            returns (ndarray): List of returns.
+        """
+        nonlocal stats
+
+        stats.append({
+            'last_result':returns.sum(),
+            'profit_fact':profit_fact(returns),
+            'sharpe_ratio':sharpe_ratio_woa(returns),
+        })
+    calc_stats(test[0])
+
+    all_indices = np.arange(data_idx_len)
     signals.sort(key=lambda rep: rep[0], reverse=True)
     signals = np.asarray(signals)
 
@@ -1046,12 +1080,7 @@ def permutation(names:Sequence[str|int|None]|str|int|None = None,
         for _at in range(frag_attps):
             try:
                 test_ls = placement()
-
-                stats.append({
-                    'last_result':test_ls.sum(),
-                    'profit_fact':profit_fact(test_ls),
-                    'sharpe_ratio':sharpe_ratio_woa(test_ls),
-                })
+                calc_stats(test_ls)
 
                 if (len(test)-1)*len(trades) < total_data and len(test_ls) > 0:
                     test.append(test_ls)

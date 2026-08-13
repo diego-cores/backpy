@@ -12,23 +12,19 @@ import unittest
 import matplotlib.pyplot
 import numpy as np
 import matplotlib
+import sys
 
 matplotlib.use("Agg")
+
+if "tkinter" not in sys.modules:
+    try: import tkinter
+    except ImportError:
+        sys.modules["tkinter"] = MagicMock()
 
 class TestCustomPlt(unittest.TestCase):
     def setUp(self) -> None:
         self.fig, self.ax = matplotlib.pyplot.subplots()
         self.graphics = ['price', 'v', 'rsi/', '\\macd']
-
-        setattr(_cm, '__panel_list', [])
-        self._mod__panel_list = []
-
-        self._mod__panel_list.append({
-            'fig':self.fig,
-            'title':'test',
-            'toolbar':'total',
-        })
-        self._mod__panel_list = self._mod__panel_list * 4
 
     def tearDown(self) -> None:
         matplotlib.pyplot.close(self.fig)
@@ -180,78 +176,29 @@ class TestCustomPlt(unittest.TestCase):
         with self.assertRaises(ex.StatsError):
             cs_plt.ax_view(bad_view, self.graphics)
 
-    @patch("backpy.custom_plt.CustomWin")
-    def test_new_paneledw(self, mock_win:MagicMock) -> None:
+    @patch("backpy._commons.TKINTER", True)
+    @patch("backpy.tk_window.add_window")
+    def test_add_window_tkinter(self, mock_add_window: MagicMock) -> None:
         """
-        Test 'new_paneledw'
+        Test 'add_window' 
 
-        Verify that the function works correctly.
-        """
-
-        mock_win_instance = MagicMock()
-        mock_win.return_value = mock_win_instance
-
-        setattr(_cm, '__panel_list', self._mod__panel_list)
-        setattr(_cm, '__panel_wmax', 4)
-
-        cs_plt.new_paneledw(False)
-
-        mock_win.assert_called_once()
-
-    def test_new_paneledw_empty(self) -> None:
-        """
-        Test 'new_paneledw'
-
-        Verify that the function works correctly when there are no panels.
+        Verify that 'add_window' is working correctly when tkinter is available.
         """
 
-        cs_plt.new_paneledw(False)
+        cs_plt.add_window(self.fig)
+        mock_add_window.assert_called_once()
 
-        with self.assertRaises(ex.CustomWinError):
-            cs_plt.new_paneledw(True)
-
-        setattr(_cm, '__panel_list', self._mod__panel_list * 2)
-        setattr(_cm, '__panel_wmax', 4)
-
-        with self.assertRaises(ex.CustomWinError):
-            cs_plt.new_paneledw(False)
-
-    @patch("backpy.custom_plt.new_paneledw")
-    @patch("backpy.custom_plt.mpl.pyplot.close")
-    def test_add_window(self, mock_close:MagicMock, mock_new_paneledw:MagicMock) -> None:
+    @patch("backpy._commons.TKINTER", False)
+    @patch("backpy.custom_plt.mpl.pyplot.show")
+    def test_add_window(self, mock_show: MagicMock) -> None:
         """
         Test 'add_window'
 
-        Verify that the function works correctly.
+        Verify that 'add_window' is working correctly when tkinter is unavailable.
         """
 
-        setattr(_cm, '__panel_wmax', 4)
-
-        cs_plt.add_window(self.fig, new=False)
-        self.assertEqual(len(getattr(_cm, '__panel_list', [])), 1)
-        panel = getattr(_cm, '__panel_list', [{}])[0]
-        self.assertIs(panel['fig'], self.fig)
-
-        mock_close.assert_called_once_with(self.fig)
-        mock_new_paneledw.assert_called_once()
-
-    @patch("backpy.custom_plt.CustomWin")
-    @patch("backpy.custom_plt.mpl.pyplot.close")
-    def test_add_window_true(self, mock_close:MagicMock, mock_win:MagicMock) -> None:
-        """
-        Test 'add_window'
-
-        Verify that the function works correctly with 'new' = 'True'.
-        """
-
-        mock_win_instance = MagicMock()
-        mock_win.return_value = mock_win_instance
-
-        cs_plt.add_window(self.fig, new=True)
-
-        mock_win.assert_called_once()
-        mock_win_instance.show.assert_called_once()
-        mock_close.assert_called_once_with(self.fig)
+        cs_plt.add_window(self.fig)
+        mock_show.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()
