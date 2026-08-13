@@ -37,6 +37,8 @@ Variables:
         to jump over everything else when running.
 
 Hidden Variables:
+    _max_elements: Maximum number of elements to return. 
+        Used in functions with 'full_output' argument (hidden variable).
     _random_titles: Random titles for windows (hidden variable).
     _tkinter_root: Root Tk instance (hidden variable).
     __anim_puntil: Timestamp indicating when the animation drawing should pause. 
@@ -146,6 +148,7 @@ graph_panel_order:dict[str, float] = {'price':0, 'volume':1}
 graph_first_size:int = 2
 graph_dpi:int = 100
 
+_max_elements:int = 10000
 _random_titles:list = [
     f'BackPy v{version("backpyf")}',
     'Window from BackPy',
@@ -220,7 +223,7 @@ __plt_styles:dict = {
         'vol': 'gray'
     },
 
-    # All properties are: 'bg', 'gdir', 'fr', 'btn', 'btna', 'vol', 'mk', 'psmk'.
+    # All properties are: 'bg', 'gdir', 'fr', 'btn', 'btna', 'vol', 'mk', 'psmk', 'crss'.
     # light
     'emberday': {
         'bg': ("#f0f0f0", "#e5e5e5", "#dfdfdf"), 'gdir': True,
@@ -229,53 +232,99 @@ __plt_styles:dict = {
         'psmk':{'u':"#089991", 'd':"#f23651"},
     },
     'ivory': {
-        'bg': '#FAFAF0',
-        'fr': '#F0EDD8', 'btn': '#7A6020', 'btna': '#5C4810',
-        'vol': '#C4A85C', 'mk': {'u': '#3A7848', 'd': '#A83030'},
-    },
-    'parchment': {
-        'bg': ('#FAF7F0', '#F2E8D5', '#E8D9B8'), 'gdir': True,
-        'fr': '#EDE0C8', 'btn': '#5C4A1E', 'btna': '#3D3010',
-        'vol': '#C8A87A', 'mk': {'u': '#4A7C59', 'd': '#8B3A3A'},
+        'bg': ('#FBFAF2', '#F2EFE0', '#E7E2CB'), 'gdir': True,
+        'fr': '#EDE8D2', 'btn': '#4A3A0E', 'btna': '#2E2400',
+        'vol': '#BFA254', 'mk': {'u': '#2F6B3C', 'd': '#8F2020'},
     },
     'arctic': {
-        'bg': '#EEF4FA',
-        'fr': '#DDEAF5', 'btn': '#1A365D', 'btna': '#0D2137',
-        'vol': '#8AAFC8', 'mk': {'u': '#2F855A', 'd': '#C53030'},
+        'bg': ('#F4F8FC', '#E7F0F8', '#D6E5F2'), 'gdir': False,
+        'fr': '#0E2A47', 'btn': '#BFDCF5', 'btna': '#2F7FD0',
+        'vol': '#93B4CE', 'crss': '#0E2A47',
+        'mk': {'u': '#0F7A5F', 'd': '#C03434'},
+        'psmk': {'u': '#0F7A5F', 'd': '#D03A3A'},
     },
     'rosegold': {
-        'bg': ('#FFF2F5', '#FFE0EC', '#FFD0E4', '#FFC0D8'), 'gdir': True,
-        'fr': '#FFBAD4', 'btn': '#B52050', 'btna': '#8C1438',
-        'vol': '#F0A0BC', 'mk': {'u': '#3A7848', 'd': '#A83030'},
+            'bg': ('#FFF2F6', '#FFE2EE', '#FFCFE2', '#FFBCD6'), 'gdir': True,
+            'fr': '#FFBAD4', 'btn': '#B52050', 'btna': '#8C1438',
+            'vol': '#EE96B4', 'crss': '#8C1438', 
+            'mk': {'u': '#1F8A6B', 'd': '#D6215C'},
+    },
+    'lilac': {
+        'bg': ('#F6F0FC', '#EBDDF8', '#DCC9F0'), 'gdir': True,
+        'fr': '#E4D3F3', 'btn': '#4A1E70', 'btna': '#2E0F4A',
+        'vol': '#BE9FDD', 'mk': {'u': '#2A8F70', 'd': '#B02A6B'},
+        'psmk': {'u': '#1E9E76', 'd': '#C81E74'},
+    },
+    'coral': {
+        'bg': ('#FFF7F1', '#FFE8D9', '#FFD6BC'), 'gdir': True,
+        'fr': '#0A0A0A', 'btn': '#FFD9C4', 'btna': '#F58B57',
+        'vol': '#F0A377', 'crss': '#8C3312',
+        'mk': {'u': '#127A5C', 'd': '#D93A1E'},
+        'psmk': {'u': '#0E8A66', 'd': '#E8452A'},
+    },
+    'mint': {
+        'bg': ('#F0FAF4', '#DFF3E7', '#CBEAD8'), 'gdir': True,
+        'fr': '#D6EEE0', 'btn': '#0E4630', 'btna': '#052A1C',
+        'vol': '#8FC7A9', 'mk': {'u': '#127A52', 'd': '#B8342A'},
+        'psmk': {'u': '#0E8A5C', 'd': '#CC3A30'},
+    },
+    'porcelain': {
+        'bg': ('#FDFDFE', '#F4F6F9'), 'gdir': True,
+        'fr': '#ECEFF3', 'btn': '#20242B', 'btna': '#4C5BD4',
+        'vol': '#C3CAD4', 'crss': '#4C5BD4',
+        'mk': {'u': '#1F7A4D', 'd': '#B02A37'},
+        'psmk': {'u': '#1F7A4D', 'd': '#C62828'},
     },
 
     # dark
-    'nocturne': {
-        'bg': '#131722',
-        'fr': '#1E222D', 'btn': '#2962FF', 'btna': '#1E4FD8',
-        'vol': '#363A45', 'mk': {'u': '#26a69a', 'd': '#ef5350'},
-        'psmk': {'u': '#089981', 'd': '#f23645'},
-    },
     'midnight': {
-        'bg': ('#040810', '#0A1428', '#0F1E3D'), 'gdir': False,
-        'fr': '#0F1830', 'btn': '#4A9EFF', 'btna': '#2E7FD9',
-        'vol': '#1B3554', 'mk': {'u': '#00C7A8', 'd': '#FF4F5E'},
+        'bg': ('#03060E', '#0A1730', '#12254A'), 'gdir': False,
+        'fr': '#01030A', 'btn': '#5AAEFF', 'btna': '#2E7FD9',
+        'vol': '#1E3E66', 'mk': {'u': '#00D9B4', 'd': '#FF5566'},
     },
     'charcoal': {
-        'bg': '#1A1A1A',
-        'fr': '#111111', 'btn': '#D4D4D4', 'btna': '#8A8A8A',
-        'vol': '#383838', 'mk': {'u': '#4CAF50', 'd': '#F44336'},
-    },
-    'amber': {
-        'bg': ('#050400', '#0C0A00', '#1A1400'), 'gdir': False,
-        'fr': '#060500', 'btn': '#FF8C00', 'btna': '#BF6900',
-        'vol': '#5C3E00', 'mk': {'u': '#FFB347', 'd': '#FF4040'},
-        'psmk': {'u': '#4CAF50', 'd': '#E53935'},
+        'bg': '#1B1B1B',
+        'fr': '#0B0B0B', 'btn': '#EDEDED', 'btna': '#767676',
+        'vol': '#3F3F3F', 'mk': {'u': '#3DD16A', 'd': '#FF4438'},
     },
     'mocha': {
-        'bg': ('#1C1610', '#26201A', '#332A22'), 'gdir': True,
-        'fr': '#141008', 'btn': '#C89050', 'btna': '#9E6E30',
-        'vol': '#3E2E1A', 'mk': {'u': '#7CB880', 'd': '#C86060'},
+        'bg': ('#191309', '#241C10', '#33281A'), 'gdir': True,
+        'fr': '#100B04', 'btn': '#D9A05C', 'btna': '#A8742E',
+        'vol': '#453118', 'mk': {'u': '#8FCB84', 'd': '#D06A54'},
+    },
+    'eclipse': {
+        'bg': ('#0D0D0F', '#141417', '#1C1C20'), 'gdir': True,
+        'fr': '#E8E8EA', 'btn': '#141416', 'btna': '#A83200',
+        'vol': '#2E2E34', 'crss': '#F0F0F2',
+        'mk': {'u': '#F0F0F2', 'd': '#FF3B30'},
+        'psmk': {'u': '#00D68F', 'd': '#FF3B30'},
+    },
+    'orchid': {
+        'bg': ('#160B22', '#211036', '#301A4E'), 'gdir': True,
+        'fr': '#08040D', 'btn': '#F5A6D2', 'btna': '#B04084',
+        'vol': '#503066', 'crss': '#EBC8FF',
+        'mk': {'u': '#4FD1A5', 'd': '#FF4D8D'},
+        'psmk': {'u': '#3ED9B0', 'd': '#FF3B6B'},
+    },
+    'bordeaux': {
+        'bg': ('#1E0B12', '#2B121E', '#3C1A2A'), 'gdir': False,
+        'fr': '#0A0207', 'btn': '#EFC97E', 'btna': '#B88E3A',
+        'vol': '#552435', 'mk': {'u': '#7CCFA8', 'd': '#FF5C6C'},
+        'psmk': {'u': '#E8C57A', 'd': '#FF5C6C'},
+    },
+    'abyss': {
+        'bg': ('#04171D', '#072A34', '#0B404E'), 'gdir': True,
+        'fr': '#031117', 'btn': '#55DDE8', 'btna': '#1F98A8',
+        'vol': '#105668', 'crss': '#9BEFF2',
+        'mk': {'u': '#2DE0B0', 'd': '#FF5A52'},
+        'psmk': {'u': '#39E6C0', 'd': '#FF4F6D'},
+    },
+    'pine': {
+        'bg': ('#0B1510', '#122019', '#1A2E22'), 'gdir': True,
+        'fr': '#070F0B', 'btn': '#B6E2C2', 'btna': '#4F7C60',
+        'vol': '#26402F', 'crss': '#DCE8D8',
+        'mk': {'u': '#6FE08E', 'd': '#D9603F'},
+        'psmk': {'u': '#6FE08E', 'd': '#E4674A'},
     },
 }
 
@@ -522,6 +571,11 @@ __plot_indicators_def:dict = {
 
     # For more info read the 'draw_plot' docstring.
     'idct_ema':{'panel':'price', 'color':['blue'],'dtSource':'close',},
+    'idct_sma':{'panel':'price', 'color':['red'],'dtSource':'close',},
+    'idct_wma':{'panel':'price', 'color':['orange'],'dtSource':'close',},
+    'idct_smma':{'panel':'price', 'color':['yellow'],'dtSource':'close',},
+    'idct_sema':{'panel':'price', 'color':['green'],'dtSource':'close',},
+
     'idct_bb':{'panel':'price', 'color':['#f23645', '#2D2DFF', '#089981'], 
         'dtSource':'close',
         'style':[
@@ -534,6 +588,17 @@ __plot_indicators_def:dict = {
             drawax_hline(30, '#FFFFFF36', linestyle=(0, (1.5,1))), 
             drawax_hline(50, '#FFFFFF36', linestyle=(0, (1.5,1))), 
             drawax_btw((70, 30), '#BB00D824',),
+        ]},
+    'idct_stochastic':{'panel':None, 'color':['#2660FF', '#FF6F00'], 
+        'style':[
+            drawax_hline(70, '#FFFFFF36', linestyle=(0, (1.5,1))), 
+            drawax_hline(30, '#FFFFFF36', linestyle=(0, (1.5,1))), 
+            drawax_hline(50, '#FFFFFF36', linestyle=(0, (1.5,1))), 
+            drawax_btw((70, 30), '#008CFF24',),
+        ]},
+    'idct_adx':{'panel':None, 'color':['#FF0000A1', '#0044FFA1', '#5D5D5DA1'],
+        'style':[
+            drawax_hline(23, '#CFCFCFD7', linestyle=(0, (1,1))), 
         ]},
     'idct_macd':{'panel':None, 'color':['blue', 'orange'], 
         'dtSource':'close',
@@ -548,10 +613,14 @@ __plot_indicators_def:dict = {
             draw_hist(1, color=('#0AAF0A', '#AF0909'), color_d=('#0A5D0A', '#5C0909')),
         ], 
     },
+    'idct_mom':{'panel':None, 'color':['#2D2DFF'],
+        'dtSource':'close',
+        },
     'idct_ichimoku':{'panel':'price', 'color':['#C4E293', '#E29393', '#2450C0', '#C0110B'], 
         'style':[
             draw_btw((0,1), ('#81B13324', '#AA2F2F24'))
         ]},
+    'idct_atr':{'panel':None, 'color':['#B71C1C']},
 }
 
 def _store_decorator(func:Callable) -> Callable:

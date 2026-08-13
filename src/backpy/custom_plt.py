@@ -81,7 +81,7 @@ def def_style(name:str,
             be top to bottom and diagonal, but you can choose whether 
             it starts from the right or left, true = right.
         volume (str|None, optional): Volume color.
-        cross (str|None, optional): Cross pointer color, default buttons color.
+        cross (str|None, optional): Cross pointer color, default: buttons color.
         up (str|None, optional): Color when the price rises, this influences 
             the color of the candle.
         down (str|None, optional): Color of when the price rises this influences 
@@ -137,7 +137,7 @@ def style_def(name:str|None = 'last', update:dict|None = None) -> tuple[dict, st
         tuple[dict,str]: Style dict and style name.
     """
 
-    if (not name is None and not (name:=name.lower()) in {'random', 'last'} | set(_cm.__plt_styles.keys())):
+    if (name is not None and not (name:=name.lower()) in {'random', 'last'} | set(_cm.__plt_styles.keys())):
         raise exception.StyleError(f"Style not found. '{name}'")
 
     if name == 'last':
@@ -148,7 +148,7 @@ def style_def(name:str|None = 'last', update:dict|None = None) -> tuple[dict, st
     elif name == 'random':
         name = rd.choice(list(_cm.__plt_styles.keys()))
 
-    stl_colors = _cm.__plt_styles[name]
+    stl_colors:dict = _cm.__plt_styles[name]
     _cm.plt_style = name
 
     mk = stl_colors.get('mk', {'u': 'green', 'd': 'red'})
@@ -158,6 +158,7 @@ def style_def(name:str|None = 'last', update:dict|None = None) -> tuple[dict, st
         stl_colors['crss'] = stl_colors['btn']
 
     if isinstance(update, dict):
+        stl_colors = stl_colors.copy()
         stl_colors.update(update)
 
     return stl_colors, name

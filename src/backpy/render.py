@@ -183,7 +183,7 @@ def draw_indicators(indicators:Sequence[str], named_axes:dict[str, Axes], x_inde
             if artist: artists.extend(artist if isinstance(artist, list) else [artist])
         legends[panel]['handles'].append(tuple(i for i in artists))
         legends[panel]['labels'].append(mathform(rname.upper(), 
-            f'{(', '.join(names) if not names is None else 'line')}{'; '+'; '.join(map(str,adef.values()))if adef else ''}'.lower()))
+            f'{(', '.join(names) if names is not None else 'line')}{'; '+'; '.join(map(str,adef.values()))if adef else ''}'.lower()))
 
     for panel in legends:
         if not any(legends[panel]['handles']) or not legends[panel]['labels']:
@@ -196,6 +196,8 @@ def draw_indicators(indicators:Sequence[str], named_axes:dict[str, Axes], x_inde
             handler_map={tuple: HandlerTuple(ndivide=ndivide, pad=0.5)},
             fontsize=fontsize,
             handlelength=ndivide,
+            frameon=True,
+            ncol=1,
             loc=2,
         )
 

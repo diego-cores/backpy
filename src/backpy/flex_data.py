@@ -84,7 +84,7 @@ class DataWrapper():
 
         columns_nd = None if columns is None else self.__get_columns(columns)            
 
-        if not index is None:
+        if index is not None:
             index = self.__get_columns(index, index=True)
 
         self._data = self.__set_convertible(data)
@@ -242,7 +242,7 @@ class DataWrapper():
                   else 1)
 
         return (self._columns.tolist() 
-                if not self._columns is None
+                if self._columns is not None
                     and not isinstance(self._columns, range)
                     and n_cols == len(self._columns) 
                 else list(range(n_cols)))

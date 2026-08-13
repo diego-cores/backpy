@@ -1,5 +1,5 @@
 ![BackPy logo](https://raw.githubusercontent.com/diego-cores/backpy/main/images/logo.png)
-![Version](https://img.shields.io/badge/version-1.0.14-blue) ![status](https://img.shields.io/badge/status-wip-blue) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/backpyf?period=total&units=NONE&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pypi.org/project/backpyf/)
+![Version](https://img.shields.io/badge/version-1.0.15-blue) ![status](https://img.shields.io/badge/status-wip-blue) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/backpyf?period=total&units=NONE&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pypi.org/project/backpyf/)
 
 ## Light, realistic, fast and adaptable
 
@@ -32,7 +32,6 @@ Strategy with more complex logic and advanced indicators, more calculations per 
 
 | Method | Simple strategy  🟢 | Complex strategy  🔴 |
 | ------ | ------ | ------ |
-| Manual | ~76.4 hours          ⏳ | ~186.1 hours           🎈 |
 | **BackPy v0.9.72** | **~18.6 seconds**     💸 | **~25.4 seconds**       🚀 |
 
 ### 📌 Important note and **conclusion**
@@ -63,13 +62,7 @@ By using this software, you acknowledge that you have read and agree to the term
 
 ## 📦 Installation
 
-You can install BackPy (backpyf) in two different ways depending on your needs:
-
----
-
-### 🧰 Option 1 — From PyPI (recommended)
-
-You can simply run:
+You can install BackPy (backpyf) with PyPI:
 
 ```bash
 pip install backpyf
@@ -80,38 +73,6 @@ Then import it in Python:
 ```python
 import backpy
 ```
-
----
-
-### 💻 Option 2 — From source (GitHub)
-
-1. Download the latest version from GitHub
-
-- Go to this project GitHub page.
-- Download the ZIP file of the latest version of the project.
-
-2. Unzip the ZIP file
-
-- Unzip the ZIP file you downloaded.
-- This will give you a folder containing the project files.
-
-3. Open the terminal
-
-- Open the terminal in your operating system.
-- Navigate to the folder you just unzipped. You can use the cd command to change directories.
-
-4. Install the module
-
-- Once you are in the project folder in terminal, run the following command: `pip install .`.
-- This command will install the Python module using the setup.py file located in the project folder.
-
-5. Verify installation
-
-- After the installation process finishes without errors, you can verify if the module has been installed correctly by running some code that imports the newly installed module.
-
-6. Clean downloaded files
-
-- After you have verified that the module is working correctly, you can delete the downloaded ZIP file and unzipped folder if you wish.
 
 ---
 
@@ -298,7 +259,7 @@ Use `block=False` if you want to display multiple charts without blocking the ma
 `backpy.plot` displays the candles and trades executed.
 
 You can customize the style with the `style` argument (e.g., `darkmode`).
-There are more than 15 predefined styles, and you can also create your own using configuration functions like `style_c`.
+There are more than 10 predefined styles, and you can also create your own using configuration functions like `style_c`.
 
 ---
 

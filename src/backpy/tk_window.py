@@ -280,7 +280,7 @@ class CustomToolbar(NavigationToolbar2Tk):
                         linked_toolbars[k] = v
                         continue
 
-                    if not button is None and isinstance(
+                    if button is not None and isinstance(
                         (command_btn:=getattr(k, '_buttons')[button]), 
                         tk.Checkbutton) and not self is k:
                         if bool(getattr(command_btn, 'var').get()):
@@ -1064,7 +1064,7 @@ class CustomWin:
             if (self.root.winfo_ismapped()
                 and getattr(mpl_canvas.draw, "__func__", None) 
                     is type(mpl_canvas).draw
-                and not getattr(_cm, '__anim_puntil') is None
+                and getattr(_cm, '__anim_puntil') is not None
                 and monotonic() >= getattr(_cm, '__anim_puntil')):
                 try:
                     anim.frame_seq = iter(anim.frame_seq)

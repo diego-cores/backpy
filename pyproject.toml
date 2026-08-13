@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "backpyf"
-version = "1.0.14"
+version = "1.0.15"
 description = "BackPy is a library made in python for back testing in financial markets."
 authors = [{name = "Diego Cores", email = "89626622+diego-cores@users.noreply.github.com"}]
 readme = {file = "README.md", "content-type" = "text/markdown"}
@@ -59,7 +59,7 @@ project-includes = [
 ]
 
 [tool.bumpversion]
-current_version = "1.0.14"
+current_version = "1.0.15"
 
 [[tool.bumpversion.files]]
 filename = "src/backpy/__init__.py"

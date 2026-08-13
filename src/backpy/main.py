@@ -32,7 +32,7 @@ from typing import Callable, Sequence
 from datetime import datetime
 import logging
 
-from matplotlib.collections import LineCollection, PatchCollection, PathCollection
+from matplotlib.collections import LineCollection, PatchCollection, PathCollection, PolyCollection
 from matplotlib.dates import DateFormatter, date2num, num2date
 from matplotlib.animation import FuncAnimation
 from matplotlib.axes._axes import Axes
@@ -189,10 +189,6 @@ def load_binance_data_futures(symbol:str = 'BTCUSDT', interval:str = '1d',
 
     Loads data using the binance-connector module from futures.
 
-    Why this differentiation?
-        Binance futures data is different from spot data, 
-        so it's up to you to decide which one to use based on how you plan to trade.
-
     Args:
         symbol (str, optional): The trading pair.
         interval (str, optional): Data interval, e.g 1s, 1m, 5m, 1h, 1d, etc.
@@ -235,10 +231,6 @@ def load_binance_data_spot(symbol:str = 'BTCUSDT', interval:str = '1d',
     Load Binance data from spot.
 
     Loads data using the binance-connector module from spot.
-
-    Why this differentiation?
-        Binance spot data is different from futures data, 
-        so it's up to you to decide which one to use based on how you plan to trade.
 
     Args:
         symbol (str, optional): The trading pair.
@@ -712,7 +704,7 @@ def run(cls:type|Sequence[type], name:str|None = None, prnt:bool = True,
     for i in instances:
         positions_open_list.extend(i._StrategyClass__positions) # pyrefly: ignore
 
-        if not positions_list is None:
+        if positions_list is not None:
             positions_list = np.concatenate((positions_list, i._StrategyClass__pos_record[ # pyrefly: ignore
                 :i._StrategyClass__pos_record._pos]))
         else:
@@ -926,19 +918,11 @@ def run_animation(cls:type, candles:int = 100, interval:int = 100,
                 if isinstance(coll, LineCollection):
                     segs = coll.get_segments()[0]
                     xs = segs[0][0]
-                elif isinstance(coll, PatchCollection):
+                elif isinstance(coll, (PatchCollection, PathCollection, PolyCollection)):
                     paths = coll.get_paths()[0]
                     if not isinstance(paths.vertices, np.ndarray):
                         continue
-
                     xs = np.max(paths.vertices[:, 0])
-
-                elif isinstance(coll, PathCollection):
-                    offsets = coll.get_offsets()
-                    if not isinstance(offsets, np.ndarray):
-                        continue
-
-                    xs = offsets[:, 0][0]
                 else:
                     continue
 
@@ -1086,15 +1070,16 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
 
     Plots your data, highlighting the trades made.
 
-    Simbol guide:
+    Symbol guide:
         - 'x': Position close.
         - '^': Buy position.
         - 'v': Sell position.
 
     All color styles:
-        'lightmode', 'darkmode', 'emberday',
-        'ivory', 'parchment', 'arctic', 'rosegold',
-        'nocturne', 'midnight', 'charcoal', 'amber', 'mocha'.
+        'lightmode', 'darkmode', 'emberday', 'ivory', 
+        'arctic', 'rosegold', 'lilac', 'coral', 'mint', 
+        'porcelain', 'midnight', 'charcoal', 'mocha', 
+        'eclipse', 'orchid', 'bordeaux', 'abyss', 'pine'.
 
     Draw styles:
         'candle': Typical Japanese candle. 
@@ -1129,7 +1114,7 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
         draw_style_pos (str | None, optional): Change the drawing style of the positions.
             Current types: 'complex', 'simple', 'none', 'none'. None = 'complex'.
         draw_style_vol (str | None, optional): Change the drawing style of the
-            volumen. Current types: 'bar', 'none'. None = 'bar'.
+            volume. Current types: 'bar', 'none'. None = 'bar'.
         style_c (dict | None, optional): Customize the defined style by 
             modifying the dictionary. To know what to modify, 
             read the docstring of 'def_style'.
@@ -1233,15 +1218,16 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
     fig.autofmt_xdate()
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0, hspace=0)
 
-    ix_date:Sequence = num2date(_cm.__data.index) # type: ignore
+    datefrist = num2date(_cm.__data.index.values[0])
+    datelast = num2date(_cm.__data.index.values[-1])
 
     s_date = ".".join(str(val) for val in 
-                    [ix_date[0].day, ix_date[0].month, 
-                    ix_date[0].year])
+                    [datefrist.day, datefrist.month, 
+                    datefrist.year])
     
     e_date = ".".join(str(val) for val in 
-                    [ix_date[-1].day, ix_date[-1].month, 
-                    ix_date[-1].year])
+                    [datelast.day, datelast.month, 
+                    datelast.year])
 
     load_prgs.next()
     cpl.add_window(
@@ -1255,8 +1241,8 @@ def plot(log:bool = False, progress:bool = True, name:Sequence[str|int|None]|str
 
 def plot_strategy(name:Sequence[str|int|None]|str|int|None = None, 
                   log:bool = False, view:str = 'b/w/r/e',  
-                  custom_graph:dict = {}, panel:str = 'add',
-                  style:str | None = 'last', style_c:dict | None = None, 
+                  custom_graph:dict|None = None, panel:str = 'add',
+                  style:str|None = 'last', style_c:dict|None = None, 
                   block:bool = True) -> None:
     """
     Plot Strategy Statistics.
@@ -1297,7 +1283,8 @@ def plot_strategy(name:Sequence[str|int|None]|str|int|None = None,
             displaying the figures. Default is True.
     """
 
-    for i in custom_graph: plot_strategy_add(custom_graph[i], i)
+    if custom_graph is not None:
+        for i in custom_graph: plot_strategy_add(custom_graph[i], i)
 
     trades_data = _cm.__get_strategy(name)
     trades = _cm.__get_trades(name)

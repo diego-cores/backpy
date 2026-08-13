@@ -329,7 +329,7 @@ class StrategyClass(ABC):
                 continue
             elif getattr(attr, '_store', False):
                 logger.debug("Adding __data_store decorator to '%s'", name)
-                decorator = getattr(self, '_StrategyClass__data_store')(attr)
+                decorator = self.__data_store(attr)
                 setattr(self, name, 
                     lambda *args, dec=decorator, **kwargs: dec(*args, **kwargs))
 
@@ -341,7 +341,7 @@ class StrategyClass(ABC):
                 continue
             elif getattr(attr, '_uidc', False):
                 logger.debug("Adding __uidc decorator to '%s'", name)
-                decorator = getattr(self, '_StrategyClass__uidc')(attr)
+                decorator = self.__uidc(attr)
                 setattr(self, name, decorator)
 
     @abstractmethod
@@ -568,8 +568,7 @@ class StrategyClass(ABC):
                 continue
 
             key = self.__data_key.get(id(v), None)
-            arguments[k] = (key if key is not None 
-                               else utils.gen_datakey(v, size=8))
+            arguments[k] = (key if key is not None else utils.gen_datakey(v, size=8))
 
         args_wo = arguments.copy()
         args_wo.pop('cut', None); args_wo.pop('last', None)
@@ -810,7 +809,7 @@ class StrategyClass(ABC):
         Delete index
 
         Removes indexes from '__to_delete'.
-        Removes them from the '_StrategyClass'+name attribute.
+        Removes them from the class StrategyClass.__name__+name attribute.
 
         Args:
             name (str): Name saved in '__to_delete' and attribute name.
@@ -821,7 +820,7 @@ class StrategyClass(ABC):
             for i in sorted(self.__to_delete[name], 
                             reverse=True):
 
-                del getattr(self, '_StrategyClass'+name)[i]
+                del getattr(self, f'_{StrategyClass.__name__}{name}')[i]
 
     def __del(self, name:str, index:list) -> None:
         """
@@ -998,9 +997,8 @@ class StrategyClass(ABC):
             if self.__orders:
                 self.__del('__orders', [
                     i for i,d in enumerate(self.__orders) 
-                    if (not position.get('unionId') is None 
-                        and position.get('unionId') in (d.get('unionId').split('/')[-1], 
-                                                        d.get('closeId')))
+                    if (position.get('unionId') is not None and position.get('unionId') in (
+                        d.get('unionId').split('/')[-1], d.get('closeId')))
                 ])
 
         exit_fee = 0.
@@ -1110,8 +1108,7 @@ class StrategyClass(ABC):
         union_positions = [
             {**v, 'rIndex': i}
             for i, v in enumerate(self.__positions)
-            if (not v.get('unionId') is None 
-                and v.get('unionId') == union_id)
+            if (v.get('unionId') is not None and v.get('unionId') == union_id)
         ]
 
         return union_positions or None
@@ -1207,7 +1204,7 @@ class StrategyClass(ABC):
         # Del closeId orders
         self.__del('__orders', [
             i for i, d in enumerate(self.__orders)
-            if (not d.get('closeId') is None 
+            if (d.get('closeId') is not None 
                 and d.get('closeId') in (order['id'], order['closeId']))
         ])
 
@@ -1267,7 +1264,7 @@ class StrategyClass(ABC):
         union_id = union_id.split('/')[-1]
         func = np.max if type_side else np.min
 
-        def get_union_price(data, col_name:str) -> tuple[None, float|bool]:
+        def get_union_price(data, col_name:str) -> tuple[bool|None, float|bool]:
             """
             Get union price
 
@@ -1280,7 +1277,7 @@ class StrategyClass(ABC):
                 col_name (str): Column to pass through 'func'.
 
             Returns:
-                tuple[bool,float|bool]: Condition of 'typeSide' equals and 
+                tuple[bool|None,float|bool]: Condition of 'typeSide' equals and 
                     result of 'func' on 'col_name'.
             """
 
@@ -1300,7 +1297,7 @@ class StrategyClass(ABC):
             else:
                 leak = self.__get_union(data=data, union_id=union_id)
 
-                if not leak is None:
+                if leak:
                     leak_type_side = leak['typeSide'].iloc[0]
                 else:
                     return None, False
@@ -1385,9 +1382,9 @@ class StrategyClass(ABC):
             'order':order_type,
             'date':self.__data_cind[-1],
             'orderPrice':price,
-            'limitPrice':limit_price if limit_price else price,
+            'limitPrice':limit_price if limit_price is not None else price,
             'amount':amount,
-            'typeSide':pos_type_side if not pos_type_side is None else buy,
+            'typeSide':pos_type_side if pos_type_side is not None else buy,
             'typeSideOrd':buy,
             'id':self.unique_id(),
             'unionId':union_id,
@@ -1505,7 +1502,7 @@ class StrategyClass(ABC):
 
         order = self.__orders[index]
 
-        if not price is None:
+        if price is not None:
             _, union = self.__price_check(
                 price=price, 
                 union_id=order['unionId'], 
@@ -1516,7 +1513,7 @@ class StrategyClass(ABC):
             if union:
                 self.__orders[index]['orderPrice'] = price
 
-        if not amount is None:
+        if amount is not None:
             self.__orders[index]['amount'] = amount
 
     def prev_positions_rec(self, label:str | None = None,
@@ -1688,7 +1685,7 @@ class StrategyClass(ABC):
                             Last has to be less than the length of 
                             'data' and greater than 0.
                             """, newline_exclude=True))
-        elif ((not isinstance(ids, dict) and not ids is None) 
+        elif ((ids and not isinstance(ids, dict)) 
             or (isinstance(ids, dict) 
             and not set(ids.keys()).issubset(('id','unionId','closeId')))):
 

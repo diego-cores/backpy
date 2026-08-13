@@ -42,13 +42,14 @@ Hidden Functions:
     _loop_data: Function to extract data from an API with a data per second limit.
 """
 
-from matplotlib.collections import PatchCollection, LineCollection, Collection
+from matplotlib.collections import PolyCollection, PatchCollection, LineCollection, Collection
 from matplotlib.patches import Rectangle, Patch
 from matplotlib.markers import MarkerStyle
+from matplotlib import colors as mcolors
 from matplotlib.axes._axes import Axes
-from matplotlib.dates import date2num
 from matplotlib.artist import Artist
 from matplotlib.lines import Line2D
+from matplotlib.path import Path
 import matplotlib as mpl
 
 from typing import Any, Callable
@@ -686,7 +687,7 @@ def plot_volume(ax:Axes, data:pd.Series,
                 width:float = 1, color:str = 'tab:orange', 
                 alpha:float = 1, zorder:float = 1) -> None:
     """
-    Volume draw.
+    Volume draw
 
     Plots volume on the provided `ax`.
 
@@ -699,13 +700,21 @@ def plot_volume(ax:Axes, data:pd.Series,
         zorder (float, optional): Z-order of the volume.
     """
 
-    x = data.index.to_numpy() - width / 2
-    volume = data.to_numpy()
+    idx = data.index.to_numpy()
+    n = len(data)
 
-    patches = [Rectangle((xi, 0), width, vol) for xi, vol in zip(x, volume)]
+    x0, x1 = idx - width/2, idx + width/2
+    y0, y1 = np.zeros(n), data.to_numpy()
 
-    ax.add_collection(
-        PatchCollection(patches, color=color, alpha=alpha, linewidth=0, zorder=zorder)) # type: ignore
+    verts = np.empty((n, 4, 2))
+    verts[:, 0] = np.column_stack([x0, y0])
+    verts[:, 1] = np.column_stack([x1, y0])
+    verts[:, 2] = np.column_stack([x1, y1])
+    verts[:, 3] = np.column_stack([x0, y1])
+
+    ax.add_collection(PolyCollection(verts, color=color, # type: ignore
+        linewidth=0, alpha=alpha, zorder=zorder), autolim=False)
+
     ax.set_ylim(top=data.max()*1.1 or 1)
     ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
                 data.index.values[-1]+(width*len(data.index)/10))
@@ -715,7 +724,7 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
                  color_down:str = 'r', color_n:str = 'k',
                  alpha:float = 1, zorder:float = 1) -> None:
     """
-    Candles draw.
+    Candles draw
 
     Plots candles on the provided `ax`.
 
@@ -734,27 +743,46 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
         zorder (float, optional): Z-order of the candles.
     """
 
-    color = data.apply(
-               lambda x: (color_n if x['close'] == x['open'] else
-                   color_up if x['close'] >= x['open'] else color_down), 
-               axis=1)
+    idx = data.index.to_numpy()
+    o = data['open'].to_numpy()
+    c = data['close'].to_numpy()
+    h = data['high'].to_numpy()
+    l = data['low'].to_numpy()
+    n = len(data)
+
+    colors = np.array([
+        mcolors.to_rgba(color_n, alpha), # type: ignore
+        mcolors.to_rgba(color_up, alpha), # type: ignore
+        mcolors.to_rgba(color_down, alpha), # type: ignore
+    ])
+    slc = np.select([c == o, c >= o], [0, 1], default=2)
 
     # Drawing vertical lines.
-    segments = [[(x, low), (x, high)] 
-                for x, low, high in zip(data.index, data['low'], data['high'])]
-    ax.add_collection(LineCollection(segments, colors=color, alpha=alpha, # type: ignore
-                                     linewidths=1, zorder=zorder)) # type: ignore
+    wick_verts:np.ndarray = np.empty((n, 2, 2))
+    wick_verts[:, 0, 0] = idx
+    wick_verts[:, 0, 1] = l
+    wick_verts[:, 1, 0] = idx
+    wick_verts[:, 1, 1] = h
 
-    x = data.index.to_numpy() - width / 2
-    y = np.minimum(data.loc[:, 'open'].to_numpy(), data.loc[:, 'close'].to_numpy())
-    height = np.abs(data.loc[:, 'close'].to_numpy() - data.loc[:, 'open'])
+    ax.add_collection(LineCollection(wick_verts, zorder=zorder, # type: ignore
+        colors=colors[slc], alpha=alpha, linewidths=1,), autolim=False)
 
     # Bar drawing.
-    patches = [Rectangle((xi, yi), width, hi) for xi, yi, hi in zip(x, y, height)]
-    ax.add_collection(PatchCollection(patches, color=color, alpha=alpha, linewidth=0, zorder=zorder)) # type: ignore
+    x0, x1 = idx - width / 2, idx + width / 2
+    y0, y1 = np.minimum(o, c), np.maximum(o, c)
 
-    ylim_range = data['high'].max() - data['low'].min()
-    ax.set_ylim(data['low'].min() - ylim_range*0.1, data['high'].max() + ylim_range*0.1)
+    body_verts = np.empty((n, 4, 2))
+    body_verts[:, 0] = np.column_stack([x0, y0])
+    body_verts[:, 1] = np.column_stack([x1, y0])
+    body_verts[:, 2] = np.column_stack([x1, y1])
+    body_verts[:, 3] = np.column_stack([x0, y1])
+
+    ax.add_collection(PolyCollection(body_verts, color=colors[slc],  # type: ignore
+        linewidth=0, alpha=alpha, zorder=zorder), autolim=False)
+
+    # Manual lim
+    ylim_range = h.max()-l.min()
+    ax.set_ylim(l.min()-ylim_range*0.1, h.max()+ylim_range*0.1)
     ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
                 data.index.values[-1]+(width*len(data.index)/10))
 
