@@ -91,6 +91,8 @@ def idct_sma(data:pd.Series, length:int = 10) -> pd.Series:
     Returns:
         Series: Series containing the SMA values for each step.
     """
+    if length <= 0:
+        raise ValueError("'length' cannot be less than or equal to 0.")
 
     return data.rolling(window=length).mean()
 
@@ -110,6 +112,8 @@ def idct_wma(data:pd.Series, length:int = 10,
     Returns:
         Series: Series containing the WMA values for each step.
     """
+    if length <= 0:
+        raise ValueError("'length' cannot be less than or equal to 0.")
 
     weight = (np.arange(1, length+1)[::-1] 
                 if invt_weight else np.arange(1, length+1))
@@ -131,10 +135,18 @@ def idct_smma(data:pd.Series, length:int = 10) -> pd.Series:
 
     Returns:
         Series: Series containing the SMMA values for each step.
-    """
+    """ 
+    if length > len(data):
+        return pd.Series(np.nan, index=data.index)
 
-    smma = data.ewm(alpha=1/length, adjust=False).mean()
-    smma.shift(1)
+    tail_vals = data.iloc[length:].to_numpy()
+    tail = np.empty(len(tail_vals) + 1)
+
+    tail[0] = data.iloc[:length].mean()
+    tail[1:] = tail_vals
+
+    smma = pd.Series(np.nan, index=data.index)
+    smma.iloc[length-1:] = pd.Series(tail).ewm(alpha=1/length, adjust=False).mean()
 
     return smma
 
@@ -150,7 +162,7 @@ def idct_sema(data:pd.Series, length:int = 9, method:str = 'sma',
         data (Series): Series of data to perform the SEMA calculation.
         length (int, optional): Length of the EMA.
         method (str, optional): Smoothing method. Choices include various smoothing 
-                        methods.
+            methods: 'sma', 'ema', 'smma', 'wma'.
         smooth (int, optional): Length of the smoothing method.
         only (bool, optional): If True, returns only a Series with the values of the 
                     'method'.
@@ -172,7 +184,7 @@ def idct_sema(data:pd.Series, length:int = 9, method:str = 'sma',
         case 'ema': smema = idct_ema(data=ema, length=smooth)
         case 'smma': smema = idct_smma(data=ema, length=smooth)
         case 'wma': smema = idct_wma(data=ema, length=smooth)
-        case _: smema = idct_sma(data=ema, length=smooth)
+        case _: raise ValueError(f"'{method}' not is a valid smothing method.")
 
     if only: return smema
     
@@ -204,14 +216,16 @@ def idct_bb(data:pd.Series, length:int = 20, std_dev:float = 2,
         DataFrame: DataFrame containing 'upper', '{ma_type}', and 'lower' 
                         values for each step.
     """
+    if std_dev <= 0:
+        raise ValueError("'std_dev' cannot be less than or equal to 0.")
 
     match ma_type:
         case 'sma': ma = idct_sma(data=data, length=length)
         case 'ema': ma = idct_ema(data=data, length=length)
         case 'wma': ma = idct_wma(data=data, length=length)
         case 'smma': ma = idct_smma(data=data, length=length)
-        case _: ma = idct_sma(data=data, length=length)
-    std_ = (std_dev * data.rolling(window=length).std())
+        case _: raise ValueError(f"'{ma_type}' not is a valid type of moving average.") 
+    std_ = (std_dev * data.rolling(window=length).std(ddof=0))
 
     return pd.DataFrame({
         'upper':ma + std_, 
@@ -248,15 +262,17 @@ def idct_rsi(data:pd.Series, length_rsi:int = 14,
         DataFrame: DataFrame containing 'rsi' and '{base_type}' values for 
                         each step.
     """
+    if bb_std_dev <= 0:
+        raise ValueError("'bb_std_dev' cannot be less than or equal to 0.")
 
     delta = data.diff()
 
-    ma = idct_sma
     match rsi_ma_type:
         case 'sma': ma = idct_sma
         case 'ema': ma = idct_ema
         case 'wma': ma = idct_wma
         case 'smma': ma = idct_smma
+        case _: raise ValueError(f"'{rsi_ma_type}' not is a valid type of moving average.") 
 
     ma_gain = ma(data = delta.where(delta > 0, 0), 
                     length=length_rsi)
@@ -271,7 +287,7 @@ def idct_rsi(data:pd.Series, length_rsi:int = 14,
         case 'smma': mv = idct_smma(data=rsi, length=length)
         case 'bb': mv = idct_bb(data=rsi, length=length,
                                         std_dev=bb_std_dev)
-        case _: mv = idct_sma(data=rsi, length=length)
+        case _: raise ValueError(f"'{base_type}' not is a valid type of moving average.")
 
     if type(mv) == pd.Series: mv.name = base_type
 
@@ -304,16 +320,22 @@ def idct_stochastic(data:pd.DataFrame, length_k:int = 14, smooth_k:int = 1,
     Returns:
         DataFrame: DataFrame containing 'stoch' and '{d_type}' values for each step.
     """
+    if length_k <= 0:
+        raise ValueError("'length_k' cannot be less than or equal to 0.")
+    elif smooth_k <= 0:
+        raise ValueError("'smooth_k' cannot be less than or equal to 0.")
+    elif length_d <= 0:
+        raise ValueError("'length_d' cannot be less than or equal to 0.")
 
     low_data = data.loc[:, 'low'].rolling(window=length_k).min()
     high_data = data.loc[:, 'high'].rolling(window=length_k).max()
 
-    ma = idct_sma
     match d_type:
         case 'sma': ma = idct_sma
         case 'ema': ma = idct_ema
         case 'wma': ma = idct_wma
         case 'smma': ma = idct_smma
+        case _: raise ValueError(f"'{d_type}' not is a valid type of moving average.") 
 
     stoch = (((data[source] - low_data) / 
                 (high_data - low_data)) * 100).rolling(window=smooth_k).mean()
@@ -400,20 +422,30 @@ def idct_macd(data:pd.Series, short_len:int = 12,
         DataFrame: A DataFrame with MACD values and signal line for each step.
     """
 
-    macd_ma = idct_ema
     match macd_ma_type:
         case 'ema':
             macd_ma = idct_ema
         case 'sma':
             macd_ma = idct_sma
+        case 'wma': 
+            macd_ma = idct_wma
+        case 'smma': 
+            macd_ma = idct_smma
+        case _:
+            raise ValueError(f"'{macd_ma_type}' not is a valid type of moving average.") 
 
-    signal_ma = idct_ema
     match signal_ma_type:
         case 'ema':
             signal_ma = idct_ema
         case 'sma':
             signal_ma = idct_sma
-    
+        case 'wma': 
+            signal_ma = idct_wma
+        case 'smma': 
+            signal_ma = idct_smma
+        case _:
+            raise ValueError(f"'{signal_ma_type}' not is a valid type of moving average.") 
+
     short_ema = macd_ma(data=data, length=short_len)
     long_ema = macd_ma(data=data, length=long_len)
     macd = short_ema - long_ema
@@ -501,6 +533,8 @@ def idct_rlinreg(data:pd.Series, length:int = 5, offset:int = 1) -> pd.Series:
     Returns:
         Series: Series with the linear regression values for each window.
     """
+    if offset < 0 or offset >= length:
+        raise ValueError("'offset' cannot be less than 0 and cannot be more or equal than 'length'")
 
     x = np.arange(length)
     y = data.rolling(window=length)
@@ -524,6 +558,8 @@ def idct_mom(data:pd.Series, length:int = 10) -> pd.Series:
     Returns:
         Series: Series with the momentum values for each step.
     """
+    if length <= 0:
+        raise ValueError("'length' cannot be less than or equal to 0.")
 
     return data - data.shift(length)
 
@@ -535,6 +571,7 @@ def idct_ichimoku(data:pd.DataFrame, tenkan_period:int = 9,
     Calculate Ichimoku cloud values.
 
     This function calculates the Ichimoku cloud.
+    The displacement is not calculated, the results are the same, but the data is not displaced.
 
     Args:
         data (DataFrame): The data used to calculate the Ichimoku cloud values.
@@ -550,12 +587,17 @@ def idct_ichimoku(data:pd.DataFrame, tenkan_period:int = 9,
         - 'senkou_b'
         - 'tenkan_sen'
         - 'kijun_sen'
-        - 'ichimoku_lines'
 
     Returns:
         DataFrame: A DataFrame with Ichimoku cloud values and optionally
             'tenkan_sen' and 'kijun_sen' columns if `ichimoku_lines` is True.
     """
+    if tenkan_period <= 0:
+        raise ValueError("'tenkan_period' cannot be less than or equal to 0.")
+    elif kijun_period <= 0:
+        raise ValueError("'kijun_period' cannot be less than or equal to 0.")
+    elif senkou_span_b_period <= 0:
+        raise ValueError("'senkou_span_b_period' cannot be less than or equal to 0.")
 
     tenkan_sen_val = (data.loc[:, 'high'].rolling(window=tenkan_period).max() + 
                         data.loc[:, 'low'].rolling(window=tenkan_period).min()) / 2
@@ -572,7 +614,7 @@ def idct_ichimoku(data:pd.DataFrame, tenkan_period:int = 9,
                                 'kijun_sen':kijun_sen_val}) 
                     if ichimoku_lines else 
                     pd.DataFrame({'senkou_a':senkou_span_a_val,
-                                    'senkou_b':senkou_span_b_val}))
+                                'senkou_b':senkou_span_b_val}))
 
     return senkou_span
 
@@ -607,7 +649,7 @@ def idct_atr(data:pd.DataFrame, length:int = 14, smooth:str = 'smma',
         case 'smma':
             atr:np.ndarray = idct_smma(data=tr, length=length)
         case _:
-            atr:np.ndarray = idct_wma(data=tr, length=length)
+            raise ValueError(f"'{smooth}' not is a valid type of moving average.") 
 
     return atr
 

@@ -107,7 +107,7 @@ class TestCustomPlt(unittest.TestCase):
         Verify that the grid is generated correctly and a single background color.
         """
 
-        bg = "#123456"
+        bg = '#123456'
         cs_plt.custom_ax(self.ax, bg=bg)
 
         facecolor = matplotlib.colors.to_hex(self.ax.get_facecolor())

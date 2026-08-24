@@ -838,15 +838,12 @@ class StrategyClass(ABC):
 
         self.__to_delete[name].update(index)
 
-    def unique_id(self = None) -> str:
+    @staticmethod
+    def unique_id() -> str:
         """
         Unique id
 
         Generates a random id quickly.
-
-        Args:
-            self (optional): 
-                You can run the function from the instance.
 
         Returns:
             str: An unique id.
@@ -2314,10 +2311,10 @@ class StrategyClass(ABC):
                                             'bb_mult' it has to be greater than 
                                             0.001.
                                             """, newline_exclude=True))
-        elif kc_len <= 0: 
+        elif kc_len <= 1: 
             raise ValueError(utils.text_fix("""
                                             'kc_len' it has to be greater than 
-                                            0.
+                                            1.
                                             """, newline_exclude=True))
         elif kc_mult < 0.001: 
             raise ValueError(utils.text_fix("""

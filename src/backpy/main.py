@@ -30,6 +30,8 @@ Hidden Functions:
 
 from typing import Callable, Sequence
 from datetime import datetime
+from pathlib import Path
+from time import time
 import logging
 
 from matplotlib.collections import LineCollection, PatchCollection, PathCollection, PolyCollection
@@ -42,8 +44,6 @@ import random as rd
 import pickle as pk
 import pandas as pd
 import numpy as np
-
-from time import time
 
 from . import custom_plt as cpl
 from . import flex_data as flx
@@ -409,7 +409,7 @@ def load_data(data:pd.DataFrame, icon:str | None = None,
 
     if statistics: stats.stats_icon(prnt=True)
 
-def load_data_bpd(path:str = 'data.bpd', start:int | None = None, 
+def load_data_bpd(path:str|Path = 'data.bpd', start:int | None = None, 
                   end:int | None = None, days_op:int | None = None, 
                   statistics:bool = True, progress:bool = True, 
                   data_extract:bool = False
@@ -423,7 +423,7 @@ def load_data_bpd(path:str = 'data.bpd', start:int | None = None,
         To save a .pbd file use 'save_data_bpd'.
 
     Args:
-        path (str, optional): Path address to the file to be loaded (.bpd).
+        path (str|Path, optional): Path address to the file to be loaded (.bpd).
         start (int  | None, optional): Cut the saved data [start:end].
         end (int | None, optional): Cut the saved data [start:end].
         days_op (int | None, optional): Number of operable days in 1 year. This will be 
@@ -487,7 +487,7 @@ def load_data_bpd(path:str = 'data.bpd', start:int | None = None,
     _cm.__data_year_days = days_op
     _cm.__data_width_day = utils.calc_day(interval, _cm.__data_width)
 
-def save_data_bpd(file_name:str = 'data') -> None:
+def save_data_bpd(file_name:str|Path = 'data') -> None:
     """
     Save data on .bpd file
 
@@ -511,7 +511,11 @@ def save_data_bpd(file_name:str = 'data') -> None:
         raise exception.RunError('Year days not loaded.')
 
     _cm.__data.columns = _cm.__data.columns.str.lower()
-    with open(f"{file_name}.bpd", "wb") as file:
+
+    file_name = Path(file_name)
+    file_name = file_name.parent / f"{file_name.name}.bpd"
+
+    with open(file_name, "wb") as file:
         pk.dump((_cm.__data, 
                 _cm.__data_icon, 
                 _cm.__data_interval, 
