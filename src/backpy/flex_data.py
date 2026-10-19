@@ -14,7 +14,7 @@ Classes:
 """
 
 from __future__ import annotations
-from typing import Self, Any, cast, overload, Callable
+from typing import Any, cast, overload, Callable, TypeVar, Generic, TYPE_CHECKING
 import logging
 
 from pandas.api.extensions import ExtensionArray
@@ -28,8 +28,9 @@ from . import exception
 from . import utils
 
 logger:logging.Logger = logging.getLogger(__name__)
+ScalarT = TypeVar('ScalarT', bound=np.generic) 
 
-class DataWrapper():
+class DataWrapper(Generic[ScalarT]):
     """
     Data wrapper.
 
@@ -65,8 +66,8 @@ class DataWrapper():
     def __init__(
             self, data: (list | dict[str, list] | ExtensionArray | np.ndarray | pd.DataFrame
                           | pd.Series | pd.Index | DataWrapper | None) = None, 
-            columns: np.ndarray | pd.Index | range | list | tuple | "DataWrapper" | None = None,
-            index: np.ndarray | pd.Index | range | list | tuple | "DataWrapper" | None = None,
+            columns: np.ndarray | pd.Index | range | list | tuple | DataWrapper | None = None,
+            index: np.ndarray | pd.Index | range | list | tuple | DataWrapper | None = None,
             alert: bool = False
         ) -> None:
         """
@@ -106,7 +107,7 @@ class DataWrapper():
 
         Args:
             columns (ndarray | Index 
-                | list | tuple | "DataWrapper" | None, optional): 
+                | list | tuple | "DataWrapper" | None): 
                 Columns to convert.
             index (bool, optional): Instead of searching for 
                 the '_columns' attribute in 'DataWrapper' search for '_index'.
@@ -127,7 +128,7 @@ class DataWrapper():
             return np.array(columns, ndmin=1)
 
     def __set_convertible(self, data:list | dict[str, list] | ExtensionArray | np.ndarray | pd.DataFrame 
-                | pd.Series | pd.Index | "DataWrapper" | None) -> np.ndarray:
+                | pd.Series | pd.Index | DataWrapper | None) -> np.ndarray:
         """
         Set convertible.
 
@@ -162,7 +163,7 @@ class DataWrapper():
         return data
 
     def __set_index(self, data:list | dict[str, list] | ExtensionArray | np.ndarray | pd.DataFrame 
-                | pd.Series | pd.Index | "DataWrapper" | None) -> range|np.ndarray|None:
+                | pd.Series | pd.Index | DataWrapper | None) -> range|np.ndarray|None:
         """
         Set index.
 
@@ -186,7 +187,7 @@ class DataWrapper():
         return None
 
     def __set_columns(self, data:list | dict[str, list] | ExtensionArray | np.ndarray | pd.DataFrame 
-                | pd.Series | pd.Index | "DataWrapper" | None) -> np.ndarray|range|None:
+                | pd.Series | pd.Index | DataWrapper | None) -> np.ndarray|range|None:
         """
         Set index.
 
@@ -370,7 +371,7 @@ class DataWrapper():
             """, newline_exclude=False))
         return self._data.tolist()
 
-    def __getattr__(self, name):
+    def __getattr__(self, name) -> Any:
         attr:Any|None = getattr(self._data, name, None)
         if callable(attr):
             c_attr = attr
@@ -392,12 +393,15 @@ class DataWrapper():
         return self._data if dtype is None else self._data.astype(dtype)
 
     @overload
-    def __getitem__(self, index: int | slice) -> np.ndarray: ...
+    def __getitem__(self, index: int) -> ScalarT: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> DataWrapper[ScalarT]: ...
 
     @overload
     def __getitem__(self, index: str) -> np.ndarray: ...
 
-    def __getitem__(self, index:str|int|slice) -> np.ndarray:
+    def __getitem__(self, index:str|int|slice) -> np.ndarray | ScalarT | DataWrapper[ScalarT]:
         if len(self._data) == 0: return self._data
 
         return self._data[index]
@@ -437,6 +441,13 @@ class DataWrapper():
         return DataWrapper(
             self._data / (other.unwrap() if isinstance(other, DataWrapper) else other))
 
+    if TYPE_CHECKING:
+        def sum(self, *args, **kwargs) -> ScalarT: ...
+        def mean(self, *args, **kwargs) -> np.floating: ...
+        def std(self, *args, **kwargs) -> np.floating: ...
+        def min(self, *args, **kwargs) -> np.floating: ...
+        def max(self, *args, **kwargs) -> np.floating: ...
+
 class CostsValue:
     """
     Costs value.
@@ -449,6 +460,7 @@ class CostsValue:
 
     Private Attributes:
         _value: Given value.
+        _seed: Numpy random generator.
         _error: Custom message displayed at the end of an error.
         _rand_supp: Whether random values can be generated or not.
         __maker: function that returns maker value.  
@@ -467,21 +479,24 @@ class CostsValue:
             self, value: (float | tuple[float, float] | tuple[float 
             | tuple[float, float], float | tuple[float, float]]), 
             supp_random:bool = True, supp_double:bool = False, 
-            cust_error:str | None = None
+            seed:int|None = None, cust_error:str | None = None
         ) -> None:
         """
         Builder method.
 
         Args:
-            value (float | tuple[float, float] | tuple[float | tuple[float, float], float | tuple[float, float]]): 
+            value (float|tuple[float,float]|tuple[float|tuple[float,float],float|tuple[float, float]]): 
                 Data tuple with this format: (maker, taker).
             supp_random (bool, optional): If it supports random values.
             supp_double (bool, optional): False if there is only one side (maker, taker).
+            seed (int|None, optional): Random seed.
             cust_error (str | None, optional): If an error occurs, 
                 you can add custom text at the end of the error.
+            
         """
 
         self._value = value
+        self._random = np.random.default_rng(seed)
         self._rand_supp = supp_random
         self._error = ' ' + (cust_error or '')
 
@@ -519,7 +534,7 @@ class CostsValue:
                 raise exception.CostValueError(
                     f"No value can be less than 0.{self._error}")
 
-            return lambda: rd.uniform(*val)
+            return lambda: self._random.uniform(*val)
         elif isinstance(val, (int, float)):
             if val < 0:
                 raise exception.CostValueError(
@@ -575,14 +590,14 @@ class ChunkWrapper(np.ndarray):
     _chunk_size:int
     _pos:int
 
-    def __new__(cls, data:Any = np.array([]), 
+    def __new__(cls, data:Any = None, 
                 dtype:str | type | np.dtype | None = None,
-                chunk_size: int | None = None) -> Self:
+                chunk_size: int | None = None) -> ChunkWrapper:
         """
         Constructor method.
 
         Args:
-            data (Any): Value to store.
+            data (Any): Value to store. Default: np.array([]).
             dtype (str | type | dtype | None, optional): 
                 Numpy dtype, None sets the dtype already set.
             chunk_size (int, optional): Size of each chunk.
@@ -590,8 +605,9 @@ class ChunkWrapper(np.ndarray):
 
         # exceptions
         if chunk_size and (not isinstance(chunk_size, int) or chunk_size <= 0):
-            raise ValueError(
-                "'chunk_size' can only be 'int' greater than 0.")
+            raise ValueError("'chunk_size' can only be 'int' greater than 0.")
+
+        if data is None: data = np.array([])
 
         obj = np.asarray(data, dtype=dtype).view(cls)
         obj._pos = len(data)

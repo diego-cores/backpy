@@ -24,7 +24,7 @@ class TestTkWindow(unittest.TestCase):
     def setUp(self) -> None:
         self.fig, self.ax = matplotlib.pyplot.subplots()
 
-        setattr(_cm, '__panel_list', [])
+        _cm.plot_state._panel_list = []
         self._mod__panel_list = []
 
         self._mod__panel_list.append({
@@ -45,8 +45,8 @@ class TestTkWindow(unittest.TestCase):
         mock_win_instance = MagicMock()
         mock_win.return_value = mock_win_instance
 
-        setattr(_cm, '__panel_list', self._mod__panel_list)
-        setattr(_cm, '__panel_wmax', 4)
+        _cm.plot_state._panel_list = self._mod__panel_list
+        _cm.plot_state._panel_wmax = 4
 
         tkw.new_paneledw(False)
         mock_win.assert_called_once()
@@ -63,14 +63,14 @@ class TestTkWindow(unittest.TestCase):
         with self.assertRaises(ex.CustomWinError):
             tkw.new_paneledw(True)
 
-        setattr(_cm, '__panel_list', self._mod__panel_list * 2)
-        setattr(_cm, '__panel_wmax', 4)
+        _cm.plot_state._panel_list = self._mod__panel_list * 2
+        _cm.plot_state._panel_wmax = 4
 
         with self.assertRaises(ex.CustomWinError):
             tkw.new_paneledw(False)
 
     @patch("backpy.tk_window.new_paneledw")
-    @patch("backpy.tk_window.mpl.pyplot.close")
+    @patch("backpy.tk_window.mpl.pyplot.close") # pyrefly: ignore
     def test_add_window(self, mock_close:MagicMock, mock_new_paneledw:MagicMock) -> None:
         """
         Test 'add_window'
@@ -78,18 +78,18 @@ class TestTkWindow(unittest.TestCase):
         Verify that the function works correctly.
         """
 
-        setattr(_cm, '__panel_wmax', 4)
+        _cm.plot_state._panel_wmax = 4
 
         tkw.add_window(self.fig, new=False)
-        self.assertEqual(len(getattr(_cm, '__panel_list', [])), 1)
-        panel = getattr(_cm, '__panel_list', [{}])[0]
+        self.assertEqual(len(_cm.plot_state._panel_list), 1)
+        panel = _cm.plot_state._panel_list[0]
         self.assertIs(panel['fig'], self.fig)
 
         mock_close.assert_called_once_with(self.fig)
         mock_new_paneledw.assert_called_once()
 
     @patch("backpy.tk_window.CustomWin")
-    @patch("backpy.tk_window.mpl.pyplot.close")
+    @patch("backpy.tk_window.mpl.pyplot.close") # pyrefly: ignore
     def test_add_window_true(self, mock_close:MagicMock, mock_win:MagicMock) -> None:
         """
         Test 'add_window'

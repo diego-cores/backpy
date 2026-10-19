@@ -48,7 +48,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
-from typing import Callable, Sequence
+from typing import Callable, Sequence, cast
 from time import time
 import logging
 
@@ -266,8 +266,15 @@ def payoff_ratio(profits:pd.Series|np.ndarray) -> float:
 
     profits = profits[~np.isnan(profits)]
 
-    return (profits[profits > 0].mean() 
-            / abs(profits[profits < 0].mean()))
+    wins = profits[profits > 0]
+    losses = profits[profits < 0]
+
+    if not len(losses):
+        return np.nan
+    elif not len(wins):
+        return 0.0
+
+    return (wins.mean() / abs(losses.mean()))
 
 def expectation(profits:pd.Series|np.ndarray) -> float:
     """
@@ -495,7 +502,7 @@ def perf_tzone_chart(names:Sequence[str|int|None]|str|int|None = None,
     gdir = plt_colors.get('gdir', False)
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
 
-    fig = plt.figure(figsize=(16,8),dpi=_cm.graph_dpi)
+    fig = plt.figure(figsize=(16,8),dpi=_cm.user_config.graph_dpi)
     fig.subplots_adjust(left=0, right=1, top=1, 
                         bottom=0, wspace=0, hspace=0)
 
@@ -620,7 +627,7 @@ def distribution_chart(data:tuple[dict[str, np.ndarray|list], str], view:str = '
     gdir = plt_colors.get('gdir', False)
     market_colors = plt_colors.get('mk', {'u':'g', 'd':'r'})
 
-    fig = plt.figure(figsize=(16,8),dpi=_cm.graph_dpi)
+    fig = plt.figure(figsize=(16,8),dpi=_cm.user_config.graph_dpi)
     fig.subplots_adjust(left=0, right=1, top=1, 
                         bottom=0, wspace=0, hspace=0)
 
@@ -629,7 +636,7 @@ def distribution_chart(data:tuple[dict[str, np.ndarray|list], str], view:str = '
 
     t = time()
     load_prgs = utils.ProgressBar()
-    load_prgs.adder_add({'DataTimer':lambda x=t: utils.num_align(time()-x)})
+    load_prgs.adder_add({'PlotTimer':lambda x=t: utils.num_align(time()-x)})
     if progress:
         load_prgs.reset_size(len(v_view))
 
@@ -747,9 +754,10 @@ def distribution_chart(data:tuple[dict[str, np.ndarray|list], str], view:str = '
 
 def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None, 
                     n_trades:int|None = None, n_sims:int|None = 10000, 
-                    percentiles:Sequence[int|float] = [1,5,10,24,50,75],
+                    percentiles:Sequence[int|float]|None = None,
                     replace:bool = True, full_output:bool|int = False, 
-                    prnt:bool = True, progress:bool = True) -> tuple[dict[str,np.ndarray|list],str]:
+                    seed:int|None = None, prnt:bool = True, 
+                    progress:bool = True) -> tuple[dict[str,np.ndarray|list],str]:
     """
     Monte Carlo bootstrap simulation
 
@@ -769,7 +777,8 @@ def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None,
         n_trades (int|None, optional): Number of trades per simulation, 
             None = length of loaded trades.
         n_sims (int|None, optional): Number of simulations.
-        percentiles (Sequence[int|float], optional): Percentiles for statistics.
+        percentiles (Sequence[int|float]|None, optional): Percentiles for statistics.
+            Default: (1,5,10,24,50,75)
         replace (bool, optional): If False change the Monte Carlo simulation, 
             remove the possibility of duplicates; 'n_trades' 
             cannot exceed the length of the trades.
@@ -781,6 +790,7 @@ def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None,
                 100 are returned.
             - int: same as False, but caps the returned simulations at 
                 this value instead of 100.
+        seed (int|None, optional): Random seed. 
         prnt (bool, optional): If True, the statistics are 
             printed on the console.
         progress (bool, optional): If True, shows a progress bar and timer.
@@ -798,8 +808,7 @@ def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None,
         raise exception.StatsError(
             "'n_sims' can only be greater than 0.")
 
-    trades = _cm.__get_trades(names=names)['profitPer'].dropna().to_numpy(dtype=np.float32)
-    sim = [trades[:n_trades]]
+    trades = _cm.__get_trades(names=names)
     n_sims = n_sims or 10000
 
     if n_trades and not replace and (n_trades <= 1 or n_trades > len(trades)):
@@ -807,13 +816,21 @@ def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None,
             f"'n_trades' has to be greater than 1 and less than the total number of trades ({len(trades)}).")
     elif len(trades) < 1:
         logger.warning('Trades not loaded.'); return ({}, '')
+    elif not 'profitPer' in trades.columns:
+        logger.warning('No closed trades.'); return ({}, '')
+
+    if percentiles is None: percentiles = (1,5,10,24,50,75)
+
+    trades = trades['profitPer'].dropna().to_numpy(dtype=np.float32)
+    sim = [trades[:n_trades]]
+    rng = np.random.default_rng(seed)
 
     t = time()
     load_prgs = utils.ProgressBar()
-    load_prgs.adder_add({'DataTimer':lambda x=t: utils.num_align(time()-x)})
+    load_prgs.adder_add({'StatTimer':lambda x=t: utils.num_align(time()-x)})
     if progress:
         load_prgs.reset_size(n_sims)
-    skip = max(1, n_sims // _cm.max_bar_updates)
+    skip = max(1, n_sims // _cm.user_config.max_bar_updates)
 
     # Data limitation
     rn_trades = (n_trades or len(trades))
@@ -821,7 +838,7 @@ def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None,
     alldata = full_output if isinstance(full_output, bool) else False
 
     total_data = n_sims * rn_trades
-    if total_data > _cm._max_elements and not alldata:
+    if total_data > _cm.user_config._max_elements and not alldata:
         total_data = min(maxsims * rn_trades, total_data)
     if total_data != n_sims * rn_trades:
         logger.warning(f'Returned data limited to {total_data//rn_trades} sims')
@@ -851,7 +868,7 @@ def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None,
 
     # Monte carlo sim
     for i in range(n_sims):
-        trades_s = np.random.choice(trades, size=rn_trades, replace=replace)
+        trades_s = rng.choice(trades, size=rn_trades, replace=replace)
         calc_stats(trades_s)
 
         if (len(sim)-1)*rn_trades < total_data:
@@ -869,32 +886,33 @@ def monte_carlo_bsim(names:Sequence[str|int|None]|str|int|None = None,
     percentiles_r = np.percentile(stats_carr['last_result'], percentiles)
     percentiles_t = {
         f'Percentile {percentiles[i]}':[
-            round(v, 2), _cm.__COLORS['GREEN'] if v > 0 else _cm.__COLORS['RED']
+            round(v, 2), _cm.COLORS['GREEN'] if v > 0 else _cm.COLORS['RED']
         ] for i,v in enumerate(percentiles_r)}
 
     text = {
         'Average return':[(md_rtrn:=round(np.average(stats_carr['last_result']), 1)),
-                         _cm.__COLORS['GREEN'] if md_rtrn > 0 else _cm.__COLORS['RED']],
+                         _cm.COLORS['GREEN'] if md_rtrn > 0 else _cm.COLORS['RED']],
         'Profit fact avg':[(prft_fact:=utils.round_r(np.average(stats_carr['profit_fact']), 3)),
-                              _cm.__COLORS['GREEN'] if prft_fact > 1 else _cm.__COLORS['RED']],
+                              _cm.COLORS['GREEN'] if prft_fact > 1 else _cm.COLORS['RED']],
         'Max drawdown avg':[str(round(np.average(stats_carr['max_drawdown'])*100, 1)) + '%'],
         'Average drawdown avg':[str(-round(np.average(stats_carr['avg_drawdown'])*100, 1)) + '%'],
         'Expectation avg':[utils.round_r(np.average(stats_carr['expectation']), 2)],
         'Winnings avg':[str(round(np.average(stats_carr['winrate']), 1)) + '%',
-                           _cm.__COLORS['GREEN']],
-        f"\n{_cm.__COLORS['CYAN']}Percentiles{_cm.__COLORS['RESET']}":['']
+                           _cm.COLORS['GREEN']],
+        f"\n{_cm.COLORS['CYAN']}Percentiles{_cm.COLORS['RESET']}":['']
     }
     text.update(percentiles_t)
 
     text = utils.statistics_format(text, f"---Statistics of Monte Carlo---")
-    text = text if _cm.dots else text.replace('.', ',')
+    text = text if _cm.user_config.dots else text.replace('.', ',')
 
     print(text)
     return returned
 
 def permutation(names:Sequence[str|int|None]|str|int|None = None,
                 n_sims:int = 1000, max_concrr:int|None = None, cost:bool = True, 
-                frag_attps:int = 3, full_output:bool|int = False, prnt:bool = True, 
+                frag_attps:int = 3, full_output:bool|int = False, 
+                seed:int|None = None, prnt:bool = True, 
                 progress:bool = True) -> tuple[dict[str,np.ndarray|list],str]:
     """
     Permutation
@@ -931,6 +949,7 @@ def permutation(names:Sequence[str|int|None]|str|int|None = None,
                 100 are returned.
             - int: same as False, but caps the returned simulations at 
                 this value instead of 100.
+        seed (int|None, optional): Random seed. 
         prnt (bool, optional): If True, the statistics are 
             printed on the console.
         progress (bool, optional): If True, shows a progress bar and timer.
@@ -943,7 +962,7 @@ def permutation(names:Sequence[str|int|None]|str|int|None = None,
     """
 
     # Exceptions.
-    if _cm.__data is None or not type(_cm.__data) is pd.DataFrame or _cm.__data.empty:
+    if _cm.data_state._data is None or not type(_cm.data_state._data) is pd.DataFrame or _cm.data_state._data.empty:
         raise exception.StatsError('Data not loaded.')
     elif max_concrr is not None and max_concrr < 1:
         raise exception.StatsError("'max_concrr' must be >= 1.")
@@ -958,10 +977,10 @@ def permutation(names:Sequence[str|int|None]|str|int|None = None,
 
     t = time()
     load_prgs = utils.ProgressBar()
-    load_prgs.adder_add({'DataTimer':lambda x=t: utils.num_align(time()-x)})
+    load_prgs.adder_add({'StatTimer':lambda x=t: utils.num_align(time()-x)})
     if progress:
         load_prgs.reset_size(n_sims)
-    skip = max(1, n_sims // _cm.max_bar_updates)
+    skip = max(1, n_sims // _cm.user_config.max_bar_updates)
 
     signals = []
     for t in trades.values.tolist():
@@ -971,7 +990,7 @@ def permutation(names:Sequence[str|int|None]|str|int|None = None,
 
     if max_concrr is None:
         total_duration = np.asarray(signals)[:, 0].sum()
-        max_concrr = 1+int(total_duration/(_cm.__data.index[-1]-_cm.__data.index[0]))
+        max_concrr = 1+int(total_duration/(_cm.data_state._data.index[-1]-_cm.data_state._data.index[0]))
         logger.warning("'max_concrr' not specified, using estimated value: "+str(max_concrr))
 
     # Data limitation
@@ -979,17 +998,17 @@ def permutation(names:Sequence[str|int|None]|str|int|None = None,
     alldata = full_output if isinstance(full_output, bool) else False
 
     total_data = n_sims * len(trades)
-    if total_data > _cm._max_elements and not alldata:
+    if total_data > _cm.user_config._max_elements and not alldata:
         total_data = min(maxsims * len(trades), total_data)
     if total_data != n_sims * len(trades):
         logger.warning(f'Returned data limited to {total_data//len(trades)} sims')
 
-    spread_pct = _cm.__spread_pct or flex_data.CostsValue(0)
-    slippage_pct = _cm.__slippage_pct or flex_data.CostsValue(0)
+    spread_pct = _cm.data_state._spread_pct or flex_data.CostsValue(0)
+    slippage_pct = _cm.data_state._slippage_pct or flex_data.CostsValue(0)
 
-    data_idx = _cm.__data.index.values
+    data_idx = _cm.data_state._data.index.values
     data_idx_len = len(data_idx)
-    data_closes = _cm.__data['close'].to_numpy()
+    data_closes = _cm.data_state._data['close'].to_numpy()
 
     test:list[np.ndarray] = [trades['profitPer'].dropna().to_numpy()]
     stats = []
@@ -1017,6 +1036,7 @@ def permutation(names:Sequence[str|int|None]|str|int|None = None,
     signals_range = range(len(signals))
 
     max_idxs:np.ndarray = data_idx.searchsorted(data_idx[-1]-sff_sig_sum)
+    rng = np.random.default_rng(seed)
 
     if (max_idxs-1 < 0).any():
         raise exception.StatsError(
@@ -1055,7 +1075,7 @@ def permutation(names:Sequence[str|int|None]|str|int|None = None,
             if len(valid_indices) == 0:
                 raise exception.DataFragError
 
-            idx = valid_indices[np.random.randint(len(valid_indices))]
+            idx = valid_indices[rng.integers(len(valid_indices))]
             exit_idx = int(exit_indices[idx])
             coverage[idx:exit_idx] += 1
 
@@ -1105,29 +1125,29 @@ def permutation(names:Sequence[str|int|None]|str|int|None = None,
     profitf_result = stats_carr['profit_fact']
 
     text = {
-        f"{_cm.__COLORS['CYAN']}Z-score{_cm.__COLORS['RESET']}":[''],
+        f"{_cm.COLORS['CYAN']}Z-score{_cm.COLORS['RESET']}":[''],
         'Z return':[round(z_s:=z_score(last_result, last_result[0]), 3), 
-            _cm.__COLORS['GREEN'] if z_s > 0 else _cm.__COLORS['RED'] if z_s < 0 else ''],
+            _cm.COLORS['GREEN'] if z_s > 0 else _cm.COLORS['RED'] if z_s < 0 else ''],
         'Z profit fact':[round(z_spf:=z_score(profitf_result, profitf_result[0]), 3), 
-            _cm.__COLORS['GREEN'] if z_spf > 0 else _cm.__COLORS['RED'] if z_spf < 0 else ''],
+            _cm.COLORS['GREEN'] if z_spf > 0 else _cm.COLORS['RED'] if z_spf < 0 else ''],
         'Z sharpe ratio':[round(z_ssp:=z_score(sharp_result, sharp_result[0]), 3), 
-            _cm.__COLORS['GREEN'] if z_ssp > 0 else _cm.__COLORS['RED'] if z_ssp < 0 else ''],
+            _cm.COLORS['GREEN'] if z_ssp > 0 else _cm.COLORS['RED'] if z_ssp < 0 else ''],
 
-        f"\n{_cm.__COLORS['CYAN']}P-value{_cm.__COLORS['RESET']}":[''],
+        f"\n{_cm.COLORS['CYAN']}P-value{_cm.COLORS['RESET']}":[''],
         'P return':[round(p_v:=np.mean(last_result >= last_result[0]), 3), 
-            _cm.__COLORS['RED'] if p_v > 0.05 else _cm.__COLORS['GREEN']],
+            _cm.COLORS['RED'] if p_v > 0.05 else _cm.COLORS['GREEN']],
         'P profit fact':[round(p_vpf:=np.mean(profitf_result >= profitf_result[0]), 3), 
-            _cm.__COLORS['RED'] if p_vpf > 0.05 else _cm.__COLORS['GREEN']],
+            _cm.COLORS['RED'] if p_vpf > 0.05 else _cm.COLORS['GREEN']],
         'P sharpe ratio':[round(p_vsp:=np.mean(sharp_result >= sharp_result[0]), 3), 
-            _cm.__COLORS['RED'] if p_vsp > 0.05 else _cm.__COLORS['GREEN']],
+            _cm.COLORS['RED'] if p_vsp > 0.05 else _cm.COLORS['GREEN']],
 
-        f"\n{_cm.__COLORS['CYAN']}Others{_cm.__COLORS['RESET']}":[''],
+        f"\n{_cm.COLORS['CYAN']}Others{_cm.COLORS['RESET']}":[''],
         'percentile rank':[str(round(percentile_rank(last_result[1:], last_result[0], form='mean')*100, 2))+'%', 
-            _cm.__COLORS['GREEN']],
+            _cm.COLORS['GREEN']],
     }
     text = utils.statistics_format(text, f"---Statistics of permutation test---")
 
-    text = text if _cm.dots else text.replace('.', ',')
+    text = text if _cm.user_config.dots else text.replace('.', ',')
 
     print(text)
     return returned
@@ -1209,9 +1229,9 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None,
         str|None: Statistics.
     """
 
-    data_interval = _cm.__data_interval if data_interval is None else data_interval
-    data_icon = _cm.__data_icon if data_icon is None else data_icon
-    data = _cm.__data if data is None else data
+    data_interval = _cm.data_state._data_interval if data_interval is None else data_interval
+    data_icon = _cm.data_state._data_icon if data_icon is None else data_icon
+    data = _cm.data_state._data if data is None else data
 
     # Exceptions.
     if data is None: 
@@ -1237,25 +1257,25 @@ def stats_icon(prnt:bool = True, data:pd.DataFrame | None = None,
 
     text = utils.statistics_format({
         'Last price':[utils.round_r(data['close'].iloc[-1],2),
-                      _cm.__COLORS['BOLD']],
+                      _cm.COLORS['BOLD']],
         'Maximum price':[utils.round_r(data['high'].max(),2),
-                         _cm.__COLORS['GREEN']],
+                         _cm.COLORS['GREEN']],
         'Minimum price':[utils.round_r(data['low'].min(),2),
-                         _cm.__COLORS['RED']],
+                         _cm.COLORS['RED']],
         'Maximum volume':[utils.round_r(data['volume'].max(), 2),
-                          _cm.__COLORS['CYAN']],
+                          _cm.COLORS['CYAN']],
         'Sample size':[len(data.index)],
         'Standard deviation':[utils.round_r(
             np.std(data['close'].dropna(), ddof=1),2)],
         'Average price':[utils.round_r(data.loc[:, 'close'].mean(),2),
-                         _cm.__COLORS['YELLOW']],
+                         _cm.COLORS['YELLOW']],
         'Average volume':[utils.round_r(data.loc[:, 'volume'].mean(),2),
-                          _cm.__COLORS['YELLOW']],
+                          _cm.COLORS['YELLOW']],
         f"'{data_icon}'":[f'{r_date} ~ {data_interval}',
-                          _cm.__COLORS['CYAN']],
+                          _cm.COLORS['CYAN']],
     }, f"---Statistics of '{data_icon}'---")
 
-    text = text if _cm.dots else text.replace('.', ',')
+    text = text if _cm.user_config.dots else text.replace('.', ',')
     if prnt:print(text) 
     else: return text
 
@@ -1346,7 +1366,8 @@ def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = N
                 values mean high frequency and low values mean the opposite.
         - Max consecutive winn: Maximum consecutive winnings count. 
         - Max consecutive loss: Maximum consecutive loss count. 
-        - Max losing streak: Maximum number of lost trades in drawdown.
+        - Win-loss cum drawdown: Maximum drawdown in the cumulative 
+                counter of winning trades minus losing trades.
         - Max drawdown:  The biggest drawdown the equity has ever had.
         - Average drawdown: The average of all drawdowns of equity curve, 
                 indicating the typical loss experienced before recovery.
@@ -1404,7 +1425,7 @@ def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = N
     trades_streak = (trades_count_cs.cumsum() 
                      - np.maximum.accumulate(trades_count_cs.cumsum()))
 
-    with np.errstate(over='ignore'):
+    with np.errstate(over='ignore', divide='ignore', invalid='ignore'):
         trades['multiplier'] = 1 + trades['profitPer'] / 100
 
         nan_inf = lambda x: x.where(~np.isinf(x), np.nan)
@@ -1415,94 +1436,94 @@ def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = N
 
         text = utils.statistics_format({
         'Trades':[len(trades.index),
-                  _cm.__COLORS['BOLD']+_cm.__COLORS['CYAN']],
+                  _cm.COLORS['BOLD']+_cm.COLORS['CYAN']],
 
         'Win trades':[(trades['profit'] > 0).sum(),
-                  _cm.__COLORS['BOLD']+_cm.__COLORS['GREEN']],
+                  _cm.COLORS['BOLD']+_cm.COLORS['GREEN']],
 
         'Loss trades':[(trades['profit'] <= 0).sum(),
-                  _cm.__COLORS['BOLD']+_cm.__COLORS['RED']],
+                  _cm.COLORS['BOLD']+_cm.COLORS['RED']],
 
-        'Op years':[utils.round_r(op_years, 2), _cm.__COLORS['CYAN']],
+        'Op years':[utils.round_r(op_years, 2), _cm.COLORS['CYAN']],
 
-        'Return':[str(_return:=utils.round_r((_cm.c_tf(trades.loc[:, 'multiplier'].prod())-1)*100,2))+'%',
-                  _cm.__COLORS['GREEN'] if _return > 0 else _cm.__COLORS['RED'],],
+        'Return':[str(_return:=utils.round_r((cast(float, trades.loc[:, 'multiplier'].prod())-1)*100,2))+'%',
+                  _cm.COLORS['GREEN'] if _return > 0 else _cm.COLORS['RED'],],
 
         'Profit':[str(_profit:=utils.round_r(np.nansum(trades['profit'].to_numpy()),2)),
-                _cm.__COLORS['GREEN'] if _profit > 0 else _cm.__COLORS['RED'],],
+                _cm.COLORS['GREEN'] if _profit > 0 else _cm.COLORS['RED'],],
 
         'Gross earnings':[utils.round_r((trades['profit'][trades['profit']>0].sum()
                            if not pd.isna(trades['profit']).all() else 0), 4),
-                        _cm.__COLORS['GREEN']],
+                        _cm.COLORS['GREEN']],
 
         'Gross losses':[utils.round_r(abs(trades['profit'][trades['profit']<=0].sum())
                            if not pd.isna(trades['profit']).all() else 0, 4),
-                        _cm.__COLORS['RED']],
+                        _cm.COLORS['RED']],
 
-        'Commission cost':[utils.round_r(float(trades['commission'].sum()), 4), _cm.__COLORS['RED']],
+        'Commission cost':[utils.round_r(float(trades['commission'].sum()), 4), _cm.COLORS['RED']],
 
         'Max return':[str(utils.round_r((multiplier_cumprod.max()-1)*100,2))+'%'],
 
         'Return from max':[str(utils.round_r(
             -((multiplier_cumprod.max()-1)
-            - (_cm.c_tf(trades.loc[:, 'multiplier'].prod())-1))*100,2))+'%'],
+            - (cast(float, trades.loc[:, 'multiplier'].prod())-1))*100,2))+'%'],
 
         'Days from max':[str(utils.round_r(
             (trades['date'].dropna().iloc[-1]
                 - trades['date'].dropna().loc[
                 np.argmax(multiplier_cumprod)])
             / trades_data['d_width_day'], 2)),
-            _cm.__COLORS['CYAN']],
+            _cm.COLORS['CYAN']],
 
         'Return ann':[str(_return_ann:=utils.round_r((ann_return.prod()**(1/op_years)-1)*100,2))+'%',
-                  _cm.__COLORS['GREEN'] if _return_ann > 0 else _cm.__COLORS['RED'],],
+                  _cm.COLORS['GREEN'] if _return_ann > 0 else _cm.COLORS['RED'],],
 
         'Profit ann':[str(_profit_ann:=utils.round_r(ann_profit.mean(),2)),
-                  _cm.__COLORS['GREEN'] if _profit_ann > 0 else _cm.__COLORS['RED'],],
+                  _cm.COLORS['GREEN'] if _profit_ann > 0 else _cm.COLORS['RED'],],
 
         'Return ann vol':[utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1)
                                         *np.sqrt(trades_data['d_year_days']), 2),
-                          _cm.__COLORS['YELLOW']],
+                          _cm.COLORS['YELLOW']],
 
         'Profit ann vol':[utils.round_r(np.std(diary_profit.dropna(),ddof=1)
                                     *np.sqrt(trades_data['d_year_days']), 2),
-                        _cm.__COLORS['YELLOW']],
+                        _cm.COLORS['YELLOW']],
 
         'Average ratio':[utils.round_r(average_ratio(trades), 2),
-                        _cm.__COLORS['YELLOW'],],
+                        _cm.COLORS['YELLOW'],],
 
         'Average return':[str(round(
                 trades.loc[:, 'profitPer'].dropna().to_numpy().mean(),2))+'%',
-            _cm.__COLORS['YELLOW'],],
+            _cm.COLORS['YELLOW'],],
 
         'Average profit':[str(round(trades.loc[:, 'profit'].mean(),2)),
-                    _cm.__COLORS['YELLOW'],],
+                    _cm.COLORS['YELLOW'],],
 
         'Average return abs':[str(round(
                 trades.loc[:, 'profitPer'].dropna().abs().to_numpy().mean(),2))+'%',
-            _cm.__COLORS['YELLOW'],],
+            _cm.COLORS['YELLOW'],],
 
         'Average profit abs':[str(round(trades.loc[:, 'profit'].abs().mean(),2)),
-                    _cm.__COLORS['YELLOW'],],
+                    _cm.COLORS['YELLOW'],],
 
         'Profit fact':[_profit_fact:=utils.round_r(profit_fact(trades.loc[:, 'profit']), 3),
-                _cm.__COLORS['GREEN'] if _profit_fact > 1 else _cm.__COLORS['RED'],],
+                _cm.COLORS['GREEN'] if _profit_fact > 1 else _cm.COLORS['RED'],],
 
         'Gain loss diff':[_gain_diff:=utils.round_r(gain_loss_diff(trades.loc[:, 'profit']), 3),
-                _cm.__COLORS['GREEN'] if _gain_diff > 0 else _cm.__COLORS['RED'],],
+                _cm.COLORS['GREEN'] if _gain_diff > 0 else _cm.COLORS['RED'],],
 
         'Return diary std':[(_return_std:=utils.round_r(np.std((diary_return.dropna()-1)*100,ddof=1), 2)),
-                    _cm.__COLORS['YELLOW'] if _return_std > 1 else _cm.__COLORS['GREEN'],],
+                    _cm.COLORS['YELLOW'] if _return_std > 1 else _cm.COLORS['GREEN'],],
 
         'Profit diary std':[(_profit_std:=utils.round_r(np.std(diary_profit.dropna(),ddof=1), 2)),
-                      _cm.__COLORS['YELLOW'] if _profit_std > 1 else _cm.__COLORS['GREEN'],],
+                      _cm.COLORS['YELLOW'] if _profit_std > 1 else _cm.COLORS['GREEN'],],
 
         'Math hope':[_math_hope:=round(math_hope(trades.loc[:, 'profit']), 3),
-            _cm.__COLORS['GREEN'] if _math_hope > 0 else _cm.__COLORS['RED'],],
+            _cm.COLORS['GREEN'] if _math_hope > 0 else _cm.COLORS['RED'],],
 
         'Math hope r':[_math_hope_r:=round(
                 math_hope_relative(trades, trades.loc[:, 'profitPer']), 3),
-            _cm.__COLORS['GREEN'] if _math_hope_r > 0 else _cm.__COLORS['RED'],],
+            _cm.COLORS['GREEN'] if _math_hope_r > 0 else _cm.COLORS['RED'],],
 
         'Historical var':[0 if trades['profit'].dropna().empty else utils.round_r(
                             var_historical(trades.loc[:, 'profit'].dropna()), 2)],
@@ -1532,7 +1553,7 @@ def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = N
 
         'Duration ratio':[utils.round_r(
             np.nansum(trades['duration'].to_numpy())/len(trades.index), 2),
-            _cm.__COLORS['CYAN']],
+            _cm.COLORS['CYAN']],
 
         'Payoff ratio':[utils.round_r(payoff_ratio(trades.loc[:, 'profitPer']), 3)],
 
@@ -1544,31 +1565,31 @@ def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = N
 
         'Average winning op':[str(utils.round_r(trades.loc[:, 'profitPer'][
                 trades['profitPer'] > 0].dropna().mean(), 2))+'%',
-            _cm.__COLORS['GREEN']],
+            _cm.COLORS['GREEN']],
 
         'Average losing op':[str(utils.round_r(trades.loc[:, 'profitPer'][
                 trades['profitPer'] < 0].dropna().mean(), 2))+'%',
-            _cm.__COLORS['RED']],
+            _cm.COLORS['RED']],
 
         'Average duration winn':[str(utils.round_r(trades.loc[:, 'duration'][
                 trades['profitPer'] > 0].dropna().mean()))+'d',
-                _cm.__COLORS['CYAN']],
+                _cm.COLORS['CYAN']],
 
         'Average duration loss':[str(utils.round_r(trades.loc[:, 'duration'][
                 trades['profitPer'] < 0].dropna().mean()))+'d',
-                _cm.__COLORS['CYAN']],
+                _cm.COLORS['CYAN']],
 
         'Daily frequency op':[utils.round_r(
             len(trades.index) / (op_years*trades_data['d_year_days']), 2),
-            _cm.__COLORS['CYAN']],
+            _cm.COLORS['CYAN']],
 
         'Max consecutive winn':[trades_csct.max(),
-                                _cm.__COLORS['GREEN']],
+                                _cm.COLORS['GREEN']],
 
         'Max consecutive loss':[abs(trades_csct.min()), # pyrefly: ignore
-                                _cm.__COLORS['RED']],
+                                _cm.COLORS['RED']],
 
-        'Max losing streak':[abs(trades_streak.min())],
+        'Win-loss cum drawdown':[abs(trades_streak.min())],
 
         'Max drawdown':[str(round(
             max_drawdown(multiplier_cumprod)*100, 1)) + '%'],
@@ -1586,13 +1607,13 @@ def stats_trades(data:bool = False, name:Sequence[str|int|None]|str|int|None = N
 
         'Long exposure':[str(round(
             long_exposure(trades.loc[:, 'typeSide'])*100)) + '%',
-            _cm.__COLORS['GREEN']],
+            _cm.COLORS['GREEN']],
 
         'Winnings':[str(round(winnings(trades.loc[:, 'profitPer'])*100, 1)) + '%'],
 
         }, f"---Statistics of '{trades_data['name']}'---")
 
-    text = text if _cm.dots else text.replace('.', ',')
+    text = text if _cm.user_config.dots else text.replace('.', ',')
     if data: 
         text += (stats_icon(False) or '')
 
@@ -1654,12 +1675,10 @@ def trades_group_year(trades_date:pd.Series, op_years:float) -> pd.Series:
         Series: Year groups.
     """
 
-    if op_years <= 0:
-        raise exception.StatsError("'op_years' cannot be less or equal than 0.")
-
-    return ((trades_date - trades_date.iloc[0]) / 
-            (trades_date.iloc[-1] - trades_date.iloc[0]) * 
-            op_years).astype(int)
+    result:pd.Series = ((trades_date - trades_date.iloc[0]) / 
+        (trades_date.iloc[-1] - trades_date.iloc[0]) * op_years)
+    result.fillna(0, inplace=True)
+    return result.astype(int)
 
 def trades_group_day(trades_date:pd.Series, op_years:float, year_days:int) -> pd.Series:
     """
@@ -1677,14 +1696,10 @@ def trades_group_day(trades_date:pd.Series, op_years:float, year_days:int) -> pd
         Series: Day groups.
     """
 
-    if op_years <= 0:
-        raise exception.StatsError("'op_years' cannot be less or equal than 0.")
-    elif year_days <= 0:
-        raise exception.StatsError("'year_days' cannot be less or equal than 0.")
-
-    return ((trades_date - trades_date.iloc[0]) / 
-                (trades_date.iloc[-1] - trades_date.iloc[0]) * 
-                op_years*year_days).astype(int)
+    result:pd.Series = ((trades_date - trades_date.iloc[0]) / 
+                (trades_date.iloc[-1] - trades_date.iloc[0]) * op_years*year_days)
+    result.fillna(0, inplace=True)
+    return result.astype(int)
 
 def earnings_intime(names:Sequence[str|int|None]|str|int|None = None,
                     in_days:float = 365, profit:bool = True, 
@@ -1736,18 +1751,18 @@ def earnings_intime(names:Sequence[str|int|None]|str|int|None = None,
     data = {}
     for i,v in enumerate(indays_profit):
         value = {f'Group: {i+1}':[round(v, 1), 
-            _cm.__COLORS['GREEN'] if round(v, 1) > 0 else _cm.__COLORS['RED']]}
+            _cm.COLORS['GREEN'] if round(v, 1) > 0 else _cm.COLORS['RED']]}
         data.update(value)
 
     data.update({
         'Winrate':[
         str(round(winnings(indays_profit)*100)) + '%',
-        _cm.__COLORS['CYAN']],
+        _cm.COLORS['CYAN']],
         'Average':[round(indays_profit.mean(), 1)]
     })
     text = utils.statistics_format(data, f"---Earnings per {in_days} days---")
 
-    text = text if _cm.dots else text.replace('.', ',')
+    text = text if _cm.user_config.dots else text.replace('.', ',')
     if prnt: print(text) 
 
     return (indays_profit, text)

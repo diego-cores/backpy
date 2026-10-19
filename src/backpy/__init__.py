@@ -4,7 +4,7 @@ Back Test Py
 BackPy is a library used to test strategies in the market.
 
 Version:
-    1.0.17
+    1.0.18
 
 Repository:
     https://github.com/diego-cores/backpy
@@ -33,7 +33,16 @@ License:
     SOFTWARE.
 """
 
-from . import _commons as cfg
+from ._commons import (
+    get_commission_names,
+    get_backtest_names,
+    del_backtest,
+    user_config,
+    data_state,
+    plot_state,
+    TKINTER,
+    COLORS,
+)
 
 from .strategy import (
     StrategyClass,
@@ -53,6 +62,7 @@ from .flex_data import (
 
 from .main import (
     load_binance_data_futures,
+    load_binance_fee_futures,
     plot_strategy_decorator,
     load_binance_data_spot,
     load_yfinance_data, 
@@ -143,10 +153,13 @@ Terms and Conditions:
 
 __all__ = [
     'load_binance_data_futures',
+    'load_binance_fee_futures',
     'plot_strategy_decorator',
     'load_binance_data_spot',
+    'get_commission_names',
     'load_yfinance_data',
     'distribution_chart',
+    'get_backtest_names',
     'plot_strategy_add',
     'monte_carlo_bsim',
     'perf_tzone_chart',
@@ -165,11 +178,15 @@ __all__ = [
     'max_drawdown',
     'stats_trades',
     'ChunkWrapper',
+    'del_backtest',
+    'user_config',
     'idct_sqzmom',
     'idct_trange',
     'DataWrapper',
     'permutation',
     'correlation',
+    'plot_state',
+    'data_state',
     'stats_icon',
     'CostsValue',
     'run_config',
@@ -187,13 +204,14 @@ __all__ = [
     'idct_wma',
     'idct_rsi',
     'idct_bb',
+    'TKINTER',
+    'COLORS',
     'utils',
     'plot',
     'run',
-    'cfg',
 ]
 
-__version__ = '1.0.17'
+__version__ = '1.0.18'
 __author__ = 'Diego Cores'
 __url__ = 'https://github.com/diego-cores'
 __email__ = '89626622+diego-cores@users.noreply.github.com'

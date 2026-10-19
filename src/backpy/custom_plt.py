@@ -17,6 +17,7 @@ Functions:
     config_ax: Backpy default axis configuration.
 """
 
+from matplotlib.ticker import NullLocator, NullFormatter
 from matplotlib.animation import FuncAnimation
 from matplotlib.dates import DateFormatter
 from matplotlib.axes._axes import Axes
@@ -35,7 +36,7 @@ from . import utils
 logger:logging.Logger = logging.getLogger(__name__)
 
 def def_style(name:str, 
-              background:str | tuple[str, ...] | list[str] = '#e5e5e5', 
+              background:str|tuple[str, ...]|list[str] = '#e5e5e5', 
               frames:str = 'SystemButtonFace', 
               buttons:str = '#000000', 
               button_act:str | None = None, 
@@ -91,14 +92,14 @@ def def_style(name:str,
         pos_down (str|None, optional): Color when a position is negative. 
             If it is None, the color of 'mk' will be used.
     """
-    if name in _cm.__plt_styles.keys():
+    if name in _cm.plot_state._plt_styles.keys():
         raise exception.StyleError(f"Name already in use. '{name}'")
 
     up_mc = up or 'green'
     down_mc = down or 'red'
     btn_color = buttons or '#000000'
 
-    _cm.__plt_styles.update({
+    _cm.plot_state._plt_styles.update({
         name: {
             'bg':background or '#e5e5e5', 
             'gdir':gardient_dir, 
@@ -137,19 +138,21 @@ def style_def(name:str|None = 'last', update:dict|None = None) -> tuple[dict, st
         tuple[dict,str]: Style dict and style name.
     """
 
-    if (name is not None and not (name:=name.lower()) in {'random', 'last'} | set(_cm.__plt_styles.keys())):
+    if (name is not None and not (name:=name.lower()) in 
+        {'random', 'last'} | set(_cm.plot_state._plt_styles.keys())):
         raise exception.StyleError(f"Style not found. '{name}'")
 
     if name == 'last':
-        name = _cm.plt_style
+        name = _cm.user_config.plt_style
 
     if name is None:
-        name = list(_cm.__plt_styles.keys())[0]
+        name = list(_cm.plot_state._plt_styles.keys())[0]
     elif name == 'random':
-        name = rd.choice(list(_cm.__plt_styles.keys()))
+        name = rd.choice(list(_cm.plot_state._plt_styles.keys()))
+    assert isinstance(name, str)
 
-    stl_colors:dict = _cm.__plt_styles[name]
-    _cm.plt_style = name
+    stl_colors:dict = _cm.plot_state._plt_styles[name]
+    _cm.user_config.plt_style = name
 
     mk = stl_colors.get('mk', {'u': 'green', 'd': 'red'})
     if 'psmk' not in stl_colors:
@@ -163,11 +166,15 @@ def style_def(name:str|None = 'last', update:dict|None = None) -> tuple[dict, st
 
     return stl_colors, name
 
-def gradient_ax(ax:Axes, colors:list|tuple, right:bool=False) -> None:
+def gradient_ax(ax:Axes, colors:list|tuple, 
+                right:bool=False, quality:int|None = None) -> None:
     """
     Gradient axes.
 
     Create a diagonal background gradient on the 'ax' with 'ax.imshow'.
+
+    Note:
+        The attribute '_is_background' = True is added to the collection.
 
     Args:
         ax (Axes): Axes to draw.
@@ -175,23 +182,32 @@ def gradient_ax(ax:Axes, colors:list|tuple, right:bool=False) -> None:
             Len less than 2 will default to: ['white', '#e5e5e5'].
         right (bool, optional): Corner from which the gradient 
             starts if False starts from the top left.
+        quality (int, optional): Control the quality of the gradient.
+            If it is None, it is calculated automatically: number of colors * 3.
     """
 
     if len(colors) < 2:
         colors = ['white', '#e5e5e5']
+    if quality is None:
+        quality = len(colors) * 3
+    elif quality < 2:
+        raise ValueError("'quality' can't be less than 2.")
 
-    gradient = (np.linspace(0, 1, 256).reshape(-1, 1) 
-                + (np.linspace(0, 1, 256) 
-                   if right else -np.linspace(0, 1, 256)))
+    cmap = mpl.colors.LinearSegmentedColormap.from_list('custom_gradient', colors)
+
+    lin = np.linspace(0, 1, quality)
+    X, Y = np.meshgrid(lin, lin)
+
+    v = (X + Y) if right else (X - Y)
+    v = (v - v.min()) / (v.max() - v.min())
 
     ylim = ax.get_ylim()
     autoylim, autoxlim = ax.get_autoscaley_on(), ax.get_autoscalex_on() # pyrefly: ignore
 
-    im = ax.imshow(gradient, aspect='auto', 
-                   cmap=mpl.colors.LinearSegmentedColormap.from_list('custom_gradient', colors), 
-                extent=(0., 1., 0., 1.), transform=ax.transAxes, zorder=-1)
-    im.get_cursor_data = lambda event: None
-    im.sticky_edges.x[:] = []; im.sticky_edges.y[:] = [] # pyrefly: ignore
+    qm = ax.pcolormesh(X, Y, cmap(v), shading='gouraud',
+                        transform=ax.transAxes, zorder=-1)
+    qm.sticky_edges.x[:] = []; qm.sticky_edges.y[:] = [] # pyrefly: ignore
+    setattr(qm, '_is_background', True)
 
     ax.set_ylim(*ylim)
     ax.set_autoscaley_on(autoylim); ax.set_autoscalex_on(autoxlim) # pyrefly: ignore
@@ -220,7 +236,7 @@ def custom_ax(ax:Axes, bg:str|tuple|list = '#e5e5e5', edge:bool = False) -> None
     else:
         ax.set_facecolor(bg[0] if isinstance(bg, list) else bg)
 
-    ax.tick_params(colors='white')
+    ax.tick_params(labelleft=False, labelbottom=False, length=0, colors='white')
     ax.spines['bottom'].set_color('white')
     ax.spines['left'].set_color('white')
     ax.spines['top'].set_color('white')
@@ -230,6 +246,15 @@ def custom_ax(ax:Axes, bg:str|tuple|list = '#e5e5e5', edge:bool = False) -> None
     ax.yaxis.label.set_color('white')
     ax.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
     ax.set_axisbelow(True)
+
+    ax.xaxis.set_major_formatter(NullFormatter())
+    ax.yaxis.set_major_formatter(NullFormatter())
+
+    ax.xaxis.set_minor_locator(NullLocator())
+    ax.yaxis.set_minor_locator(NullLocator())
+
+    ax.set_xlabel('')
+    ax.set_ylabel('')
 
     semi_transparent_white = mpl.colors.to_rgba(cast(Any, "white"), alpha=0.3)
     for spine in ax.spines.values():
@@ -313,12 +338,13 @@ def add_window(fig:Figure, title:str|Callable|None = None, block:bool = True,
         **kwargs: -> tk_window.add_window
     """
 
-    if not _cm.graph_integration or not _cm.TKINTER:
+    if not _cm.user_config.graph_integration or not _cm.TKINTER:
         fig_canvas = getattr(fig, 'canvas')
         if fig_canvas.manager is not None:
             fig_canvas.manager.set_window_title(
                 ((lambda: title) if isinstance(title, str|None) else title)() 
-                or rd.choice(_cm._random_titles if _cm._random_titles else ['BackPy']))
+                or rd.choice(_cm.plot_state._random_titles 
+                    if _cm.plot_state._random_titles else ['BackPy']))
 
         setattr(fig, '_anim_ref', anim)
         return plt.show(block=block)
@@ -384,7 +410,8 @@ def config_ax(ax:Axes, date:bool = True, bg_color:str|tuple|list = '#e5e5e5',
 
     ax.yaxis.set_major_formatter(lambda y, _: utils.float_str(utils.round_r(y.real, 2, True)))
     ax.xaxis.set_major_formatter(
-        DateFormatter('%H:%M %d-%m-%Y') if date else lambda x, _: utils.float_str(utils.round_r(x.real, 2, True)))
+        DateFormatter('%H:%M %d-%m-%Y') if date else lambda x, _: utils.float_str(
+            utils.round_r(x.real, 2, True)))
 
     ax.tick_params(axis='x', labelbottom=False)
     ax.tick_params(axis='y', labelleft=False)

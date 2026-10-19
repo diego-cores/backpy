@@ -11,6 +11,7 @@ Hidden variables:
 
 Classes:
     ProgressBar: Create a loading bar.
+    FramesCounter: Calculate FPS using a time window.
 
 Functions:
     statistics_format: Returns statistics into a structured string.
@@ -29,9 +30,11 @@ Functions:
     get_darguments: Get default arguments.
     get_arguments: Give all arguments given to the function, including defaults.
     gen_datakey: Generate a unique key that represents 'data'.
+    nowriteable_dataframe: Makes the elements of a dataframe non-rewritable.
     mult_color: Multiply a color.
     diff_color: Makes a color darker or lighter.
     diff_ccolor: Differentiate a color from another color.
+    line2d_collection: Convert a Line2D into a LineCollection.
     get_vertices: Get the vertices of a matplotlib artist.
     plot_volume: Function to plot volume on a give `Axes`.
     plot_candles: Function to plot candles on a given `Axes`.
@@ -49,12 +52,12 @@ from matplotlib import colors as mcolors
 from matplotlib.axes._axes import Axes
 from matplotlib.artist import Artist
 from matplotlib.lines import Line2D
-from matplotlib.path import Path
 import matplotlib as mpl
 
+from collections.abc import Sequence
+from time import sleep, perf_counter
 from typing import Any, Callable
 from hashlib import blake2b
-from time import sleep
 import logging
 import shutil
 import re
@@ -252,8 +255,131 @@ class ProgressBar():
 
         else: return progress_bar
 
+class FramesCounter():
+    """
+    Frames Counter
+
+    Calculate FPS using a time window.
+
+    Attributes:
+        window (float): Average window duration, in seconds.
+        fps (float): Average frames per second.
+        ms (float): Average time per frame in milliseconds.
+
+    Private Attributes:
+        _flist: List of times for each frame; the number of items 
+            is determined by the time window.
+        _total: Sum of the elements of 'flist', added separately.
+        _last: Time of last frame.
+
+    Methods:
+        reset(): Reset the registred frames.
+        set_last(): Set the last frame time to the current time.
+        frame(): Save a frame.
+
+    Example:
+        Measure fps::
+
+            counter = FramesCounter(window=0.5)
+            for _ in range(100):
+                counter.frame()
+                ...
+                print(f"{counter.fps:.0f} fps")
+    """
+
+    window:float
+
+    _flist:list[float]
+    _total:float
+    _last:float
+
+    def __init__(self, window:float = 0.5) -> None:
+        """
+        __init__
+
+        Builder for initializing the class.
+
+        Args:
+            window (float): Average window duration, in seconds.
+        """
+
+        self.window = window
+
+        self._flist = []
+        self._total = 0.
+        self._last = perf_counter()
+
+    def reset(self) -> None:
+        """
+        Reset
+
+        Reset the registred frames.
+        """
+        self._flist = []
+        self._total = 0.
+
+    def set_last(self) -> None:
+        """
+        Set last
+
+        Set the last frame time to the current time.
+        Marks the start of the section to measure.
+
+        Example:
+            Measure only a function::
+
+                counter = FramesCounter(window=0.5)
+                for _ in range(100):
+                    counter.set_last()
+                    my_function_to_measure()
+                    counter.frame()
+   
+                    print(f"{counter.fps:.0f} fps")
+        """
+        self._last = perf_counter()
+
+    def frame(self):
+        """
+        Frame
+
+        Save a frame.
+        """
+
+        now = perf_counter()
+        calc = now-self._last
+    
+        self._flist.append(calc)
+        self._total += calc
+        self._last = now
+
+        while len(self._flist) > 1 and self._total > self.window: 
+            self._total -= self._flist[0]
+            del self._flist[0]
+
+    @property
+    def ms(self) -> float:
+        """
+        Milliseconds
+
+        Return:
+            float: Average time per frame in milliseconds.
+        """
+        return self._total / len(self._flist) * 1000 if self._flist else 0.0
+
+    @property
+    def fps(self) -> float:
+        """
+        Frames per second
+
+        Return:
+            float: Average frames per second.
+        """
+        if self._flist and self._total > 0:
+            return len(self._flist)/self._total
+        return 0.
+
 def statistics_format(data:dict, title:str | None = None, 
-                      val_tt:list = ['Metric', 'Value']) -> str:
+                      val_tt:Sequence|None = None) -> str:
     """
     Statistics format.
 
@@ -268,19 +394,21 @@ def statistics_format(data:dict, title:str | None = None,
             }
             If a metric value is a list, the second element should be a color.
         title (str | None, optional): Statistics title.
-        val_tt (list, optional): Name of the metrics and values.
+        val_tt (list|None, optional): Name of the metrics and values.
+            Default: ('Metric', 'Value').
 
     Returns:
         str: A formatted string representation of the statistics.
     """
     if not bool(title): title = ''
+    if val_tt is None: val_tt = ('Metric', 'Value')
 
     values = []
     for i in data:
         values.append([i+':'])
         if isinstance(data[i], list) and len(data[i]) > 1:
             values[-1].extend([
-                data[i][1]+str(data[i][0])+_cm.__COLORS['RESET'], str(data[i][0])
+                data[i][1]+str(data[i][0])+_cm.COLORS['RESET'], str(data[i][0])
                 ])
         else:
             values[-1].append(
@@ -295,10 +423,10 @@ def statistics_format(data:dict, title:str | None = None,
 
     text = f"""
     {val_tt[0]+' '*(min_len+len(title)-len(''.join(val_tt)))+val_tt[1]}
-    {(_cm.__COLORS['BOLD'] + 
+    {(_cm.COLORS['BOLD'] + 
       '-'*(min_len//2) + 
       title + '-'*(min_len//2) + 
-      ('-' if min_len//2 != min_len/2 else '') + _cm.__COLORS['RESET'])}
+      ('-' if min_len//2 != min_len/2 else '') + _cm.COLORS['RESET'])}
     """
     text +='\n'.join(values[i][0] + 
                      ' '*(min_len+len(title)-len(values[i][0]+values[i][-1])) + 
@@ -364,7 +492,7 @@ def num_align(num:float|np.floating, digits:int = 4, side:bool = True) -> str:
         return simbol+int_part[-digits+len(simbol):] 
 
     data_s = side_c(round(num, digits-len(int_part)-1))
-    return data_s if _cm.dots else data_s.replace('.', ',')
+    return data_s if _cm.user_config.dots else data_s.replace('.', ',')
 
 def round_r(num:float|np.floating|int, r:int = 1, alw_dec:bool = False) -> float|int:
     """
@@ -574,6 +702,24 @@ def gen_datakey(data:pd.Series|pd.DataFrame|np.ndarray, size:int = 8) -> str:
 
     return blake2b(raw.tobytes(), digest_size=size).hexdigest()
 
+def nowriteable_dataframe(df:pd.DataFrame) -> None:
+    """
+    No writeable dataframe
+
+    Makes the elements of a dataframe non-rewritable, 
+    although block could be replaced.
+
+    Args:
+        df (DataFrame): DataFrame.
+    """
+
+    for block in df._mgr.blocks:
+        values = block.values
+        if isinstance(values, np.ndarray):
+            values.flags.writeable = False
+        elif hasattr(values, '_ndarray'):
+            values._ndarray.flags.writeable = False
+
 def mult_color(color:str, multiplier:float = 1) -> tuple[float, ...]:
     """
     Multiply a color
@@ -654,6 +800,49 @@ def diff_ccolor(color:str, dcolor:str, factor:float = 1,
     return tuple(rgb[i] if v >= rgb_d[i]*(1+line) or v <= rgb_d[i]*(1-line) 
                  else min(1., v*(1+factor)) for i,v in enumerate(rgb))
 
+def line2d_collection(line:Line2D, ax:Axes|None = None, 
+                    remove:bool = True) -> LineCollection|None:
+    """
+    Line2D to LineCollection
+
+    Convert a Line2D into a LineCollection.
+
+    Note:
+        The line markers are lost.
+
+    Args:
+        line (Line2D): Line to convert.
+        ax (Axes|None, optional): Axes, leave it on None if you do not want the line added.
+        remove (bool, optional): Remove Line2D.
+
+    Return:
+        LineCollection|None: Returns None if the Line2d only has 1 point.
+    """
+
+    x = np.asarray(line.get_xdata())
+    y = np.asarray(line.get_ydata())
+
+    if len(x) <= 1:
+        return
+
+    points = np.array([x, y]).T.reshape(-1, 1, 2)
+    segments = np.concatenate([points[:-1], points[1:]], axis=1)
+
+    lc = LineCollection(
+        segments, # pyrefly: ignore
+        colors=line.get_color(),
+        linewidths=line.get_linewidth(),
+        linestyles=line.get_linestyle(),
+        zorder=line.get_zorder(),
+        label=line.get_label(),
+        alpha=line.get_alpha(),
+    )
+
+    if remove: line.remove()
+    if ax: ax.add_collection(lc) # pyrefly: ignore
+
+    return lc
+
 def get_vertices(artist:Artist, sup_nan:bool = True) -> list|None:
     """
     Get vertices
@@ -685,7 +874,8 @@ def get_vertices(artist:Artist, sup_nan:bool = True) -> list|None:
 
 def plot_volume(ax:Axes, data:pd.Series, 
                 width:float = 1, color:str = 'tab:orange', 
-                alpha:float = 1, zorder:float = 1) -> None:
+                alpha:float = 1, zorder:float = 1, 
+                lim:bool = True) -> None:
     """
     Volume draw
 
@@ -698,6 +888,7 @@ def plot_volume(ax:Axes, data:pd.Series,
         color (str, optional): Color of the volume.
         alpha (float, optional): Opacity of the volume.
         zorder (float, optional): Z-order of the volume.
+        lim (bool, optional): Configure the axis limits.
     """
 
     idx = data.index.to_numpy()
@@ -713,16 +904,18 @@ def plot_volume(ax:Axes, data:pd.Series,
     verts[:, 3] = np.column_stack([x0, y1])
 
     ax.add_collection(PolyCollection(verts, color=color, # type: ignore
-        linewidth=0, alpha=alpha, zorder=zorder), autolim=False)
+        linewidth=0, alpha=alpha, zorder=zorder,), autolim=False)
 
-    ax.set_ylim(top=data.max()*1.1 or 1)
-    ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
-                data.index.values[-1]+(width*len(data.index)/10))
+    if lim:
+        ax.set_ylim(top=data.max()*1.1 or 1)
+        ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
+                    data.index.values[-1]+(width*len(data.index)/10))
 
 def plot_candles(ax:Axes, data:pd.DataFrame, 
                  width:float = 1, color_up:str = 'g', 
                  color_down:str = 'r', color_n:str = 'k',
-                 alpha:float = 1, zorder:float = 1) -> None:
+                 alpha:float = 1, zorder:float = 1, 
+                 lim:bool = True) -> None:
     """
     Candles draw
 
@@ -734,13 +927,11 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
             Need 'close', 'open', 'high', 'low' columns.
         width (float, optional): Width of each candle.
         color_up (str, optional): Color of the candle when the price rises. 
-            Defaults to 'g'.
         color_down (str, optional): Color of the candle when the price falls. 
-            Defaults to 'r'.
         color_n (str, optional): Color of the candle when the price does not move. 
-            Defaults to 'k'.
         alpha (float, optional): Opacity of the candles.
         zorder (float, optional): Z-order of the candles.
+        lim (bool, optional): Configure the axis limits.
     """
 
     idx = data.index.to_numpy()
@@ -778,18 +969,20 @@ def plot_candles(ax:Axes, data:pd.DataFrame,
     body_verts[:, 3] = np.column_stack([x0, y1])
 
     ax.add_collection(PolyCollection(body_verts, color=colors[slc],  # type: ignore
-        linewidth=0, alpha=alpha, zorder=zorder), autolim=False)
+        linewidth=0, alpha=alpha, zorder=zorder,), autolim=False)
 
     # Manual lim
-    ylim_range = h.max()-l.min()
-    ax.set_ylim(l.min()-ylim_range*0.1, h.max()+ylim_range*0.1)
-    ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
-                data.index.values[-1]+(width*len(data.index)/10))
+    if lim:
+        ylim_range = h.max()-l.min()
+        ax.set_ylim(l.min()-ylim_range*0.1, h.max()+ylim_range*0.1)
+        ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
+                    data.index.values[-1]+(width*len(data.index)/10))
 
 def plot_line(ax:Axes, data:pd.Series, 
             width:float = 1, color_up:str = 'g', 
             color_down:str = 'r', color_n:str = 'k',
-            alpha:float = 1, zorder:float = 1) -> None:
+            alpha:float = 1, zorder:float = 1, 
+            lim:bool = False) -> None:
     """
     Line draw.
 
@@ -801,14 +994,12 @@ def plot_line(ax:Axes, data:pd.Series,
         width (float, optional): Used to calculate the margin on the sides.
             Width of each point.
         color_up (str, optional): Color of the line when the price rises. 
-            Defaults to 'g'.
         color_down (str, optional): Color of the line when the price falls. 
-            Defaults to 'r'.
         color_n (str, optional): Color of the line when the price does not move. 
-            Defaults to 'k'.
         alpha (float, optional): Opacity of the line.
         zorder (float, optional): Z-order of the line, the zorder varies between the 
             value and +0.02 for the different line colors.
+        lim (bool, optional): Configure the axis limits.
     """
 
     x = data.index.to_numpy()
@@ -826,7 +1017,8 @@ def plot_line(ax:Axes, data:pd.Series,
         groups[key]['xy'][0].extend([a, c, np.nan])
         groups[key]['xy'][1].extend([b, d, np.nan])
 
-    ax.plot(groups['n']['xy'][0], groups['n']['xy'][1], color=groups['n']['color'], zorder=zorder, alpha=alpha)
+    ax.plot(groups['n']['xy'][0], groups['n']['xy'][1], color=groups['n']['color'], 
+        zorder=zorder, alpha=alpha, scalex=False, scaley=False)
 
     u_z = p_z = zorder+0.01
     if y.sum() > 0:
@@ -834,17 +1026,20 @@ def plot_line(ax:Axes, data:pd.Series,
     else:
         p_z = p_z + 0.01
 
-    ax.plot(groups['u']['xy'][0], groups['u']['xy'][1], color=groups['u']['color'], zorder=u_z, alpha=alpha)
-    ax.plot(groups['d']['xy'][0], groups['d']['xy'][1], color=groups['d']['color'], zorder=p_z, alpha=alpha)
+    ax.plot(groups['u']['xy'][0], groups['u']['xy'][1], color=groups['u']['color'], 
+        zorder=u_z, alpha=alpha, scalex=False, scaley=False)
+    ax.plot(groups['d']['xy'][0], groups['d']['xy'][1], color=groups['d']['color'], 
+        zorder=p_z, alpha=alpha, scalex=False, scaley=False)
 
-    ax.set_ylim(data.min()*0.98, data.max()*1.02)
-    ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
-                data.index.values[-1]+(width*len(data.index)/10))
+    if lim:
+        ax.set_ylim(data.min()*0.98, data.max()*1.02)
+        ax.set_xlim(data.index.values[0]-(width*len(data.index)/10), 
+                    data.index.values[-1]+(width*len(data.index)/10))
 
 def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green', 
                   color_stop:str = 'red', alpha:float = 1, 
                   alpha_arrow:float = 1, arrow_fact:float = 0.2, 
-                  operation_route:bool | None = True, closing_markets:bool | None = True,
+                  operation_route:bool | None = True, closing_markets:bool = True,
                   route_zorder:float = 0.9, markers_zorder:float = 1.1
                   ) -> list[PatchCollection|Collection]:
     """
@@ -852,8 +1047,12 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
 
     Plots positions on your `ax`.
 
+    Note:
+        The arrow and 'x' markers indicate where the position was closed.
+        The 'V' and '^' markers indicate the direction of the position.
+
     Args:
-        trades (DataFrame): Trades data to draw.
+        trades (DataFrame): Trades data to draw. Columns: see _commons.__get_trades.
         ax (Axes): Axes where it is drawn.
         color_take (str, optional): Color for positive positions.
         color_stop (str, optional): Color for negative positions.
@@ -863,16 +1062,9 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
             If you don't want this to happen, leave it at 0.
         operation_route (bool | None, optional): If True, traces the route of the operation.
             None, it doesn't draw the color but it does draw the arrow.
-        closing_markets (bool | None, optional): If True, draws markers for closing positions.
+        closing_markets (bool, optional): If True, draws markers for closing positions.
         route_zorder (float, optional): Z-order of the operation route. It varies between the value and -0.1.
         markers_zorder (float, optional): Z-order of the markers.
-
-    Info:
-        The arrow and 'x' markers indicate where the position was closed.
-        The 'V' and '^' markers indicate the direction of the position.
-        The 'color_take' indicates where the take profit is placed and the 'color_stop'
-        indicates where the stop loss is placed. If there is no take profit, its marker 
-        will not be drawn; the same applies to the stop loss.
     
     Returns:
         list[PatchCollection|Collection]: List of the collections added to the `ax`.
@@ -927,12 +1119,12 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
 
     # Drawing of the closing marker of the operations.
     if ('positionDate' in trades.columns and 
-        'positionClose' in trades.columns and 
-        (closing_markets or closing_markets is None)):
+        'positionClose' in trades.columns and closing_markets):
 
         collections.append(
             ax.scatter(trades['positionDate'].to_numpy(), trades['positionClose'].to_numpy(), 
-                  c=color_close, s=30, marker=MarkerStyle('x'), alpha=alpha_arrow, zorder=markers_zorder))
+                  c=color_close, s=30, marker=MarkerStyle('x'), 
+                  alpha=alpha_arrow, zorder=markers_zorder))
 
     up_type:Callable = lambda x: x['positionOpen'] if x['typeSide'] == 1 else None
     down_type:Callable = lambda x: x['positionOpen'] if x['typeSide'] != 1 else None
@@ -952,7 +1144,7 @@ def plot_position(trades:pd.DataFrame, ax:Axes, color_take:str = 'green',
 
     return collections
 
-def _loop_data(function:Callable, bpoint:Callable, init:int, timeout:float) -> pd.DataFrame:
+def _loop_data(function:Callable, bpoint:Callable, initf:Callable, init:int, timeout:float) -> pd.DataFrame:
     """
     Data loop.
 
@@ -962,10 +1154,11 @@ def _loop_data(function:Callable, bpoint:Callable, init:int, timeout:float) -> p
         function (Callable): A callable function that retrieves data from an API or another source. 
             The function must accept an integer (`init`) as its argument and 
             return data in a format that can be converted to a pandas DataFrame.
-        bpoint (Callable): A callable function used as a breaking point checker or updater. 
-            It should accept the current DataFrame and optionally an integer `init`. 
-            If provided with `init`, it should return `True` if the loop should stop. 
-            If called without `init`, it should return the updated `init` value.
+        bpoint (Callable): A callable function used as a breaking point checker. 
+            It should accept the result of 'function'. 
+            If it returns True, the loop stops without saving the results.
+        initf (Callable): Function that updates the value of 'init', 
+            must accept the last result as a dataframe.
         init (int): The initial value to pass to the `function`. Commonly represents a starting 
             timestamp or other incremental parameter needed to retrieve paginated data.
         timeout (float): The time in seconds to wait between consecutive function calls, allowing 
@@ -977,14 +1170,13 @@ def _loop_data(function:Callable, bpoint:Callable, init:int, timeout:float) -> p
     data = pd.DataFrame()
 
     while True:
-        data = pd.concat(
-            [data, pd.DataFrame(function(init)).iloc[1:-1]], 
-            ignore_index=True)
-
-        if bpoint(data, init):
+        result = function(init)
+        if bpoint(result):
             break
 
-        init = bpoint(data)
-        sleep(timeout)
+        n_data = pd.DataFrame(result)
+        data = pd.concat([data, n_data], ignore_index=True)
 
+        init = initf(n_data)
+        sleep(timeout)
     return data

@@ -3,6 +3,10 @@ Indicators module
 
 This module contains the main logic of the indicators.
 
+Note:
+    'StrategyClass' Pass the real data variable without 
+    copying it, with its columns as read-only.
+
 Variables:
     logger (Logger): Logger variable.
 
@@ -179,8 +183,7 @@ def idct_sema(data:pd.Series, length:int = 9, method:str = 'sma',
     ema = data.ewm(span=length, adjust=False).mean()
 
     match method:
-        case 'sma': 
-            smema = idct_sma(data=ema, length=smooth)
+        case 'sma': smema = idct_sma(data=ema, length=smooth)
         case 'ema': smema = idct_ema(data=ema, length=smooth)
         case 'smma': smema = idct_smma(data=ema, length=smooth)
         case 'wma': smema = idct_wma(data=ema, length=smooth)
@@ -536,13 +539,25 @@ def idct_rlinreg(data:pd.Series, length:int = 5, offset:int = 1) -> pd.Series:
     if offset < 0 or offset >= length:
         raise ValueError("'offset' cannot be less than 0 and cannot be more or equal than 'length'")
 
-    x = np.arange(length)
-    y = data.rolling(window=length)
+    x = np.arange(length, dtype=float)
+    sum_x = x.sum()
+    sum_x2 = (x**2).sum()
+    denom = length * sum_x2 - sum_x**2 
 
-    m = y.apply(lambda y: np.polyfit(x, y.values, 1)[0])
-    b = y.mean() - (m * float(np.mean(x))) 
+    values = data.to_numpy()
+    windows = np.lib.stride_tricks.sliding_window_view(values, length)
 
-    return m * (length - 1 - offset) + b
+    sum_y = windows.sum(axis=1)
+    sum_xy = windows @ x
+
+    m = (length * sum_xy - sum_x * sum_y) / denom
+    b = (sum_y - m * sum_x) / length
+
+    result = m * (length - 1 - offset) + b
+
+    out = np.full(len(values), np.nan)
+    out[length - 1:] = result
+    return pd.Series(out, index=data.index)
 
 @_cm._store_decorator
 def idct_mom(data:pd.Series, length:int = 10) -> pd.Series:
@@ -620,7 +635,7 @@ def idct_ichimoku(data:pd.DataFrame, tenkan_period:int = 9,
 
 @_cm._store_decorator
 def idct_atr(data:pd.DataFrame, length:int = 14, smooth:str = 'smma', 
-            handle_na:bool = True) -> np.ndarray:
+            handle_na:bool = True) -> pd.Series:
     """
     Calculate the average true range (ATR).
 
@@ -634,20 +649,20 @@ def idct_atr(data:pd.DataFrame, length:int = 14, smooth:str = 'smma',
         handle_na (bool, optional): Whether to handle NaN values in 'close' (TR).
 
     Returns:
-        ndarray: ndarray with the average true range values for each step.
+        Series: ndarray with the average true range values for each step.
     """
 
     tr = idct_trange(data=data, handle_na=handle_na)
 
     match smooth:
         case 'wma':
-            atr:np.ndarray = idct_wma(data=tr, length=length)
+            atr = idct_wma(data=tr, length=length)
         case 'sma':
-            atr:np.ndarray = idct_sma(data=tr, length=length)
+            atr = idct_sma(data=tr, length=length)
         case 'ema':
-            atr:np.ndarray = idct_ema(data=tr, length=length)
+            atr = idct_ema(data=tr, length=length)
         case 'smma':
-            atr:np.ndarray = idct_smma(data=tr, length=length)
+            atr = idct_smma(data=tr, length=length)
         case _:
             raise ValueError(f"'{smooth}' not is a valid type of moving average.") 
 
@@ -672,11 +687,11 @@ def idct_trange(data:pd.DataFrame, handle_na:bool = True) -> pd.Series:
     close = data.loc[:, 'close'].shift(1)
 
     if handle_na:
-            close.fillna(data['low'], inplace=True)
+            close.fillna(data.loc[:, 'low'], inplace=True)
                     
     hl = data.loc[:, 'high'] - data.loc[:, 'low']
-    hyc = abs(data['high'] - close)
-    lyc = abs(data['low'] - close)
+    hyc = abs(data.loc[:, 'high'] - close)
+    lyc = abs(data.loc[:, 'low'] - close)
     tr:pd.Series[float] = pd.concat([hl, hyc, lyc], axis=1).max(axis=1)
 
     if not handle_na:

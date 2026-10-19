@@ -2,6 +2,6 @@ pandas>=3.0.0
 numpy>=2.3.2
 matplotlib>=3.7.5
 pillow>=11.3.0
-yfinance==0.2.50
+yfinance==1.7.0
 binance-sdk-spot==6.3.0
 binance-sdk-derivatives-trading-usds-futures==6.2.0

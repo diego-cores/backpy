@@ -12,9 +12,6 @@ Classes:
 
 Functions:
     idc_decorator: Create your own indicator.
-
-Hidden Functions:
-    _data_info: Gathers information about the dataset.
 """
 
 import pandas as pd
@@ -70,25 +67,9 @@ def idc_decorator(func:Callable) -> staticmethod:
     setattr(func, '_uidc', True)
     return cast(staticmethod, func)
 
-def _data_info() -> tuple[str|None, str|None, float|None]:
-    """
-    Data Info
-
-    Returns all 'data' variables except `__data`.
-
-    Returns:
-        tuple[str|None,str|None,float|None]: 
-            A tuple containing the following variables in order:
-            - __data_interval (str): Data interval.
-            - __data_icon (str): Data icon.
-            - __data_width (int): Data index width.
-    """
-
-    return cm_.__data_interval, cm_.__data_icon, cm_.__data_width
-
 class StrategyClass(ABC):
     """
-    StrategyClass
+    Strategy class
 
     This is the class you have to inherit to create your strategy.
 
@@ -120,6 +101,8 @@ class StrategyClass(ABC):
         __day_width: 1-day width of the index, calculated on an 
             interval basis, global variable '__data_width_day'.
         __data_index: Index to cut data.
+        __temporary_cmm: Temporary commissions structured array.
+        __tcmm_bounds: Temporary commissions index search list.
         __init_funds: Initial funds for the strategy.
         __spread_pct: Closing and opening spread.
         __slippage_pct: Closing and opening slippage.
@@ -195,6 +178,7 @@ class StrategyClass(ABC):
         __data_cut: Slices data for the user based on the current index.
         __data_updater: Updates all data with the provided DataFrame.
         __run_orders: Logic responsible for ordering and executing orders.
+        __run_temporary_cmm: Execute temporary commissions.
         __before: This function is used to run trades and other operations.
     """
 
@@ -218,8 +202,10 @@ class StrategyClass(ABC):
     __data_cind:np.ndarray
     __data_col:dict
     __data_key:dict
-
     __data_index:int
+
+    __tcmm_bounds:list
+    __temporary_cmm:np.ndarray|np.recarray
 
     __buffer:dict
     __idc_data:dict
@@ -243,21 +229,28 @@ class StrategyClass(ABC):
     __pos_record:flx.ChunkWrapper
     __to_delete:dict
 
-    def __init__(self, data:pd.DataFrame = pd.DataFrame()) -> None: 
+    def __init__(self, data:pd.DataFrame|None = None) -> None: 
         """
         __init__
 
         Builder for initializing the class.
 
         Args:
-            data (DataFrame, optional): All data from the step and previous ones.
+            data (DataFrame|None, optional): All data from the step and previous ones.
+                StrategyClass does not allow an index that is not ascending order.
         """
+        if data is None: data = pd.DataFrame()
+        if not all(np.diff(data.index) >= 0):
+            raise ValueError("'data.index' is not in ascending order")
 
         self.hour = 0.
-
         self.__data_adf = data
         self.__data_awr = flx.DataWrapper(data)
         self.__data_ind = data.index.values
+        utils.nowriteable_dataframe(self.__data_adf)
+
+        self.__tcmm_bounds = []
+        self.__temporary_cmm = np.array([])
 
         self.__data_awr.unwrap().flags.writeable = False
         self.__data_ind.flags.writeable = False
@@ -272,7 +265,7 @@ class StrategyClass(ABC):
             values = np.array(data[column].to_numpy())
             values.flags.writeable = False
 
-            series = pd.Series(values, index=data.index, 
+            series = pd.Series(values, index=self.__data_ind, 
                                name=column, copy=False)
 
             self.__data_col[column] = series
@@ -281,25 +274,37 @@ class StrategyClass(ABC):
         self.__buffer = {}
         self.__idc_data = {}
 
-        cmattr = lambda x: getattr(cm_, x)
-
-        self.icon = cmattr('__data_icon')
-        self.width = cmattr('__data_width') or 0
-        self.interval = cmattr('__data_interval')
-        self.__day_width = cmattr('__data_width_day') or 1
+        self.icon = cm_.data_state._data_icon
+        self.width = cm_.data_state._data_width or 0
+        self.interval = cm_.data_state._data_interval
+        self.__day_width = cm_.data_state._data_width_day or 1
 
         # Execution configuration
-        self.__init_funds = cmattr('__init_funds') or 0.
-        self.__commission = cmattr('__commission') or flx.CostsValue(0)
-        self.__spread_pct  = cmattr('__spread_pct') or flx.CostsValue(0)
-        self.__slippage_pct = cmattr('__slippage_pct') or flx.CostsValue(0)
-        self.__chunk_size = cmattr('__chunk_size') or 10_000 
+        self.__init_funds = cm_.data_state._init_funds or 0.
+        self.__commission = cm_.data_state._commission or flx.CostsValue(0)
+        self.__spread_pct  = cm_.data_state._spread_pct or flx.CostsValue(0)
+        self.__slippage_pct = cm_.data_state._slippage_pct or flx.CostsValue(0)
+        self.__chunk_size = cm_.data_state._chunk_size or 10_000 
         self.__orders_order = {'op': 0, 'rd': 1, 'stopLimit': 2, 'stopLoss': 3, 
                                'takeLimit': 4, 'takeProfit': 5}
-        self.__nper_commission = cmattr('__nper_commission') or False
+        self.__nper_commission = cm_.data_state._nper_commission or False
 
-        if isinstance(cmattr('__orders_order'), dict):
-            for k,v in cmattr('__orders_order').items():
+        if cm_.data_state._temp_comm is not None:
+            temp_cmm = cm_._get_temp_commission(cm_.data_state._temp_comm).values()
+            if len(temp_cmm) > 0:
+                temp_cmm_df = pd.concat([d_i.reindex(
+                    columns=['fee', 'price', 'mode']) for d_i in temp_cmm])
+
+                temp_cmm_df = temp_cmm_df.sort_index()
+                temp_cmm_df.index.name = 'date'
+
+                self.__tcmm_bounds = np.searchsorted(temp_cmm_df.index.values, 
+                    self.__data_ind, side='right').tolist()
+                self.__temporary_cmm =  temp_cmm_df.to_records(index=True)
+        self.__temporary_cmm.flags.writeable = False
+
+        if isinstance(cm_.data_state._orders_order, dict):
+            for k,v in cm_.data_state._orders_order.items():
                 if not k in ('stopLimit', 'stopLoss', 'takeLimit', 'takeProfit'):
                     continue
                 elif v > 99:
@@ -310,9 +315,9 @@ class StrategyClass(ABC):
         self.__balance = self.__init_funds
         self.__balance_rec = []
 
-        self.__ngap = bool(cmattr('__min_gap'))
-        self.__limit_ig = bool(cmattr('__limit_ig'))
-        self.__orders_nclose = bool(cmattr('__orders_nclose'))
+        self.__ngap = bool(cm_.data_state._min_gap)
+        self.__limit_ig = bool(cm_.data_state._limit_ig)
+        self.__orders_nclose = bool(cm_.data_state._orders_nclose)
 
         self.__orders = []
         self.__positions = []
@@ -499,6 +504,7 @@ class StrategyClass(ABC):
 
             logger.debug('Generating indicator')
             result = flx.DataWrapper(func(*args, **kwargs))
+            result.unwrap().flags.writeable = False
 
             self.__idc_data[id] = result
             if cut: return self.__data_cut(result, last)
@@ -735,7 +741,39 @@ class StrategyClass(ABC):
         if (psff:=self.__buff('__pos_record')): 
             self.__pos_record = self.__cn_insert(self.__pos_record, psff)
 
-    def __before(self, index:int, balance:list[float] | None = None) -> None:
+    def __run_temporary_cmm(self) -> None:
+        """
+        Run temporary commissions
+
+        Execute temporary commissions on active trades.
+        """
+
+        i = len(self.__data)-1
+        if i <= 0 or not self.__positions or len(self.__tcmm_bounds) < 2:
+            return
+
+        a, b = self.__tcmm_bounds[i-1], self.__tcmm_bounds[i]
+        if a == b: return
+
+        for idx, price, rate, mode in self.__temporary_cmm[a:b]:
+            if np.isnan(price):
+                price = self.__data['close'][-1]
+            fee = price * rate
+
+            match mode:
+                case 'funding_fee':
+                    fl, fs = fee, -fee
+                case _:
+                    fl = fs = fee
+
+            total = 0.
+            for pos in self.__positions:
+                fee = pos['amount'] / pos['positionOpen'] * (fl if pos['typeSide'] else fs)
+                pos['commission'] += fee
+                total += fee
+            self.__balance -= total
+
+    def __before(self, index:int, balance:list[float]|None = None) -> None:
         """
         Before
 
@@ -743,10 +781,14 @@ class StrategyClass(ABC):
 
         Args:
             index (int): Current data index.
+            balance (list[float]|None): Balance list.
         """
 
         # Updates data to the strategy
         self.__data_updater(index=index, balance=balance)
+
+        # Check temporary commissions
+        self.__run_temporary_cmm()
 
         # Check operations
         self.__run_orders()
@@ -875,7 +917,8 @@ class StrategyClass(ABC):
             date=float(self.__data_cind[-1]),
             amount=amount,
             type_side=buy,
-            union_id=ui
+            union_id=ui,
+            mode='taker'
         )
 
         return ui
@@ -941,11 +984,7 @@ class StrategyClass(ABC):
         """
 
         mode = mode.lower()
-        if mode.lower() not in ('maker', 'taker'):
-            return
-
         amount = amount or np.nan
-
         position = self.__positions[index].copy()
 
         pos_amount = position.get('amount')
@@ -969,6 +1008,8 @@ class StrategyClass(ABC):
             position_close_spread = (position_close-spread-slippage 
                                     if position.get('typeSide')
                                     else position_close+spread+slippage)
+        else:
+            raise ValueError('Not mode selected')
 
         # Fill data.
         position['positionClose'] = position_close_spread
@@ -1014,11 +1055,10 @@ class StrategyClass(ABC):
 
             if org_amount <= amount:
                 position['profit'] -=  position.get('commission')
-                self.__balance -= position.get('commission')
                 position['commission'] += exit_fee
             else:
                 position['commission'] = exit_fee
-
+   
             position['profit'] -= exit_fee
             self.__balance -= exit_fee
         else:
@@ -1028,8 +1068,8 @@ class StrategyClass(ABC):
             self.__buffer['__pos_record'] = []
         self.__buffer['__pos_record'].append(position)
 
-    def __put_pos(self, price:float, date:float, 
-                  amount:float, type_side:bool, union_id:str) -> None:
+    def __put_pos(self, price:float, date:float, amount:float, 
+                type_side:bool, union_id:str, mode:str = 'taker') -> None:
         """
         Put position
 
@@ -1041,22 +1081,19 @@ class StrategyClass(ABC):
             amount (float): Position amount.
             type_side (bool): Position type.
             union_id (str): unionId that will have.
+            mode (str, optional): Order type ('taker', 'maker').
         """
 
         logger.debug('Placing position')
         position_price = price
-        where_date = np.where(self.__data_cind == date)[0][0]
+        where_date = np.searchsorted(self.__data_cind, date)
 
-        if (
-            position_price > self.__data['close'][where_date]*(
-                self.__spread_pct.get_taker()/100/2+1)
-            or position_price < self.__data['close'][where_date]*(
-                1-self.__spread_pct.get_taker()/100/2)
-            ): # Maker
-
+        mode = mode.lower()
+        if mode == 'maker':
             position_open = position_price
             commission = self.__commission.get_maker()
-        else: # Taker
+
+        elif mode == 'taker':
             position_price = self.__data['close'][where_date]
 
             commission = self.__commission.get_taker()
@@ -1065,11 +1102,14 @@ class StrategyClass(ABC):
 
             position_open = (position_price+spread+slippage
                             if type_side else position_price-spread-slippage)
+        else:
+            raise ValueError('Not mode selected')
 
         if not self.__nper_commission:
             entry_fee = amount * (commission / 100)
         else:
             entry_fee = commission
+        self.__balance -= entry_fee
 
         position = {
             'date':self.__data_cind[-1],
@@ -1110,7 +1150,8 @@ class StrategyClass(ABC):
 
         return union_positions or None
 
-    def __word_reduce(self, order:dict, mode:str = 'taker') -> bool | None:
+    def __word_reduce(self, order:dict, mode:str = 'taker', 
+                    price_name:str = 'orderPrice') -> bool | None:
         """
         With order reduce
 
@@ -1119,20 +1160,21 @@ class StrategyClass(ABC):
         Args:
             order (dict): Dict with the order.
             mode (str): Order type ('taker', 'maker').
+            price_name (str): Key of the price to close.
 
         Returns:
             bool|None: 
                 Returns True if the position was reduced, otherwise returns None.
         """
 
-        logger.debug("Reducing position")
+        logger.debug("Reducing position in '%s'", price_name)
         if not (u_pos:=self.__union_pos(order['unionId'])):
             logger.debug(
                 "The reduction was cancelled: No position was found with the same 'unionId'")
             return
 
         self.__act_reduce(
-            u_pos[0]['rIndex'], order['orderPrice'], 
+            u_pos[0]['rIndex'], order[price_name], 
             amount=order['amount'], mode=mode)
         return True
 
@@ -1154,7 +1196,8 @@ class StrategyClass(ABC):
                     date=order['date'],
                     amount=order['amount'],
                     type_side=order['typeSideOrd'],
-                    union_id=order['unionId']
+                    union_id=order['unionId'],
+                    mode='maker'
                 )
     
             case 'rd':
@@ -1177,22 +1220,23 @@ class StrategyClass(ABC):
                 higher = order['orderPrice']*(self.__spread_pct.get_taker()/100/2+1)
                 lower = order['orderPrice']*(1-self.__spread_pct.get_taker()/100/2)
 
-                if (higher <= order['limitPrice'] 
-                    and lower >= order['limitPrice']
-                    and not self.__limit_ig):
+                pos_typeside = (order['typeSide'] == order['typeSideOrd'])
+                if ((higher >= order['limitPrice'] and pos_typeside) 
+                    or (lower <= order['limitPrice'] and not pos_typeside)):
 
                     self.__word_reduce(order, mode='taker')
                 elif (order['limitPrice'] <= self.__data['high'][-1]
                     and order['limitPrice'] >= self.__data['low'][-1]
                     and not self.__limit_ig):
 
-                    self.__word_reduce(order, mode='maker')
+                    self.__word_reduce(order, mode='maker', 
+                        price_name='limitPrice')
                 else:
                     self.__put_ord(
                         'rd', 
                         price=order['limitPrice'], 
                         amount=order['amount'],
-                        buy=order['typeSide'],
+                        buy=order['typeSideOrd'],
                         union_id=order['unionId'],
                         close_id=order['closeId'],
                         limit=True,
@@ -1322,9 +1366,11 @@ class StrategyClass(ABC):
             union_ord_bff_f:float = union_ord_bff or union_ord_f or union_pos_f
 
             price_cn = func([union_pos_f, union_ord_f, union_ord_bff_f])
+        assert price_cn is not None
+
         return comp, price >= price_cn if func == np.max else price <= price_cn
 
-    def __put_ord(self, order_type:str, price: float, amount:float | None = None, 
+    def __put_ord(self, order_type:str, price:float, amount:float | None = None, 
                   limit_price:float | None = None, buy:bool = True, 
                   wait:bool = True, union_id:str | int | None = None, 
                   close_id:str | int | None = None, limit:bool = False) -> str:
@@ -1360,8 +1406,26 @@ class StrategyClass(ABC):
         union_id = f'{"w/" if wait else ""}{int(union_id)}' if union_id else None
 
         match order_type:
-            case 'op' | 'rd':
-                buy = buy
+            case 'op':
+                if ((price <= self.__data['close'][-1]*(
+                        self.__spread_pct.get_taker()/100/2+1
+                    ) and not buy)
+                    or (price >= self.__data['close'][-1]*(
+                        1-self.__spread_pct.get_taker()/100/2
+                    ) and buy)):
+
+                    ui = union_id or self.unique_id()
+                    self.__put_pos(
+                        price=self.__data["close"][-1],
+                        date=float(self.__data_cind[-1]),
+                        amount=amount,
+                        type_side=buy,
+                        union_id=union_id or self.unique_id(),
+                        mode='taker'
+                    )
+                    return ui
+            case 'rd':
+                pass
             case 'stopLoss' | 'stopLimit':
                 buy = False
             case 'takeProfit' | 'takeLimit':
@@ -1422,7 +1486,7 @@ class StrategyClass(ABC):
         logger.debug("Executes 'ord_put'")
         if not order_type in (
             'stopLoss', 'takeProfit', 'takeLimit', 'stopLimit'):
-            raise exception.OrderError('Bad op type')
+            raise exception.OrderError('Bad order type')
 
         # Last unionId
         last_data = None
@@ -1449,7 +1513,7 @@ class StrategyClass(ABC):
             limit=True if order_type in ('stopLimit', 'takeLimit') else False,
         )
 
-    def ord_rmv(self, index:int) -> None:
+    def ord_rmv(self, index:int|float) -> None:
         """
         Order remove
 
@@ -1457,16 +1521,14 @@ class StrategyClass(ABC):
         An order is considered active if it is in '__ orders'.
 
         Args:
-            index (int): Real index of the order to be deleted.
+            index (int|float): Real index of the order to be deleted.
         """
 
         logger.debug("Executes 'ord_rmv'")
+        index = int(index)
+
         if not self.__orders:
             raise exception.OrderError('There are no active orders.')
-        elif not isinstance(index, int):
-            logger.debug(
-                "The order deletion was cancelled: 'index' is not a valid type.")
-            return
 
         order = self.__orders[index]
 
@@ -1498,12 +1560,13 @@ class StrategyClass(ABC):
             raise exception.OrderError('Nothing to modify.')
 
         order = self.__orders[index]
+        print(order)
 
         if price is not None:
             _, union = self.__price_check(
                 price=price, 
                 union_id=order['unionId'], 
-                type_side=order['typeSide'],
+                type_side=order['typeSideOrd'],
                 price_cn=self.__data['close'][-1]
             )
 
@@ -1651,7 +1714,7 @@ class StrategyClass(ABC):
             - date: Creation date.
             - orderPrice: Execution price.
             - amount: Amount to be executed.
-            - typeSide: Position type.
+            - typeSide: Direction: bool(position side == order side)
             - typeSideOrd: Order type True for positive type.
             - id: Unique order ID.
             - unionId: Linked id to position. If there is no id, 'none' is returned.
@@ -1662,7 +1725,7 @@ class StrategyClass(ABC):
             label (str | None, optional): Data column to return. If None, all columns 
                 are returned. If 'index', only return the 'rIndex'.
             or_type (str | None, optional): If you want to filter only one type 
-                of operation you can do so with this argument.
+                of order you can do so with this argument.
                 Current types of orders: 'op', 'takeProfit', 'stopLoss', 'takeLimit', 'stopLimit'.
             ids (dict | None, optional): Filter by id by making a dictionary with id_name:id.
             last (int | None, optional): Number of steps to return starting from the 

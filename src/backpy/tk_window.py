@@ -122,7 +122,8 @@ class CustomToolbar(NavigationToolbar2Tk):
                     for check buttons call 'self._buttons[name].deselect()/select()'.
                 'tggl' (bool|None): True if you want the button to be a checkbutton,
                 'link' (bool|None): Link the button with all the toolbars; it only works if link=True.
-                'ausl' (bool|None): If it is true and link and tggl the select/deselect is not handled automatically.
+                'ausl' (bool|None): If it is true and link and tggl the 
+                    select/deselect is not handled automatically.
         """
         self.icon_map = dict(self.icon_map)
 
@@ -200,7 +201,7 @@ class CustomToolbar(NavigationToolbar2Tk):
         self.config_colors()
 
         if link:
-            linked_toolbars:dict = getattr(_cm, '__linked_toolbars')
+            linked_toolbars:dict = _cm.plot_state._linked_toolbars
             if not self in linked_toolbars:
                 linked_toolbars[self] = []
 
@@ -210,8 +211,6 @@ class CustomToolbar(NavigationToolbar2Tk):
                 setattr(self, 'run_pan', self.run_command(func='_org_pan'))
 
             linked_toolbars[self].extend(linked_buttons)
-
-            setattr(_cm, '__linked_toolbars', linked_toolbars)
 
     def _ccheck_button(self, button:dict, before:tk.Misc|None) -> None:
         """
@@ -272,7 +271,7 @@ class CustomToolbar(NavigationToolbar2Tk):
             nonlocal func
 
             linked_toolbars = {}
-            for k, v in getattr(_cm, '__linked_toolbars').items():
+            for k, v in _cm.plot_state._linked_toolbars.items():
                 try:
                     if not k.winfo_exists():
                         continue
@@ -293,7 +292,7 @@ class CustomToolbar(NavigationToolbar2Tk):
                 except tk.TclError:
                     pass
 
-            setattr(_cm, '__linked_toolbars', linked_toolbars)
+            _cm.plot_state._linked_toolbars = linked_toolbars
         return wrapper
 
     def run_zoom(self, *args:list):
@@ -387,6 +386,7 @@ class CustomWin:
         color_frame: Frames color.
         color_buttons: Buttons color.
         color_button_act: Color of the sunken buttons.
+        fps_label: FPS counter label.
         toolbar_added_buttons: Dictionary with added toolbar buttons.
 
     Private Attributes:
@@ -401,6 +401,7 @@ class CustomWin:
         focus_title: Change title for a given milliseconds.
         config_icon: Put the icon on the application and change its color.
         lift: Focus on the window and jump over the others.
+        fps_label_config: Initialize the FPS counter and set button.
         mpl_canvas: Put your matplotlib figure inside the window.
         mpl_canvas_crosshair: Get a cross on the canvas, which can be deactivated.
         mpl_animation: Configure the window and run an animation.
@@ -415,6 +416,7 @@ class CustomWin:
 
     Private Methods:
         _quit: Closes the window without errors.
+        _set_fps: Set the fps label with 'FramesCounter' instance.
     """
 
     def __init__(self, master:tk.Tk|None = None,
@@ -440,11 +442,11 @@ class CustomWin:
                 it is called again every 5s.
         """
 
-        if not isinstance(master, tk.Tk) and not isinstance(_cm._tkinter_root, tk.Tk):
-            _cm._tkinter_root = tk.Tk()
-            _cm._tkinter_root.withdraw()
+        if not isinstance(master, tk.Tk) and not isinstance(_cm.plot_state._tkinter_root, tk.Tk):
+            _cm.plot_state._tkinter_root = tk.Tk()
+            _cm.plot_state._tkinter_root.withdraw()
 
-        root = master or _cm._tkinter_root
+        root = master or _cm.plot_state._tkinter_root
         assert isinstance(root, tk.Tk)
 
         self.master:tk.Tk = root
@@ -455,7 +457,7 @@ class CustomWin:
 
         self.icon = None
         self.title = title if title else lambda: rd.choice(
-            _cm._random_titles if _cm._random_titles else ['BackPy'])
+            _cm.plot_state._random_titles if _cm.plot_state._random_titles else ['BackPy'])
 
         self._main_after_id = None
         self._regen_title = regen_title
@@ -464,6 +466,8 @@ class CustomWin:
         self.color_frame = frame_color
         self.color_buttons = buttons_color
         self.color_button_act = button_act
+
+        self.fps_label = None
 
         self.toolbar_added_buttons = {}
 
@@ -507,6 +511,8 @@ class CustomWin:
 
         if title is None:
             title = 'Window from BackPy'
+
+        assert isinstance(title, str)
         self.root.title(title)
 
     def focus_title(self, title:str|Callable|None = None, ms:int = 5000) -> None:
@@ -554,7 +560,7 @@ class CustomWin:
 
         self._after_id_lift = ''
 
-        if not _cm.lift:
+        if not _cm.user_config.lift:
             return
 
         self.root.iconify()
@@ -582,6 +588,81 @@ class CustomWin:
 
         if self.root.winfo_exists():
             self.root.destroy()
+
+    def _set_fps(self, fr_counter:utils.FramesCounter, refresh:float = 0.5) -> None:
+        """
+        Set fps
+
+        Set the fps label with 'FramesCounter' instance.
+
+        Note:
+            This method calls 'frame' of 'fr counter'.
+
+        Args:
+            fr_counter (FramesCounter): Instance of 'FramesCounter'.
+            refresh (float, optional): It updates one time every 'refresh' seconds.
+
+        Example:
+            Measure FPS::
+
+                counter = FramesCounter()
+                for _ in range(100):
+                    draw_function()
+                    self._set_fps(counter)
+        """
+        if self.fps_label is None or not self.fps_label.winfo_manager(): return
+
+        fr_counter.frame()
+        last_show = getattr(self.fps_label, 'last_show', None)
+        if last_show is not None and last_show + refresh > monotonic(): return
+
+        text = f'FPS: {fr_counter.fps:.0f}'
+        if self.fps_label['text'] != text:
+            self.fps_label.config(text=text)
+
+        setattr(self.fps_label, 'last_show', monotonic())
+
+    def fps_label_config(self) -> None: 
+        """
+        Fps label config
+
+        Initialize the FPS counter and set button.
+        Use '_set_fps' to set current fps.
+
+        Note:
+            Add 'Fps' button to the toolbar.
+        """
+
+        if not self.fps_label:
+            self.fps_label = tk.Label(self.root, text='FPS: 0', font=('consolas', 12), 
+                                    fg=self.color_buttons, bg=self.color_frame)
+
+        def fps_button(toolbar:CustomToolbar) -> None:
+            """
+            Fps button
+
+            Activate or deactivate the fps label.
+
+            Args:
+                toolbar (CustomToolbar): Toolbar instance.
+            """
+            if self.fps_label is None:
+                return
+
+            if self.fps_label.winfo_manager():
+                self.fps_label.place_forget()
+            else:
+                self.fps_label.place(height=30, width=90, relx=1, rely=0, anchor='ne')
+
+        self.toolbar_added_buttons.update({'fpscounter':[
+            {},
+            {
+                'name':'Fps', 
+                'desc':"Fps counter, press to show or hide", 
+                'icon':str(resources.files('backpy.assets') / 'fps.png'),
+                'func':fps_button,
+            },
+        ]})
 
     def mpl_canvas(self, fig:Figure, 
                    master:tk.PanedWindow|tk.Frame|tk.Tk|tk.Toplevel|None = None,
@@ -637,7 +718,7 @@ class CustomWin:
                 if call_rdraw:
                     re_draw()
                 canvas.draw = re_draw
-                setattr(_cm, '__anim_puntil', monotonic()+0.4)
+                _cm.plot_state._anim_puntil = monotonic()+0.4
             except AttributeError:
                 self.root.after(1000, on_redraw)
 
@@ -654,7 +735,7 @@ class CustomWin:
             """
             nonlocal _resize_after_id, _in_rdraw, last_size
 
-            setattr(_cm, '__anim_puntil', None)
+            _cm.plot_state._anim_puntil = None
             canvas.draw = lambda: None
 
             if _resize_after_id:
@@ -714,7 +795,7 @@ class CustomWin:
                 last_state = 'zoomed'
             elif self.root.state() == 'normal' and last_state == 'zoomed':
                 canvas.draw = lambda: None
-                setattr(_cm, '__anim_puntil', None)
+                _cm.plot_state._anim_puntil = None
 
                 widget.after_cancel(_resize_after_id)
                 _state_after_id = widget.after(400, on_state_resize)
@@ -723,7 +804,7 @@ class CustomWin:
             if last_pos != pos:
                 last_pos = pos
 
-                setattr(_cm, '__anim_puntil', monotonic()+0.4)
+                _cm.plot_state._anim_puntil = monotonic()+0.4
 
         def on_click(event:tk.Event|None = None) -> None:
             """
@@ -736,7 +817,7 @@ class CustomWin:
                 event (Event | None, optional): Event.
             """
 
-            setattr(_cm, '__anim_puntil', None)
+            _cm.plot_state._anim_puntil = None
 
             if title:
                 self.focus_title(title=title, ms=5000)
@@ -751,7 +832,7 @@ class CustomWin:
                 event (Event | None, optional): Event.
             """
 
-            setattr(_cm, '__anim_puntil', monotonic()+0.4)
+            _cm.plot_state._anim_puntil = monotonic()+0.4
 
         widget.bind('<Button-1>', on_click, add='+')
         widget.bind('<Button-3>', on_click, add='+')
@@ -769,6 +850,9 @@ class CustomWin:
         Matplotlib canvas crosshair
 
         Get a cross on the canvas, which can be deactivated.
+
+        Note:
+            This method adds 'Cross' and 'Snap' to the toolbar.
 
         Args:
             fig (Figure): Figure from matplotlib.
@@ -1028,7 +1112,8 @@ class CustomWin:
         widget.bind('<Leave>', on_leave, add='+')
 
     def mpl_animation(self, anim:FuncAnimation, mpl_canvas:FigureCanvasTkAgg, 
-                      interval:int = 100) -> None:
+                      interval:int = 100, fps:bool = False,
+                      fps_onlydraw:bool = False) -> None:
         """
         Matplotlib animation
 
@@ -1037,18 +1122,22 @@ class CustomWin:
         Args:
             anim (FuncAnimation): Matplotlib animation.
             mpl_canvas: Canvas figure.
-            interval (int, optional): interval between frames, minimum 100 to prevent 
-                the window from blocking when moving it, if that happens increase the interval.
+            interval (int, optional): interval between frames, minimum 1.
+            fps (bool. optional): Show a fps label.
+            fps_onlydraw (bool, optional): If True, measure only the drawings.
         """
 
         anim = cast(Any, anim)
 
-        if anim.event_source:
-            anim.event_source.stop()
+        if anim.event_source: # pyrefly: ignore
+            anim.event_source.stop() # pyrefly: ignore
 
+        if fps: self.fps_label_config()
+
+        fr_counter = utils.FramesCounter()
         anim_after_id = None
-        bind_id = None
         last_pos = (0,0)
+        bind_id = None
 
         def on_anim() -> None:
             """
@@ -1056,7 +1145,7 @@ class CustomWin:
 
             Update the animation without blocking the thread.
             """
-            nonlocal anim_after_id, bind_id
+            nonlocal anim_after_id, bind_id, fr_counter
 
             if not self.root.winfo_exists():
                 return
@@ -1064,19 +1153,24 @@ class CustomWin:
             if (self.root.winfo_ismapped()
                 and getattr(mpl_canvas.draw, "__func__", None) 
                     is type(mpl_canvas).draw
-                and getattr(_cm, '__anim_puntil') is not None
-                and monotonic() >= getattr(_cm, '__anim_puntil')):
+                and _cm.plot_state._anim_puntil is not None
+                and monotonic() >= _cm.plot_state._anim_puntil):
+
                 try:
-                    anim.frame_seq = iter(anim.frame_seq)
-                    frame = next(anim.frame_seq)
+                    if fps_onlydraw: fr_counter.set_last()
+                    anim.frame_seq = iter(anim.frame_seq) # pyrefly: ignore
+                    frame = next(anim.frame_seq) # pyrefly: ignore
 
                     getattr(anim, '_draw_next_frame')(frame, getattr(anim, '_blit'))
+                    self.root.update_idletasks()
+
+                    self._set_fps(fr_counter)
                 except StopIteration:
                     if bind_id: self.root.unbind('<Configure>', bind_id)
                     anim_after_id = None; return
 
             anim_after_id = self.root.after(
-                interval if interval >= 100 else 100, on_anim)
+                interval if interval >= 1 else 1, on_anim)
 
         def on_resize(event:tk.Event) -> None:
             """
@@ -1343,7 +1437,7 @@ class CustomWin:
                 warnings.filterwarnings("ignore", message="overflow encountered in power")
                 return func(*args, **kwargs)
 
-        return wrapper if _cm.mpl_warning_supp else func
+        return wrapper if _cm.user_config.mpl_warning_supp else func
 
     @supp_warnings
     def show(self, block:bool = True) -> None:
@@ -1364,17 +1458,18 @@ class CustomWin:
             except tk.TclError: return
         else:
             if not self.root.winfo_exists():
+                self.root.update_idletasks()
                 return
 
             self._main_after_id = self.root.after(50, lambda: self.show(block=False))
 
-def new_paneledw(block:bool, force:bool = False, style:dict = {}) -> None:
+def new_paneledw(block:bool, force:bool = False, style:dict|None = None) -> None:
     """
     New paneled window
 
     Generate a window with panels using 'CustomWin'.
 
-    To add a canvas, add a dictionary to the '__panel_list' list with these values:
+    To add a canvas, add a dictionary to the '_panel_list' list with these values:
         fig: Matplotlib Figure. Mandatory key.
         title: Panel title.
         untitle: Custom unfocus titles.
@@ -1387,19 +1482,21 @@ def new_paneledw(block:bool, force:bool = False, style:dict = {}) -> None:
         block (bool): If True, the window with the loaded panels will be displayed.
         force (bool, optional): If True, skips the panel count check and creates 
             the window immediately, regardless of '__panel_wmax'.
-        style (dict, optional): Style used with 'fr', 'btn' and 'btna'.
+        style (dict|None, optional): Style used with 'fr', 'btn' and 'btna'.
     """
 
     # Exceptions
-    if len(_cm.__panel_list) > 4:
+    if len(_cm.plot_state._panel_list) > 4:
         raise exception.CustomWinError('Maximum 4 panels')
-    elif not force and len(_cm.__panel_list) != _cm.__panel_wmax and not block:
+    elif not force and len(_cm.plot_state._panel_list) != _cm.plot_state._panel_wmax and not block:
         return
-    elif len(_cm.__panel_list) <= 0:
+    elif len(_cm.plot_state._panel_list) <= 0:
         raise exception.CustomWinError('None panel loaded.')
 
+    if style is None: style = {}
+
     custom_unfocus = []
-    for i in _cm.__panel_list:
+    for i in _cm.plot_state._panel_list:
         untitle_list = i.get('untitle', [])
         if not untitle_list: continue
         custom_unfocus.extend(untitle_list)
@@ -1412,7 +1509,8 @@ def new_paneledw(block:bool, force:bool = False, style:dict = {}) -> None:
         button_act=style.get('btna', '#333333'))
 
     window.tk_panels()
-    if len(_cm.__panel_list) == 1:
+
+    if len(_cm.plot_state._panel_list) == 1:
         panels = [window.main_frame]
     else:
         panels = [window.left_pane, window.right_pane, 
@@ -1420,7 +1518,7 @@ def new_paneledw(block:bool, force:bool = False, style:dict = {}) -> None:
 
     canvases = {}
 
-    for i,panel_dict in enumerate(_cm.__panel_list):
+    for i,panel_dict in enumerate(_cm.plot_state._panel_list):
         mpl_canvas = window.mpl_canvas(fig=panel_dict['fig'], master=panels[i], 
                                     title=panel_dict.get('title', None))
         window.mpl_canvas_crosshair(fig=panel_dict['fig'], mpl_canvas=mpl_canvas, 
@@ -1428,7 +1526,9 @@ def new_paneledw(block:bool, force:bool = False, style:dict = {}) -> None:
 
         if (anim:=panel_dict.get('anim', None)):
             window.mpl_animation(anim=anim, mpl_canvas=mpl_canvas, 
-                                 interval=panel_dict.get('interval', 100))
+                                 interval=panel_dict.get('interval', 100),
+                                 fps=_cm.user_config.fps_label,
+                                 fps_onlydraw=_cm.user_config.fps_only_draw)
   
         toolbar = None
         if panel_dict.get('toolbar', None):
@@ -1439,7 +1539,7 @@ def new_paneledw(block:bool, force:bool = False, style:dict = {}) -> None:
                                          link=True)
 
         canvases[mpl_canvas] = toolbar
-    _cm.__panel_list = _cm.__panel_list[:-_cm.__panel_wmax]
+    _cm.plot_state._panel_list = _cm.plot_state._panel_list[:-_cm.plot_state._panel_wmax]
 
     window.mpl_panels_config(canvases=canvases)
     window.show(block=block)
@@ -1476,10 +1576,10 @@ def add_window(fig:Figure, title:str|Callable|None = None, block:bool = True,
     anim = cast(Any, anim)
 
     if not new:
-        if anim and anim.event_source: 
-            anim.event_source.stop()
+        if anim and anim.event_source: # pyrefly: ignore
+            anim.event_source.stop() # pyrefly: ignore
 
-        _cm.__panel_list.append({
+        _cm.plot_state._panel_list.append({
             'fig':fig,
             'title':title,
             'untitle':custom_unfocus,
@@ -1503,7 +1603,8 @@ def add_window(fig:Figure, title:str|Callable|None = None, block:bool = True,
         mpl_canvas = window.mpl_canvas(fig=fig, title=title if focus_title else None)
 
         window.mpl_canvas_crosshair(fig=fig, mpl_canvas=mpl_canvas, color=style.get('crss', btn_color))
-        if anim: window.mpl_animation(anim=anim, mpl_canvas=mpl_canvas, interval=interval or 100)
+        if anim: window.mpl_animation(anim=anim, mpl_canvas=mpl_canvas, interval=interval or 100, 
+                                    fps=_cm.user_config.fps_label, fps_onlydraw=_cm.user_config.fps_only_draw)
 
         custom_toolbar = None
         if toolbar:
@@ -1511,7 +1612,7 @@ def add_window(fig:Figure, title:str|Callable|None = None, block:bool = True,
                 mpl_canvas=mpl_canvas, movement=False if toolbar == 'limited' else True, link=True)
             window.mpl_toolbar_config(toolbar=custom_toolbar, mpl_canvas=mpl_canvas)
 
-        if len(_cm.__panel_list) > 0 and block:
+        if len(_cm.plot_state._panel_list) > 0 and block:
             new_paneledw(block=False, force=True, style=style)
 
         window.show(block=block)

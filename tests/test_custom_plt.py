@@ -9,6 +9,8 @@ from backpy import _commons as _cm
 from unittest.mock import patch, MagicMock
 import unittest
 
+from matplotlib.collections import QuadMesh
+from matplotlib.pyplot import Axes
 import matplotlib.pyplot
 import numpy as np
 import matplotlib
@@ -20,6 +22,22 @@ if "tkinter" not in sys.modules:
     try: import tkinter
     except ImportError:
         sys.modules["tkinter"] = MagicMock()
+
+def get_background_mesh(ax:Axes) -> list[QuadMesh]:
+    """
+    Get background mesh
+
+    Search for all QuadMesh with the '_is_background' attribute in the axes.
+
+    Args:
+        ax (Axes): Axes to search.
+
+    Return:
+        list[QuadMesh]: List of QuadMesh.
+    """
+
+    return [coll for coll in ax.collections if (isinstance(coll, QuadMesh) 
+            and getattr(coll, '_is_background', False))]
 
 class TestCustomPlt(unittest.TestCase):
     def setUp(self) -> None:
@@ -45,9 +63,9 @@ class TestCustomPlt(unittest.TestCase):
             down='red'
         )
 
-        self.assertIn('dark', getattr(_cm, '__plt_styles'))
+        self.assertIn('dark', _cm.plot_state._plt_styles)
 
-        style = getattr(_cm, '__plt_styles')['dark']
+        style = _cm.plot_state._plt_styles['dark']
         self.assertEqual(style['bg'], '#000000')
         self.assertEqual(style['fr'], '#111111')
         self.assertEqual(style['btn'], '#222222')
@@ -76,12 +94,8 @@ class TestCustomPlt(unittest.TestCase):
         colors = ['#000000', '#FFFFFF']
         cs_plt.gradient_ax(self.ax, colors)
 
-        images = self.ax.get_images()
-        self.assertEqual(len(images), 1)
-
-        img = images[0]
-        cmap = img.get_cmap()
-        self.assertIn('custom_gradient', cmap.name)
+        quadmeshlist = get_background_mesh(self.ax)
+        self.assertEqual(len(quadmeshlist), 1)
 
     def test_gradient_ax_empty_colors(self) -> None:
         """
@@ -92,13 +106,8 @@ class TestCustomPlt(unittest.TestCase):
 
         cs_plt.gradient_ax(self.ax, [])
 
-        images = self.ax.get_images()
-        self.assertEqual(len(images), 1)
-
-        cmap = images[0].get_cmap()
-        colors = cmap(np.linspace(0, 1, 2))
-
-        self.assertTrue(np.allclose(colors[0, :3], colors[1, :3], atol=0.5) or True)
+        quadmeshlist = get_background_mesh(self.ax)
+        self.assertEqual(len(quadmeshlist), 1)
 
     def test_custom_ax(self) -> None:
         """
@@ -133,12 +142,8 @@ class TestCustomPlt(unittest.TestCase):
         color = ('#897469', '#654321')
         cs_plt.custom_ax(self.ax, bg=color)
 
-        images = self.ax.get_images()
-        self.assertEqual(len(images), 1)
-
-        img = images[0]
-        cmap = img.get_cmap()
-        self.assertIn('custom_gradient', cmap.name)
+        quadmeshlist = get_background_mesh(self.ax)
+        self.assertEqual(len(quadmeshlist), 1)
 
     def test_ax_view(self):
         """
@@ -189,7 +194,7 @@ class TestCustomPlt(unittest.TestCase):
         mock_add_window.assert_called_once()
 
     @patch("backpy._commons.TKINTER", False)
-    @patch("backpy.custom_plt.mpl.pyplot.show")
+    @patch("backpy.custom_plt.mpl.pyplot.show") # pyrefly: ignore
     def test_add_window(self, mock_show: MagicMock) -> None:
         """
         Test 'add_window'

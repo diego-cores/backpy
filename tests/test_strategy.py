@@ -24,24 +24,11 @@ class TestFunctions(unittest.TestCase):
         func = st.idc_decorator(empty_func)
         self.assertEqual(getattr(func, '_uidc'), True)
 
-    def test_data_info(self) -> None:
-        """
-        Test '_data_info'
-
-        Verify that it works correctly.
-        """
-
-        setattr(_cm, '__data_interval', 1)
-        setattr(_cm, '__data_width', 1)
-        setattr(_cm, '__data_icon', 1)
-
-        self.assertEqual(st._data_info(), (1,1,1))
-
 class TestStrategyClass(unittest.TestCase):
     def setUp(self) -> None:
-        setattr(_cm, '__data_interval', 1)
-        setattr(_cm, '__data_width', 1)
-        setattr(_cm, '__data_icon', 'test')
+        _cm.data_state._data_interval = '1d'
+        _cm.data_state._data_width = 1
+        _cm.data_state._data_icon = 'test'
 
         data = pd.DataFrame({
             'Low':[7,7,13],
@@ -94,8 +81,8 @@ class TestStrategyClass(unittest.TestCase):
         self.assertIsInstance(self.instance.get_commission(), CostsValue)
         self.assertIsInstance(self.instance.get_init_funds(), (int, float))
 
-    @patch("backpy.StrategyClass._StrategyClass__func_idg")
-    @patch("backpy.StrategyClass._StrategyClass__data_cut")
+    @patch("backpy.StrategyClass._StrategyClass__func_idg") # pyrefly: ignore
+    @patch("backpy.StrategyClass._StrategyClass__data_cut") # pyrefly: ignore
     def test__data_store(self, mock_data_cut:MagicMock, mock_idg:MagicMock) -> None:
         """
         Test '__data_store'
@@ -116,8 +103,8 @@ class TestStrategyClass(unittest.TestCase):
 
         deco_func(10)
 
-    @patch("backpy.StrategyClass._StrategyClass__func_idg")
-    @patch("backpy.StrategyClass._StrategyClass__uidc_cut")
+    @patch("backpy.StrategyClass._StrategyClass__func_idg") # pyrefly: ignore
+    @patch("backpy.StrategyClass._StrategyClass__uidc_cut") # pyrefly: ignore
     def test__uidc(self, mock_uidc_cut:MagicMock, mock_idg:MagicMock) -> None:
         """
         Test '__uidc'
