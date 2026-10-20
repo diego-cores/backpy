@@ -1640,8 +1640,8 @@ def plot_strategy(name:Sequence[str|int|None]|str|int|None = None,
             ax.set_xlim(pos_date.dropna().values[0]-(trades_data['d_width']*len(pos_date)/10), 
                         pos_date.dropna().values[-1]+(trades_data['d_width']*len(pos_date)/10))
 
-        y_limit:Callable = lambda values, comp=1: (np.min(values)-comp, 
-                                                    np.max(values)*1.05+comp)
+        y_limit:Callable = lambda values, comp=1: (np.nan_to_num(np.nanmin(values))-comp, 
+                                                    np.nan_to_num(np.nanmax(values))*1.05+comp)
 
         match v:
             case 'b':

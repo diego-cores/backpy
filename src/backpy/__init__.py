@@ -4,7 +4,7 @@ Back Test Py
 BackPy is a library used to test strategies in the market.
 
 Version:
-    1.0.18
+    1.0.19
 
 Repository:
     https://github.com/diego-cores/backpy
@@ -211,7 +211,7 @@ __all__ = [
     'run',
 ]
 
-__version__ = '1.0.18'
+__version__ = '1.0.19'
 __author__ = 'Diego Cores'
 __url__ = 'https://github.com/diego-cores'
 __email__ = '89626622+diego-cores@users.noreply.github.com'

@@ -29,6 +29,7 @@ Functions:
     draw_hist: Draw histogram.
 
 Hidden Functions:
+    _get_version: Get backpyf version.
     _store_decorator: Give '_store' attribute to a function.
     _get_temp_commission: Get temporary commission.
     __add_temp_commission: Save a DataFrame with commission markers.
@@ -43,10 +44,10 @@ Hidden Functions:
 
 from matplotlib.collections import PathCollection, PatchCollection, PolyCollection
 from typing import Any, Callable, Sequence, Collection, TYPE_CHECKING, Generator
+from importlib.metadata import version, PackageNotFoundError
 from matplotlib.patches import Rectangle, Polygon, Patch
 from dataclasses import dataclass, fields, field
 from matplotlib.markers import MarkerStyle
-from importlib.metadata import version
 from contextlib import contextmanager
 from matplotlib.lines import Line2D
 from matplotlib.pyplot import Axes
@@ -85,6 +86,20 @@ COLORS:dict = {
     'UNDERLINE': "\033[4m",
     'RESET': "\033[0m",
 }
+
+def _get_version() -> str:
+    """
+    Get version
+
+    Get backpyf version.
+
+    Return:
+        str: Installed version of backpyf, otherwise 'none'.
+    """
+    try:
+        return version('backpyf')
+    except PackageNotFoundError:
+        return 'none'
 
 @dataclass(slots=True)
 class UserConfig():
@@ -570,7 +585,7 @@ class PlotState():
         _linked_toolbars:dict = field(default_factory=lambda: {})
 
     _random_titles:list = field(default_factory=lambda: [
-        f'BackPy v{version("backpyf")}',
+        f'BackPy v{_get_version()}',
         'Window from BackPy',
         'Python > Others',
         'Nice strategy',

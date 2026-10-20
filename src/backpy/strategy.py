@@ -755,7 +755,7 @@ class StrategyClass(ABC):
         a, b = self.__tcmm_bounds[i-1], self.__tcmm_bounds[i]
         if a == b: return
 
-        for idx, price, rate, mode in self.__temporary_cmm[a:b]:
+        for idx, rate, price, mode in self.__temporary_cmm[a:b]:
             if np.isnan(price):
                 price = self.__data['close'][-1]
             fee = price * rate
